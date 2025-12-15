@@ -85,31 +85,22 @@ export default function App() {
     setTheme(isDark ? "light" : "dark");
   };
 
-  const simulateAPICall = async (userQuestion) => {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+  // Function to call the backend API
+  const askQuestion = async (question) => {
+    const response = await fetch("http://localhost:8000/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: question,
+        database: "credit",
+      }),
+    });
 
-    const responses = [
-      {
-        sql: "SELECT name, email, created_at FROM users WHERE status = 'active' ORDER BY created_at DESC LIMIT 10;",
-        result:
-          "Ich habe 10 aktive Benutzer gefunden. Die neuesten sind: Max Müller (max@example.com), Anna Schmidt (anna@example.com), und Peter Weber (peter@example.com). Alle wurden in den letzten 30 Tagen erstellt.",
-        tableData: [
-          { name: "Max Müller", email: "max@example.com", created_at: "2025-11-20" },
-          { name: "Anna Schmidt", email: "anna@example.com", created_at: "2025-11-18" },
-          { name: "Peter Weber", email: "peter@example.com", created_at: "2025-11-15" },
-        ],
-      },
-      {
-        sql: "SELECT COUNT(*) as total, AVG(amount) as avg_amount FROM orders WHERE date >= '2025-11-01';",
-        result:
-          "Im November 2025 wurden insgesamt 1.247 Bestellungen mit einem Durchschnittswert von 89,42 € erfasst.",
-        tableData: [{ total: 1247, avg_amount: "89.42 €" }],
-      },
-    ];
-
-    return responses[Math.floor(Math.random() * responses.length)];
+    const data = await response.json();
+    return data;
   };
 
+  // Handle form submission
   const handleSubmit = async () => {
     if (!question.trim() || isLoading) return;
 
@@ -124,14 +115,16 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      const response = await simulateAPICall(question);
+      // Call the real API
+      const response = await askQuestion(question);
 
       const assistantMessage = {
         id: Date.now() + 1,
         type: "assistant",
-        content: response.result,
-        sql: response.sql,
-        tableData: response.tableData,
+        content:
+          response.results.length > 0 ? "Ergebnisse gefunden!" : "Keine Ergebnisse gefunden.",
+        sql: response.generated_sql,
+        tableData: response.results,
         showSQL: false,
       };
 
@@ -168,12 +161,6 @@ export default function App() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const exampleQuestions = [
-    "Zeige mir alle aktiven Benutzer",
-    "Wie viele Bestellungen gab es diesen Monat?",
-    "Welche Produkte sind am beliebtesten?",
-  ];
-
   return (
     <div className={`app ${isDark ? "dark" : "light"}`}>
       <header className="header">
@@ -197,47 +184,53 @@ export default function App() {
                 Formulieren Sie Ihre Frage in natürlicher Sprache – wir übernehmen die Übersetzung
                 in Datenabfragen.
               </p>
-              <div className="examples">
-                {exampleQuestions.map((q, i) => (
-                  <button key={i} className="example-btn" onClick={() => setQuestion(q)}>
-                    {q}
-                  </button>
-                ))}
-              </div>
             </div>
           ) : (
             <div className="messages">
+              {" "}
               {messages.map((msg) => (
                 <div key={msg.id} className={`message ${msg.type}`}>
+                  {" "}
                   <div className="message-label">
-                    {msg.type === "user" ? "Sie" : msg.type === "error" ? "Fehler" : "Assistent"}
-                  </div>
+                    {" "}
+                    {msg.type === "user"
+                      ? "Sie"
+                      : msg.type === "error"
+                        ? "Fehler"
+                        : "Assistent"}{" "}
+                  </div>{" "}
                   <div className="message-content">
-                    <div>{msg.content}</div>
-
-                    {msg.tableData && (
+                    {" "}
+                    <div>{msg.content}</div>{" "}
+                    {/* KORRIGIERTE BEDINGUNG HIER: Prüfe auf existierendes UND nicht-leeres Array */}{" "}
+                    {msg.tableData && msg.tableData.length > 0 && (
                       <div className="data-table">
+                        {" "}
                         <table>
+                          {" "}
                           <thead>
+                            {" "}
                             <tr>
+                              {" "}
                               {Object.keys(msg.tableData[0]).map((key) => (
                                 <th key={key}>{key}</th>
-                              ))}
-                            </tr>
-                          </thead>
+                              ))}{" "}
+                            </tr>{" "}
+                          </thead>{" "}
                           <tbody>
+                            {" "}
                             {msg.tableData.map((row, i) => (
                               <tr key={i}>
+                                {" "}
                                 {Object.values(row).map((val, j) => (
                                   <td key={j}>{val}</td>
-                                ))}
+                                ))}{" "}
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            ))}{" "}
+                          </tbody>{" "}
+                        </table>{" "}
                       </div>
                     )}
-
                     {msg.sql && (
                       <div className="sql-section">
                         <button className="sql-toggle" onClick={() => toggleSQL(msg.id)}>
@@ -261,7 +254,6 @@ export default function App() {
                   </div>
                 </div>
               ))}
-
               {isLoading && (
                 <div className="message assistant">
                   <div className="message-label">Assistent</div>
@@ -275,7 +267,6 @@ export default function App() {
                   </div>
                 </div>
               )}
-
               <div ref={messagesEndRef} />
             </div>
           )}

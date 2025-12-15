@@ -1,1 +1,1 @@
-    
+pip install fastapi uvicorn anthropic pydantic python-dotenv pip install google-generativeai
