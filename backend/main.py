@@ -16,12 +16,10 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # Überprüfe, ob der Key vorhanden ist, bevor die Konfiguration erfolgt
 if not GEMINI_API_KEY:
     print("FEHLER: GEMINI_API_KEY ist nicht in der .env-Datei oder Umgebung gesetzt.")
-    # In einer echten App würde man hier abbrechen
-    # Wir lassen es für den Moment, aber es wird später fehlschlagen
     
 genai.configure(api_key=GEMINI_API_KEY)
 
-app = FastAPI(title="Text2SQL API mit Gemini")
+app = FastAPI(title="Text2SQL using Gemini", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
