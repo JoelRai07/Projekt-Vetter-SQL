@@ -114,7 +114,8 @@ async def query_database(request: QueryRequest):
         print(f"📊 SQL Generierung Ergebnis:")
         print(f"   Confidence: {sql_result.get('confidence', 0)}")
         print(f"   Explanation: {sql_result.get('explanation', 'N/A')[:100]}...")
-        
+
+        user_explanation = sql_result.get("explanation", "")
         generated_sql = sql_result.get("sql")
 
         if not generated_sql:
@@ -210,6 +211,26 @@ async def query_database(request: QueryRequest):
 
         print(f"✅ Erfolgreich! {len(results)} Zeilen zurückgegeben")
 
+        # 6. Ergebnisse zusammenfassen
+        summary_text = None
+        try:
+            summary_text = llm_generator.summarize_results(
+                request.question,
+                generated_sql,
+                results,
+                len(results),
+                notice_msg,
+            )
+        except Exception:
+            pass
+
+        if not summary_text:
+            preview_keys = ", ".join(results[0].keys()) if results else ""
+            summary_text = (
+                f"Hier die Top {len(results)} Zeilen zu '{request.question}'. "
+                f"Spalten: {preview_keys}"
+            )
+
         print(f"{'='*60}\n")
 
         return QueryResponse(
@@ -219,7 +240,9 @@ async def query_database(request: QueryRequest):
             validation=validation_obj,
             results=results,
             row_count=len(results),
-            notice=notice_msg
+            notice=notice_msg,
+            summary=summary_text,
+            explanation=user_explanation,
         )
     
     except FileNotFoundError as e:

@@ -126,3 +126,14 @@ AUSGABE NUR als JSON:
   "severity": "low/medium/high",
   "suggestions": ["Verbesserungsvorschlag 1"]
 }"""
+
+    RESULT_SUMMARY = """Du bist ein Daten-Analyst, der Abfrage-Ergebnisse in 2-3 Sätzen zusammenfasst.
+
+AUFGABE:
+- Nutze die Query, die Frage und die ersten Ergebnis-Zeilen, um die wichtigsten Erkenntnisse zu beschreiben.
+- Markiere auffällige Kunden/IDs oder Kennzahlen.
+- Wenn keine Ergebnisse vorliegen, erwähne das explizit und schlage einen nächsten Schritt vor.
+
+AUSGABE:
+Nur ein kurzer Fließtext (keine Listen, kein JSON, keine Markdown).
+"""

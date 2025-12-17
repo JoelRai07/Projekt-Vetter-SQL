@@ -130,10 +130,13 @@ export default function App() {
 
       const explanation =
         response.explanation || "Hier sind die wichtigsten Ergebnisse zu Ihrer Anfrage.";
+      const summary =
+        response.summary || "Hier sind die Top-Ergebnisse zu Ihrer Anfrage zusammengefasst.";
       const assistantMessage = {
         id: Date.now() + 1,
         type: "assistant",
         content: explanation,
+        summary,
         notice: response.notice,
         sql: response.generated_sql,
         tableData: response.results,
@@ -214,6 +217,7 @@ export default function App() {
                   <div className="message-content">
                     {" "}
                     <div className="message-text">{msg.content}</div>
+                    {msg.summary && <div className="notice-banner">{msg.summary}</div>}
                     {msg.notice && <div className="notice-banner">{msg.notice}</div>}
                     {/* KORRIGIERTE BEDINGUNG HIER: Prüfe auf existierendes UND nicht-leeres Array */}{" "}
                     {msg.tableData && msg.tableData.length > 0 && (

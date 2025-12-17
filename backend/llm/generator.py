@@ -185,3 +185,36 @@ Validiere die Query.
                 "severity": "low",
                 "suggestions": []
             }
+
+    def summarize_results(
+        self,
+        question: str,
+        generated_sql: str,
+        results: Any,
+        row_count: int,
+        notice: Optional[str] = None,
+    ) -> str:
+        """Erzeugt eine Kurz-Zusammenfassung der Abfrageergebnisse."""
+
+        sample_rows = results[:3] if isinstance(results, list) else []
+        prompt = f"""
+NUTZER-FRAGE:
+{question}
+
+GENERIERTE SQL:
+{generated_sql}
+
+ANZAHL ZEILEN: {row_count}
+HINWEIS: {notice or 'keiner'}
+
+ERSTE ZEILEN (JSON):
+{json.dumps(sample_rows, ensure_ascii=False)}
+
+Fasse die wichtigsten Erkenntnisse kurz zusammen.
+"""
+
+        try:
+            return self._call_gemini(SystemPrompts.RESULT_SUMMARY, prompt)
+        except Exception as e:
+            print(f"⚠️  Zusammenfassung fehlgeschlagen: {str(e)}")
+            raise
