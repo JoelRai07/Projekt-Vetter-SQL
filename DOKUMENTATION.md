@@ -995,19 +995,20 @@ const handlePageChange = async (messageId, newPage) => {
 2. **Query History**: Speichern erfolgreicher Queries für Lernen
 3. **RAG (Retrieval-Augmented Generation)**: Ähnliche Queries finden
 4. **Fine-Tuning**: LLM auf spezifische Datenbanken trainieren
-5. **Multi-Database Support**: PostgreSQL, MySQL, etc.
-6. **Query Optimization**: SQL-Queries automatisch optimieren
-7. **User Feedback**: Thumbs up/down für kontinuierliche Verbesserung
+5. **Ambiguity** benutzen für: **Rückfragen** die von der LLM generiert
+6. **Testing**: Einführung von mehreren Tests
+7. **Query Optimization**: SQL-Queries automatisch optimieren
+8. **User Feedback**: Thumbs up/down für kontinuierliche Verbesserung
+9. (**Multi-Database Support**: PostgreSQL, MySQL, etc.)
 
 ### 11.2 Skalierungs-Überlegungen
 
 **Aktuell**: Single-User, lokale Entwicklung
 **Production-Ready**:
+- **Routing** (Sehr wichtig für später)
 - Connection Pooling für Datenbanken
 - Rate Limiting für API
 - Caching-Layer (Redis)
-- Load Balancing für mehrere Instanzen
-- Monitoring & Alerting
 
 ---
 
