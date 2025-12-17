@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Dict, Any, Optional
 
 from .prompts import SystemPrompts
@@ -90,6 +91,22 @@ class OpenAIGenerator:
         except json.JSONDecodeError as e:
             print(f"⚠️  JSON Parse Fehler: {str(e)}")
             print(f"📄 Extrahiertes JSON (erste 1000 Zeichen):\n{json_str[:1000]}\n")
+
+            # Versuche tolerant zu parsen (z. B. bei unescapten Newlines in Strings)
+            try:
+                return json.loads(json_str, strict=False)
+            except json.JSONDecodeError:
+                pass
+
+            # Entferne Steuerzeichen als letzte Rettung
+            sanitized = re.sub(r"[\x00-\x1f\x7f]", " ", json_str)
+            if sanitized != json_str:
+                try:
+                    print("🧹 Entferne Steuerzeichen und versuche erneut zu parsen...")
+                    return json.loads(sanitized, strict=False)
+                except json.JSONDecodeError:
+                    pass
+
             raise
 
     def _ensure_generation_fields(self, result: Dict[str, Any]) -> Dict[str, Any]:
