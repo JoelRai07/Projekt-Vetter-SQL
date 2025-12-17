@@ -7,9 +7,12 @@ class Config:
     """Zentrale Konfiguration"""
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL = "gemini-2.5-flash"
-    
+
     # Pfade
     DATA_DIR = "mini-interact"
+
+    # Ergebnisse
+    MAX_RESULT_ROWS = 100
     
     # Validierung
     if not GEMINI_API_KEY:

@@ -23,4 +23,5 @@ class QueryResponse(BaseModel):
     validation: Optional[ValidationResult] = None
     results: List[Dict[str, Any]]
     row_count: int
+    notice: Optional[str] = None
     error: Optional[str] = None

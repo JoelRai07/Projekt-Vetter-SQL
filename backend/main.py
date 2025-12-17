@@ -178,18 +178,29 @@ async def query_database(request: QueryRequest):
         
         # 5. SQL Ausführen
         print(f"\n⚡ Führe SQL aus...")
-        results = db_manager.execute_query(generated_sql)
+        results, truncated = db_manager.execute_query(
+            generated_sql, max_rows=Config.MAX_RESULT_ROWS
+        )
+        notice_msg = None
+        if truncated:
+            notice_msg = (
+                f"Ergebnis wurde auf {Config.MAX_RESULT_ROWS} Zeilen gekürzt, "
+                "weitere Zeilen wurden aus Performance-Gründen unterdrückt."
+            )
+            print(f"⚠️  Ergebnis gekürzt: {notice_msg}")
+
         print(f"✅ Erfolgreich! {len(results)} Zeilen zurückgegeben")
-        
+
         print(f"{'='*60}\n")
-        
+
         return QueryResponse(
             question=request.question,
             ambiguity_check=ambiguity_obj,
             generated_sql=generated_sql,
             validation=validation_obj,
             results=results,
-            row_count=len(results)
+            row_count=len(results),
+            notice=notice_msg
         )
     
     except FileNotFoundError as e:

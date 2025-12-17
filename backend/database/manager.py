@@ -1,6 +1,6 @@
 import sqlite3
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from functools import lru_cache
 
 class DatabaseManager:
@@ -53,14 +53,23 @@ class DatabaseManager:
         conn.close()
         return mapping
     
-    def execute_query(self, sql: str) -> List[Dict[str, Any]]:
-        """Führt SQL Query aus und gibt Ergebnisse zurück"""
+    def execute_query(self, sql: str, max_rows: int | None = None) -> Tuple[List[Dict[str, Any]], bool]:
+        """Führt SQL Query aus, begrenzt optional die Zeilenzahl und kennzeichnet Kürzungen."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         try:
             cursor.execute(sql)
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
+
+            truncated = False
+            if max_rows is None:
+                rows = cursor.fetchall()
+            else:
+                # Hole maximal max_rows + 1, um zu erkennen, ob mehr Daten vorhanden sind
+                fetched_rows = cursor.fetchmany(max_rows + 1)
+                truncated = len(fetched_rows) > max_rows
+                rows = fetched_rows[:max_rows]
+
+            return [dict(row) for row in rows], truncated
         finally:
             conn.close()
