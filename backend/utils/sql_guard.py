@@ -30,13 +30,20 @@ def enforce_known_tables(sql: str, table_columns: Dict[str, List[str]]) -> Optio
     table_names = set(table_columns.keys())
     found_tables = set()
 
+    # Ermittele CTE-Namen, damit sie nicht fälschlicherweise als unbekannte Tabellen markiert werden
+    cte_names = set()
+    for match in re.finditer(r"\bwith\s+\"?([a-zA-Z_][\w]*)\"?\s+as\b", sql, flags=re.IGNORECASE):
+        cte_names.add(match.group(1))
+    for match in re.finditer(r",\s*\"?([a-zA-Z_][\w]*)\"?\s+as\b", sql, flags=re.IGNORECASE):
+        cte_names.add(match.group(1))
+
     # Einfache Regex für FROM/JOIN
     for match in re.finditer(r"\bfrom\s+([\w\"\.]+)|\bjoin\s+([\w\"\.]+)", sql, flags=re.IGNORECASE):
         table = match.group(1) or match.group(2)
         if table:
             found_tables.add(table.replace('"', ''))
 
-    unknown = [tbl for tbl in found_tables if tbl not in table_names]
+    unknown = [tbl for tbl in found_tables if tbl not in table_names and tbl not in cte_names]
     if unknown:
         return f"Unbekannte Tabellen im SQL: {', '.join(sorted(unknown))}"
 
