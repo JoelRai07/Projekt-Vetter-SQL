@@ -67,36 +67,63 @@ Du MUSST EXAKT dieses JSON-Format zurückgeben, NICHTS ANDERES:
 
 WICHTIG: 
 - Keine zusätzlichen Kommentare vor oder nach dem JSON
-- Keine Markdown-Formatierung (keine ```json```)
+- Keine Markdown-Formatierung (keine ```json```) 
 - Nur das reine JSON-Objekt
 - confidence muss eine Zahl zwischen 0.0 und 1.0 sein
 
 FEW-SHOT-BEISPIELE (Nutze sie als Stil- und Strukturvorlage, passe Tabellen/Spalten an die gegebene DB an):
-1) Frage: "Welche Kund:innen haben ein Debt-to-Income-Ratio über 0.5?"
+1) Frage: "Zeige die 10 Kunden mit dem höchsten Nettovermögen."
    Antwort:
    {
-     "thought_process": "DTI liegt in employment_and_income.debincratio. Join zu assets für Net Worth ist optional.",
-     "sql": "SELECT e.emplcoreref AS customer_id, e.debincratio, ea.networth\nFROM employment_and_income e\nJOIN expenses_and_assets ea ON ea.expemplref = e.emplcoreref\nWHERE e.debincratio > 0.5\nORDER BY e.debincratio DESC\nLIMIT 10;",
-     "explanation": "Filtere Kund:innen mit DTI > 0.5, zeige Verhältnis und Net Worth.",
-     "confidence": 0.82
+     "thought_process": "Berechne Net Worth als totassets - totliabs, sortiere absteigend und nummeriere mit RANK().",
+     "sql": "SELECT expemplref AS customer_id, totassets, totliabs, totassets - totliabs AS computed_networth, RANK() OVER (ORDER BY (totassets - totliabs) DESC NULLS FIRST) AS networth_rank FROM expenses_and_assets ORDER BY computed_networth DESC NULLS FIRST LIMIT 10;",
+     "explanation": "Zeigt die Top 10 Kunden nach berechnetem Nettovermögen mit Rangfolge.",
+     "confidence": 0.87
    }
 
-2) Frage: "Berechne die Loan-to-Value-Quote (LTV) je Kunde und zeige die höchsten 5".
+2) Frage: "Finde alle Kunden, die digitale Kanäle intensiv nutzen und Autopay aktiviert haben."
    Antwort:
    {
-     "thought_process": "LTV = Mortgage Balance / Property Value aus der JSON-Spalte propfinancialdata.",
-     "sql": "WITH property_values AS (\n  SELECT\n    expemplref AS customer_id,\n    CAST(json_extract(propfinancialdata, '$.propvalue') AS REAL) AS prop_value,\n    CAST(json_extract(propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mort_balance\n  FROM expenses_and_assets\n)\nSELECT customer_id,\n       prop_value,\n       mort_balance,\n       CASE WHEN prop_value IS NOT NULL AND prop_value != 0 THEN mort_balance / prop_value ELSE NULL END AS ltv\nFROM property_values\nORDER BY ltv DESC NULLS LAST\nLIMIT 5;",
-     "explanation": "Extrahiert Property- und Mortgage-Werte aus JSON und berechnet LTV.",
-     "confidence": 0.8
+     "thought_process": "Suche nach Kunden mit 'High' Nutzung von Online oder Mobile und aktiviertem Autopay in JSON-Spalte.",
+     "sql": "SELECT bankexpref FROM bank_and_transactions WHERE (json_extract(chaninvdatablock, '$.onlineuse') = 'High' OR json_extract(chaninvdatablock, '$.mobileuse') = 'High') AND json_extract(chaninvdatablock, '$.autopay') = 'Yes';",
+     "explanation": "Listet alle Bankreferenzen mit hoher digitaler Nutzung und Autopay.",
+     "confidence": 0.83
    }
 
-3) Frage: "Berechne einen Financial Stability Index (FSI) als (networth + liqassets) / NULLIF(totliabs,0)".
+3) Frage: "Zeige Kunden mit signifikanten Investitionen und hoher Investment-Erfahrung."
    Antwort:
    {
-     "thought_process": "FSI-Felder liegen in expenses_and_assets; einfache Kennzahl über vorhandene Spalten.",
-     "sql": "SELECT expemplref AS customer_id,\n       networth,\n       liqassets,\n       totliabs,\n       (networth + liqassets) / NULLIF(totliabs, 0) AS fsi\nFROM expenses_and_assets\nWHERE totliabs IS NOT NULL\nORDER BY fsi DESC\nLIMIT 20;",
-     "explanation": "Addiert Net Worth und liquide Mittel und setzt sie ins Verhältnis zu Verbindlichkeiten.",
-     "confidence": 0.79
+     "thought_process": "Verknüpfe assets und bank tables, filtere nach investport und investexp, prüfe Investitionsquote.",
+     "sql": "WITH investment_customers AS (SELECT ea.expemplref AS customer_id, ea.investamt, ea.totassets, json_extract(bt.chaninvdatablock, '$.invcluster.investport') AS investport, json_extract(bt.chaninvdatablock, '$.invcluster.investexp') AS investexp FROM expenses_and_assets ea JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref) SELECT customer_id, investamt, totassets FROM investment_customers WHERE (investport = 'Moderate' OR investport = 'Aggressive') AND investexp = 'Extensive' AND investamt > 0.3 * totassets;",
+     "explanation": "Findet Kunden mit hoher Investment-Aktivität und Erfahrung.",
+     "confidence": 0.85
+   }
+
+4) Frage: "Wie verteilen sich die Kunden auf Kredit-Score-Kategorien?"
+   Antwort:
+   {
+     "thought_process": "Kategorisiere credscore in Gruppen und zähle pro Kategorie, berechne Durchschnittswerte.",
+     "sql": "SELECT CASE WHEN credscore BETWEEN 300 AND 579 THEN 'Poor' WHEN credscore BETWEEN 580 AND 669 THEN 'Fair' WHEN credscore BETWEEN 670 AND 739 THEN 'Good' WHEN credscore BETWEEN 740 AND 799 THEN 'Very Good' WHEN credscore BETWEEN 800 AND 850 THEN 'Excellent' ELSE 'Unknown' END AS credit_category, COUNT(*) AS customer_count, ROUND(AVG(credscore), 2) AS average_credscore FROM credit_and_compliance GROUP BY credit_category;",
+     "explanation": "Zeigt die Verteilung und Durchschnittswerte der Kredit-Scores.",
+     "confidence": 0.81
+   }
+
+5) Frage: "Berechne das Loan-to-Value-Verhältnis (LTV) für Immobilienbesitzer."
+   Antwort:
+   {
+     "thought_process": "Berechne LTV als mortgagebits.mortbalance / propvalue aus JSON, filtere auf gültige Werte.",
+     "sql": "WITH ltv_calc AS (SELECT expemplref, CAST(json_extract(propfinancialdata, '$.propvalue') AS REAL) AS prop_value, CAST(json_extract(propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mort_balance, CASE WHEN CAST(json_extract(propfinancialdata, '$.propvalue') AS REAL) > 0 THEN CAST(json_extract(propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) / CAST(json_extract(propfinancialdata, '$.propvalue') AS REAL) ELSE NULL END AS ltv_ratio FROM expenses_and_assets WHERE propfinancialdata IS NOT NULL) SELECT expemplref AS customer_id, prop_value, mort_balance, ROUND(ltv_ratio, 3) AS ltv_ratio FROM ltv_calc WHERE ltv_ratio IS NOT NULL ORDER BY ltv_ratio DESC NULLS FIRST;",
+     "explanation": "Berechnet das LTV für alle Kunden mit Immobilien und sortiert absteigend.",
+     "confidence": 0.84
+   }
+
+6) Frage: "Welche Kunden gelten als finanziell besonders gefährdet?"
+   Antwort:
+   {
+     "thought_process": "Berechne einen Stress-Score (FVS) aus DTI und Liquidität, filtere auf negative Net Worth und Delinquencies.",
+     "sql": "WITH stress AS (SELECT cr.clientref, ei.debincratio, ea.liqassets, ea.totassets, ea.totliabs, ei.mthincome, cc.delinqcount, cc.latepaycount, 0.5 * ei.debincratio + 0.5 * (1 - (ea.liqassets / NULLIF(ei.mthincome * 6, 0))) AS FVS, (ea.totassets - ea.totliabs) AS net_worth FROM core_record cr INNER JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref INNER JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref INNER JOIN credit_and_compliance cc ON cc.compbankref = ei.emplcoreref) SELECT clientref, FVS, net_worth, delinqcount, latepaycount FROM stress WHERE FVS > 0.7 AND (delinqcount > 0 OR latepaycount > 0) AND net_worth < 0;",
+     "explanation": "Identifiziert Kunden mit hohem finanziellen Stress und negativem Vermögen.",
+     "confidence": 0.86
    }
 """
 
