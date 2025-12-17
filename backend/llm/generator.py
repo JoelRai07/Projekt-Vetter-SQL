@@ -2,7 +2,12 @@ import json
 from typing import Dict, Any, Optional
 
 from .prompts import SystemPrompts
-from openai import OpenAI
+from openai import (
+    APIStatusError,
+    AuthenticationError,
+    OpenAI,
+    RateLimitError,
+)
 
 
 class OpenAIGenerator:
@@ -14,16 +19,33 @@ class OpenAIGenerator:
 
     def _call_openai(self, system_instruction: str, prompt: str) -> str:
         """Generischer OpenAI ChatCompletion Call"""
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.2,
-        )
-        content = response.choices[0].message.content or ""
-        return content.strip()
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.2,
+            )
+            content = response.choices[0].message.content or ""
+            return content.strip()
+        except RateLimitError as e:
+            raise RuntimeError(
+                "OpenAI-Kontingent oder Rate-Limit überschritten. Bitte Schlüssel, Plan "
+                "oder Billing-Einstellungen prüfen."
+            ) from e
+        except AuthenticationError as e:
+            raise RuntimeError(
+                "OpenAI-Authentifizierung fehlgeschlagen – ist der API-Schlüssel gültig?"
+            ) from e
+        except APIStatusError as e:
+            if e.status_code == 429:
+                raise RuntimeError(
+                    "OpenAI meldet 'Too Many Requests/Quota exceeded'. Bitte Kontingent "
+                    "prüfen oder später erneut versuchen."
+                ) from e
+            raise
 
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
         """Parse JSON Response und entferne Markdown - sehr robust"""
