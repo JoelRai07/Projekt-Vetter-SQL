@@ -1,121 +1,100 @@
-# ChatWithYourData – Text2SQL Projekt 📌
+# Text2SQL System - Projekt-Vetter-SQL
 
-## Übersicht
+Ein vollständiges System zur Übersetzung von natürlicher Sprache in SQL-Abfragen.
 
-Dieses Projekt wurde im Rahmen des Moduls "Projekt" an der DHBW Stuttgart entwickelt. Ziel ist es, eine Anwendung zu erstellen, die es Nutzer:innen ermöglicht, natürliche Sprache zu verwenden, um SQL-Abfragen automatisch zu generieren und eine Datenbank abzufragen. Dazu wird ein Large Language Model (LLM) eingebunden, das Text → SQL übersetzt.
+## 🚀 Quick Start
 
-Das Projekt basiert auf dem Benchmark-Datensatz **BIRD-INTERACT (mini-interact)**. Die Hauptaufgabe besteht darin, die bereitgestellten Fragen korrekt zu beantworten, indem die Anwendung dynamisch SQL-Abfragen erzeugt und ausführt.
+### Backend starten
+```bash
+cd backend
+pip install -r requirements.txt
+python main.py
+```
 
-## 🎯 Projektziele
+### Frontend starten
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-- Entwicklung eines funktionierenden Text2SQL-Prototyps
-- Nutzung moderner LLM-Technologien zur automatischen SQL-Generierung
-- Erstellung einer Architektur, die Frontend, Backend, LLM und Datenbank verbindet
-- Umsetzung der im Modul geforderten Methoden des Software Engineerings, Projektmanagements und Teamarbeit
+## 📚 Dokumentation
 
-## 🧠 Motivation
+**Vollständige Dokumentation**: Siehe [DOKUMENTATION.md](./DOKUMENTATION.md)
 
-Daten sind das Gold des 21. Jahrhunderts – jedoch ist SQL für viele Mitarbeitende eine Hürde. Moderne KI-Modelle ermöglichen es, natürliche Sprache effizient zu interpretieren.
+Die Dokumentation erklärt:
+- ✅ **Was** wurde gebaut (Projektübersicht)
+- ✅ **Wofür** wurde es gebaut (Anwendungsfälle)
+- ✅ **Wozu** wurde es gebaut (Ziele)
+- ✅ **Wie** funktioniert es (Architektur, Datenfluss, Code)
+- ✅ **Warum** wurden bestimmte Technologien/Entscheidungen getroffen
 
-Mit diesem Projekt helfen wir Unternehmen dabei, **data-driven** zu werden, indem wir die Distanz zwischen Mensch und Datenbank reduzieren.
+## 🏗️ Architektur
+
+```
+Frontend (React) → FastAPI Backend → OpenAI GPT-4o-mini → SQLite Database
+```
+
+## ✨ Features
+
+- 🤖 **Automatische SQL-Generierung** aus natürlicher Sprache
+- 🔍 **Ambiguity Detection** - Erkennt mehrdeutige Fragen
+- ✅ **Multi-Layer Validation** - Sicherheit + Korrektheit
+- 📄 **Paging** - Navigation durch große Ergebnis-Sets
+- 📊 **Result Summarization** - Verständliche Zusammenfassungen
+- 🔒 **SQL Guard** - Sicherheitsprüfungen
 
 ## 🛠️ Technologie-Stack
 
-### Backend
+**Backend:**
+- FastAPI (REST API)
+- OpenAI GPT-4o-mini (LLM)
+- SQLite (Datenbank)
+- Pydantic (Validierung)
 
-- **Node.js / Express**
-- Anbindung eines LLM (z. B. GPT-4.1, GPT-4o-mini, o3-mini, Claude 3.5 Sonnet)
-- **SQLite** für den mini-interact Datensatz
-- SQL Execution Layer
+**Frontend:**
+- React (UI)
+- Vite (Build Tool)
 
-### Frontend
+## 📖 Verwendung
 
-- Einfaches Chat-Interface (z. B. **React**)
-- Anfrage → Backend → Antwortfluss
+1. Öffne Frontend im Browser
+2. Stelle eine Frage in natürlicher Sprache
+3. System generiert SQL und zeigt Ergebnisse
+4. Navigiere durch Seiten bei großen Ergebnissen
 
-### Weitere Tools
+**Beispiel-Fragen:**
+- "Zeige alle Kunden mit Einkommen über 50000"
+- "Berechne den Durchschnitt des Net Worth"
+- "Welche Kunden haben die höchste Debt-to-Income-Ratio?"
 
-- **GitHub** (Versionierung, Projektmanagement)
-- ggf. **n8n** für explorative Low-Code-Prototypen
+## 📁 Projektstruktur
 
-## 🧪 Datensatz
+```
+backend/
+├── main.py              # FastAPI App
+├── models.py            # Pydantic Models
+├── database/            # Database Manager
+├── llm/                 # LLM Generator & Prompts
+└── utils/               # Helper Functions
 
-- **Mini-Interact Benchmark Datensatz der BIRD-Initiative**
-- **Fragen:** `mini_interact.jsonl` (instance_id: credit_1 – credit_10)
-- **Datenbank:** `credit.sqlite`
+frontend/
+├── src/
+│   ├── App.jsx         # Main Component
+│   └── App.css         # Styles
+└── package.json
+```
 
-### Zusatzinfos:
+## 🔐 Sicherheit
 
-- `credit_column_meaning_base.json`
-- `credit_kb.jsonl`
+- **SQL Guard**: Verhindert gefährliche Operationen (DELETE, DROP, etc.)
+- **Table Validation**: Prüft ob nur bekannte Tabellen verwendet werden
+- **LLM Validation**: Semantische Validierung der generierten SQL
 
-**Wichtig:** Die offiziellen Lösungen liegen in Moodle und dürfen nicht dem LLM zugänglich gemacht werden.
+## 📝 License
 
-## ⚙️ Funktionsweise
+Projekt für DHBW Stuttgart - Projekt Modul
 
-1. **Nutzer gibt natürliche Sprache ein** → z. B.  
-   _„Wie viele Kund:innen haben einen Kredit über 10.000 Euro?“_
+---
 
-2. **Backend verarbeitet Eingabe**
-   - Fragt LLM mit Schema + Prompt + Few-Shot-Beispielen an
-   - LLM generiert SQL
-
-3. **Backend führt SQL aus**
-   - SQLite-Abfrage
-
-4. **Backend gibt Antwort zurück**
-   - Ergebnis wird ins Frontend zurückgespielt
-
-  ## 📝 Architekturentscheidungen (ADR)
-
-Beispielhafte Entscheidungen:
-
-- Warum wir OpenAI/Claude als LLM gewählt haben
-- Warum wir Few-Shot Prompting statt Fine-Tuning nutzen
-- Wahl von Express.js statt Python FastAPI
-- Sicherheitsüberlegungen (kein Zugriff auf Lösungen)
-
-## 🧪 Tests
-
-- **SQL-Ausführungstests**
-- **Validierung der generierten Queries**
-- **Evaluation der LLM-generierten Antworten**
-- **Handling von Edge Cases** (invalid SQL, leere Antworten, etc.)
-
-## 🚧 Bekannte Limitierungen
-
-- LLM kann SQL halluzinieren
-- Fehlende Kontextinformation → komplexe Joins schwierig
-- Performance abhängig vom LLM
-- Kein Fine-Tuning auf BIRD-Datensatz
-
-## 🚀 Erweiterungsmöglichkeiten
-
-- Unterstützung mehrerer Datenbanken (DB-Auswahlproblem lösen)
-- Automatisierte Schema-Extraktion
-- SQL-Korrektur mittels Self-Refinement
-- Integration Open-Source-LLMs (Llama 3.1 / Qwen / DeepSeek) via Ollama
-- Low-Code Automation Layer mit n8n
-
-## 📅 Projektmanagement-Komponenten
-
-- **Gruppengröße:** ~5 Studierende
-- **Tickets zu:** Frontend, Backend, LLM-Anbindung, Testing, Evaluation, Doku
-- **Regelmäßige Sprint Reviews**
-- **Nutzung eines Kanban-Boards**
-- **Abschlusspräsentation:** 20 Min + 10 Min Q&A
-
-## 🧭 Selbstreflexion (für die Abgabe)
-
-- Was lief gut?
-- Was hat nicht gut funktioniert?
-- Wie könnte man im nächsten Projekt besser zusammenarbeiten?
-- Welche Rolle habe ich im Team eingenommen?
-
-## 📖 Lizenz
-
-Dieses Projekt dient ausschließlich zu Studienzwecken an der DHBW Stuttgart.
-
-## 👥 Team
-
-Tim Kühne, Dominik Ruoff, Joel Martinez, Umut Polat, Sören Frank
+**Für detaillierte Informationen siehe [DOKUMENTATION.md](./DOKUMENTATION.md)**

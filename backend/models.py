@@ -4,6 +4,9 @@ from typing import List, Dict, Any, Optional
 class QueryRequest(BaseModel):
     question: str
     database: str = "credit"
+    page: int = 1  # Paging: Seitenzahl
+    page_size: int = 100  # Paging: Zeilen pro Seite
+    use_react: bool = True  # ReAct + Retrieval Modus
 
 class AmbiguityResult(BaseModel):
     is_ambiguous: bool
@@ -23,6 +26,13 @@ class QueryResponse(BaseModel):
     validation: Optional[ValidationResult] = None
     results: List[Dict[str, Any]]
     row_count: int
+    # Paging-Felder
+    page: int = 1
+    page_size: int = 100
+    total_pages: Optional[int] = None
+    total_rows: Optional[int] = None
+    has_next_page: bool = False
+    has_previous_page: bool = False
     notice: Optional[str] = None
     summary: Optional[str] = None
     explanation: Optional[str] = None

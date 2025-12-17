@@ -3,6 +3,7 @@ import re
 from typing import Dict, Any, Optional
 
 from .prompts import SystemPrompts
+from config import Config
 from openai import (
     APIStatusError,
     AuthenticationError,
@@ -258,3 +259,216 @@ Fasse die wichtigsten Erkenntnisse kurz zusammen.
         except Exception as e:
             print(f"⚠️  Zusammenfassung fehlgeschlagen: {str(e)}")
             raise
+    
+    def generate_sql_with_react_retrieval(
+        self,
+        question: str,
+        db_path: str,
+        database_name: str,
+        max_iterations: int = 3
+    ) -> Dict[str, Any]:
+        """
+        ReAct-basierte SQL-Generierung mit gezieltem Schema/KB-Retrieval
+        
+        ReAct-Prozess:
+        1. THINK: Analysiere Frage → identifiziere benötigte Tabellen/KB-Einträge
+        2. ACT: Führe Retrieval durch basierend auf Suchanfragen
+        3. OBSERVE: Erhalte relevante Schema-Teile/KB-Einträge
+        4. REASON: Genug Info? → Ja: SQL generieren, Nein: weitere Suchen
+        """
+        from rag.schema_retriever import SchemaRetriever
+        from utils.context_loader import load_context_files
+        from database.manager import DatabaseManager
+        
+        retriever = SchemaRetriever(db_path)
+        
+        # KB/Meanings einmalig laden und indexieren (falls nötig)
+        kb_text, meanings_text = load_context_files(database_name, Config.DATA_DIR)
+        if len(retriever.kb_store.get()['ids']) == 0:
+            retriever.index_kb(kb_text)
+        if len(retriever.meanings_store.get()['ids']) == 0:
+            retriever.index_meanings(meanings_text)
+        
+        # ReAct-Loop
+        collected_schema = []
+        collected_kb = []
+        collected_meanings = []
+        all_search_queries = []
+        
+        for iteration in range(max_iterations):
+            # THINK: Analysiere Frage und bestimme Suchanfragen
+            if iteration == 0:
+                reasoning_prompt = f"""NUTZER-FRAGE: {question}
+
+Analysiere die Frage und identifiziere:
+1. Welche Konzepte/Entitäten werden erwähnt? (z.B. "Kunden", "Kredite", "Einkommen")
+2. Welche Tabellen könnten diese enthalten?
+3. Welche Berechnungen/Formeln werden benötigt?
+4. Welche Suchanfragen würden relevante Schema-Teile/KB-Einträge finden?
+
+Antworte als JSON."""
+            else:
+                reasoning_prompt = f"""NUTZER-FRAGE: {question}
+
+BEREITS GEFUNDEN:
+- Schema-Chunks: {len(collected_schema)}
+- KB-Einträge: {len(collected_kb)}
+- Meanings: {len(collected_meanings)}
+- Durchgeführte Suchen: {', '.join(all_search_queries)}
+
+Was fehlt noch? Welche weiteren Suchanfragen sind nötig?
+
+Antworte als JSON."""
+            
+            try:
+                reasoning_result = self._call_openai(
+                    SystemPrompts.REACT_REASONING,
+                    reasoning_prompt
+                )
+                reasoning = self._parse_json_response(reasoning_result)
+            except Exception as e:
+                print(f"⚠️  Reasoning-Fehler: {str(e)}")
+                reasoning = {"search_queries": [question], "sufficient_info": iteration >= max_iterations - 1}
+            
+            # ACT: Führe Retrieval durch
+            search_queries = reasoning.get("search_queries", [])
+            if not search_queries and iteration == 0:
+                # Fallback: Nutze Frage direkt als Suchanfrage
+                search_queries = [question]
+            
+            all_search_queries.extend(search_queries)
+            
+            for query in search_queries:
+                # Schema Retrieval
+                schema_chunk = retriever.retrieve_relevant_schema(query, top_k=3)
+                if schema_chunk and schema_chunk not in collected_schema:
+                    collected_schema.append(schema_chunk)
+                
+                # KB Retrieval
+                kb_chunk = retriever.retrieve_relevant_kb(query, top_k=3)
+                if kb_chunk and kb_chunk not in collected_kb:
+                    collected_kb.append(kb_chunk)
+                
+                # Meanings Retrieval
+                meanings_chunk = retriever.retrieve_relevant_meanings(query, top_k=5)
+                if meanings_chunk and meanings_chunk not in collected_meanings:
+                    collected_meanings.append(meanings_chunk)
+            
+            # OBSERVE: Prüfe ob genug Info vorhanden
+            if reasoning.get("sufficient_info", False) or iteration >= max_iterations - 1:
+                break
+        
+        # SQL Generation mit nur relevanten Informationen
+        relevant_schema = "\n\n".join(collected_schema) if collected_schema else None
+        relevant_kb = "\n".join(collected_kb) if collected_kb else ""
+        relevant_meanings = "\n".join(collected_meanings) if collected_meanings else ""
+        
+        # Fallback: Wenn nichts gefunden, verwende komplettes Schema
+        if not relevant_schema:
+            print("⚠️  Keine relevanten Schema-Teile gefunden, verwende komplettes Schema")
+            db_manager = DatabaseManager(db_path)
+            relevant_schema = db_manager.get_schema_and_sample()
+            relevant_kb = kb_text
+            relevant_meanings = meanings_text
+        
+        # Generiere SQL
+        prompt = f"""### RELEVANTE DATENBANK SCHEMA-TEILE:
+{relevant_schema}
+
+### RELEVANTE SPALTEN BEDEUTUNGEN:
+{relevant_meanings}
+
+### RELEVANTE DOMAIN WISSEN & FORMELN:
+{relevant_kb}
+
+### NUTZER-FRAGE:
+{question}
+
+Generiere die SQL-Query im JSON-Format."""
+        
+        try:
+            response = self._call_openai(SystemPrompts.REACT_SQL_GENERATION, prompt)
+            result = self._ensure_generation_fields(self._parse_json_response(response))
+            
+            # Metadaten
+            result["retrieval_info"] = {
+                "schema_chunks_used": len(collected_schema),
+                "kb_entries_used": len(collected_kb),
+                "search_queries": all_search_queries
+            }
+            
+            if result.get("sql"):
+                result["sql"] = result["sql"].replace("```sql", "").replace("```", "").strip()
+            
+            return result
+        except Exception as e:
+            return {
+                "sql": None,
+                "explanation": f"Fehler bei ReAct SQL-Generierung: {str(e)}",
+                "confidence": 0.0
+            }
+    
+    def generate_sql_with_correction(
+        self,
+        question: str,
+        schema: str,
+        kb: str,
+        meanings: str,
+        max_iterations: int = 2
+    ) -> Dict[str, Any]:
+        """Generate SQL with self-correction loop"""
+        sql_result = None
+        validation_result = None
+        
+        for iteration in range(max_iterations):
+            # Generate or correct SQL
+            if iteration == 0:
+                # Initial generation
+                sql_result = self.generate_sql(question, schema, kb, meanings)
+            else:
+                # Correction based on validation errors
+                correction_prompt = f"""
+VORHERIGE SQL (FEHLERHAFT):
+{sql_result.get("sql")}
+
+VALIDIERUNGS-FEHLER:
+{chr(10).join(validation_result.get("errors", []))}
+
+NUTZER-FRAGE:
+{question}
+
+DATENBANK SCHEMA:
+{schema}
+
+Korrigiere die SQL-Query basierend auf den Fehlern.
+"""
+                try:
+                    response = self._call_openai(SystemPrompts.SQL_GENERATION, correction_prompt)
+                    sql_result = self._ensure_generation_fields(self._parse_json_response(response))
+                    if sql_result.get("sql"):
+                        sql_result["sql"] = sql_result["sql"].replace("```sql", "").replace("```", "").strip()
+                except Exception as e:
+                    print(f"⚠️  SQL-Korrektur fehlgeschlagen: {str(e)}")
+                    break
+            
+            if not sql_result or not sql_result.get("sql"):
+                break
+            
+            # Validate
+            validation_result = self.validate_sql(sql_result["sql"], schema)
+            
+            # If valid or only low severity, return
+            if validation_result.get("is_valid") or validation_result.get("severity") != "high":
+                sql_result["correction_iterations"] = iteration + 1
+                return sql_result
+        
+        # Return best attempt even if not perfect
+        if sql_result:
+            sql_result["correction_iterations"] = max_iterations
+            sql_result["validation_warnings"] = validation_result.get("errors", []) if validation_result else []
+        
+        return sql_result or {
+            "sql": None,
+            "explanation": "SQL-Generierung nach mehreren Versuchen fehlgeschlagen.",
+            "confidence": 0.0
+        }

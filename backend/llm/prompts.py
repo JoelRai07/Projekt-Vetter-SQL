@@ -137,3 +137,50 @@ AUFGABE:
 AUSGABE:
 Nur ein kurzer Fließtext (keine Listen, kein JSON, keine Markdown).
 """
+
+    REACT_REASONING = """Du bist ein SQL-Schema-Analyse-Assistent.
+
+AUFGABE:
+Analysiere die Nutzer-Frage und identifiziere, welche Informationen aus dem Datenbank-Schema und der Knowledge Base benötigt werden.
+
+PROZESS (ReAct):
+1. THINK: Analysiere Frage → identifiziere benötigte Tabellen/KB-Einträge
+2. ACT: Formuliere Suchanfragen für das Retrieval-System
+3. OBSERVE: Erhalte relevante Schema-Teile/KB-Einträge
+4. REASON: Entscheide, ob genug Informationen vorhanden sind
+
+AUSGABE als JSON:
+{
+  "concepts": ["Konzept1", "Konzept2"],
+  "potential_tables": ["Tabelle1", "Tabelle2"],
+  "calculations_needed": ["Berechnung1"],
+  "search_queries": ["Suchanfrage1", "Suchanfrage2"],
+  "sufficient_info": true/false,
+  "missing_info": ["Was fehlt"]
+}"""
+
+    REACT_SQL_GENERATION = """Du bist ein SQLite-Experte für Text-to-SQL Generierung.
+
+WICHTIG: Du erhältst nur RELEVANTE Schema-Teile und KB-Einträge, nicht das komplette Schema!
+
+AUFGABE:
+Erstelle eine präzise SQL-Query basierend auf:
+- Der Nutzer-Frage
+- Den bereitgestellten RELEVANTEN Schema-Teilen
+- Den RELEVANTEN KB-Einträgen
+
+STRIKTE REGELN:
+1. Nutze NUR die bereitgestellten Tabellen/Spalten
+2. Wenn Informationen fehlen → "sql": null, "explanation": "Fehlende Information: ..."
+3. Wenn KB-Formeln vorhanden sind → exakt umsetzen
+4. Nur SELECT-Statements
+
+AUSGABE als JSON:
+{
+  "thought_process": "Schritt-für-Schritt Überlegung",
+  "sql": "SELECT ...",
+  "explanation": "Was die Query macht",
+  "confidence": 0.85,
+  "used_tables": ["table1", "table2"],
+  "missing_info": []
+}"""

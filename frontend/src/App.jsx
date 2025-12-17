@@ -65,6 +65,8 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
 
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -86,13 +88,16 @@ export default function App() {
   };
 
   // Function to call the backend API
-  const askQuestion = async (question) => {
+  const askQuestion = async (question, page = 1, pageSize = 100) => {
     const response = await fetch("http://localhost:8000/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question: question,
         database: "credit",
+        page: page,
+        page_size: pageSize,
+        use_react: true,
       }),
     });
 
@@ -111,12 +116,14 @@ export default function App() {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const currentQuestion = question.trim();
     setQuestion("");
+    setCurrentPage(1); // Reset to page 1 for new query
     setIsLoading(true);
 
     try {
       // Call the real API
-      const response = await askQuestion(question);
+      const response = await askQuestion(currentQuestion, 1, pageSize);
 
       if (response.error) {
         const errorMessage = {
@@ -141,6 +148,14 @@ export default function App() {
         sql: response.generated_sql,
         tableData: response.results,
         showSQL: false,
+        // Paging info
+        page: response.page || 1,
+        pageSize: response.page_size || 100,
+        totalPages: response.total_pages || 1,
+        totalRows: response.total_rows || 0,
+        hasNextPage: response.has_next_page || false,
+        hasPreviousPage: response.has_previous_page || false,
+        originalQuestion: currentQuestion, // Store for pagination
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -152,6 +167,48 @@ export default function App() {
           "Es gab ein Problem bei der Verarbeitung Ihrer Anfrage. Bitte versuchen Sie es erneut.",
       };
       setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle page navigation
+  const handlePageChange = async (messageId, newPage) => {
+    const message = messages.find((m) => m.id === messageId);
+    if (!message || !message.originalQuestion) return;
+
+    setIsLoading(true);
+    try {
+      const response = await askQuestion(
+        message.originalQuestion,
+        newPage,
+        message.pageSize || pageSize
+      );
+
+      if (response.error) {
+        alert(`Fehler: ${response.error}`);
+        return;
+      }
+
+      // Update the message with new page data
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? {
+                ...msg,
+                tableData: response.results,
+                page: response.page || newPage,
+                totalPages: response.total_pages || 1,
+                totalRows: response.total_rows || 0,
+                hasNextPage: response.has_next_page || false,
+                hasPreviousPage: response.has_previous_page || false,
+                notice: response.notice,
+              }
+            : msg
+        )
+      );
+    } catch (error) {
+      alert("Fehler beim Laden der Seite. Bitte versuchen Sie es erneut.");
     } finally {
       setIsLoading(false);
     }
@@ -223,6 +280,29 @@ export default function App() {
                     {msg.tableData && msg.tableData.length > 0 && (
                       <div className="data-table">
                         {" "}
+                        {/* Paging Controls */}
+                        {msg.totalPages > 1 && (
+                          <div className="paging-controls">
+                            <button
+                              className="page-btn"
+                              onClick={() => handlePageChange(msg.id, msg.page - 1)}
+                              disabled={!msg.hasPreviousPage || isLoading}
+                            >
+                              ← Vorherige
+                            </button>
+                            <span className="page-info">
+                              Seite {msg.page} von {msg.totalPages} ({msg.totalRows} Zeilen
+                              insgesamt)
+                            </span>
+                            <button
+                              className="page-btn"
+                              onClick={() => handlePageChange(msg.id, msg.page + 1)}
+                              disabled={!msg.hasNextPage || isLoading}
+                            >
+                              Nächste →
+                            </button>
+                          </div>
+                        )}
                         <table>
                           {" "}
                           <thead>

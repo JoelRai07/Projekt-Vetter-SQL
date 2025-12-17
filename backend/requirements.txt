@@ -1,6 +1,10 @@
-# Backend dependencies (new utilities rely only on stdlib, so no extra packages required)
+# Backend dependencies
 fastapi
 uvicorn
 pydantic
 python-dotenv
 openai
+langchain-openai
+langchain-community
+chromadb
+cachetools
