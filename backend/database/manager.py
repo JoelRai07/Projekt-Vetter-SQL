@@ -1,6 +1,7 @@
 import sqlite3
 import json
 from typing import List, Dict, Any
+from functools import lru_cache
 
 class DatabaseManager:
     """Verwaltet Datenbankzugriffe und Schema-Abfragen"""
@@ -34,6 +35,23 @@ class DatabaseManager:
         
         conn.close()
         return "\n\n".join(schema_parts)
+
+    @lru_cache(maxsize=1)
+    def get_table_columns(self) -> Dict[str, List[str]]:
+        """Liefert ein Mapping aus Tabellenname -> Spaltenliste für Validierung."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        tables_query = "SELECT name FROM sqlite_master WHERE type='table';"
+        cursor.execute(tables_query)
+        table_names = [row[0] for row in cursor.fetchall()]
+
+        mapping: Dict[str, List[str]] = {}
+        for table in table_names:
+            cursor.execute(f"PRAGMA table_info('{table}')")
+            mapping[table] = [row[1] for row in cursor.fetchall()]
+
+        conn.close()
+        return mapping
     
     def execute_query(self, sql: str) -> List[Dict[str, Any]]:
         """Führt SQL Query aus und gibt Ergebnisse zurück"""
