@@ -3,38 +3,45 @@ import json
 from typing import List, Dict, Any, Tuple
 from functools import lru_cache
 
+
 class DatabaseManager:
     """Verwaltet Datenbankzugriffe und Schema-Abfragen"""
-    
+
     def __init__(self, db_path: str):
         self.db_path = db_path
-    
+
     def get_schema_and_sample(self) -> str:
         """Holt Schema und Beispieldaten für LLM Context"""
+        blocks = self.get_schema_blocks()
+        return "\n\n".join(block["text"] for block in blocks)
+
+    @lru_cache(maxsize=1)
+    def get_schema_blocks(self) -> List[Dict[str, str]]:
+        """Liefert Schema-Abschnitte pro Tabelle inklusive Beispielzeile."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = cursor.fetchall()
-        
-        schema_parts = []
+
+        blocks: List[Dict[str, str]] = []
         for (table_name,) in tables:
-            # CREATE Statement
             cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table_name}';")
             create_stmt = cursor.fetchone()[0]
-            schema_parts.append(create_stmt)
-            
-            # Sample Row (wichtig für JSON Spalten)
+
             cursor.execute(f"SELECT * FROM {table_name} LIMIT 1")
             columns = [description[0] for description in cursor.description]
             row = cursor.fetchone()
+            sample_str = "{}"
             if row:
                 row_dict = dict(zip(columns, row))
                 sample_str = json.dumps(row_dict, default=str, ensure_ascii=False)
-                schema_parts.append(f"-- Beispielzeile für {table_name}:\n-- {sample_str}\n")
-        
+
+            text_block = f"{create_stmt}\n-- Beispielzeile für {table_name}:\n-- {sample_str}\n"
+            blocks.append({"table": table_name, "text": text_block})
+
         conn.close()
-        return "\n\n".join(schema_parts)
+        return blocks
 
     @lru_cache(maxsize=1)
     def get_table_columns(self) -> Dict[str, List[str]]:
@@ -52,7 +59,7 @@ class DatabaseManager:
 
         conn.close()
         return mapping
-    
+
     def execute_query(self, sql: str, max_rows: int | None = None) -> Tuple[List[Dict[str, Any]], bool]:
         """Führt SQL Query aus, begrenzt optional die Zeilenzahl und kennzeichnet Kürzungen."""
         conn = sqlite3.connect(self.db_path)

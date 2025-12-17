@@ -25,3 +25,4 @@ class QueryResponse(BaseModel):
     row_count: int
     notice: Optional[str] = None
     error: Optional[str] = None
+    tool_traces: Optional[List[Dict[str, Any]]] = None

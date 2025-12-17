@@ -1,7 +1,9 @@
-# Backend dependencies (new utilities rely only on stdlib, so no extra packages required)
+# Backend dependencies
 fastapi
 uvicorn
 anthropic
 pydantic
 python-dotenv
 google-generativeai
+faiss-cpu
+numpy

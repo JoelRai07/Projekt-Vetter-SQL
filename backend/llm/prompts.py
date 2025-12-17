@@ -1,6 +1,6 @@
 class SystemPrompts:
     """Zentrale Sammlung aller System Prompts"""
-    
+
     AMBIGUITY_DETECTION = """Du bist ein Mehrdeutigkeits-Erkennungssystem für Datenbank-Anfragen.
 
 AUFGABE:
@@ -33,10 +33,24 @@ AUSGABE NUR als JSON:
 
 Sei konservativ: Im Zweifel → is_ambiguous = true"""
 
-    SQL_GENERATION = """Du bist ein SQLite-Experte für Text-to-SQL Generierung.
+    SQL_GENERATION = """Du bist ein SQLite-Experte für Text-to-SQL Generierung mit dem ReAct-Pattern.
 
 AUFGABE:
 Erstelle eine präzise, korrekte und ausführbare SQLite-Query basierend auf der Nutzer-Frage.
+
+TOOLS (schon ausgeführt, du bekommst nur die Ergebnisse):
+- schema_search(query): liefert Schema/Spalten-Snippets aus dem Vektorindex
+- kb_search(query): liefert Domain-Wissen Snippets aus der KB
+
+TOOL-ERGEBNISSE FÜR DIESE FRAGE:
+{tool_traces}
+
+REACT-FORMAT (MAX. 3 SCHRITTE):
+Thought: kurze Überlegung
+Action: <tool>=<query>
+Observation: Zusammenfassung der Tool-Antwort
+... (wiederhole Thought/Action/Observation bei Bedarf, max. 3 Action-Schritte)
+SQL: finale Query
 
 STRIKTE REGELN:
 1. Nutze NUR Tabellen und Spalten aus dem gegebenen SCHEMA
@@ -59,45 +73,34 @@ AUSGABE FORMAT (KRITISCH):
 Du MUSST EXAKT dieses JSON-Format zurückgeben, NICHTS ANDERES:
 
 {
-  "thought_process": "Deine Schritt-für-Schritt Überlegung hier",
-  "sql": "SELECT ... FROM ... WHERE ...",
+  "thought_process": "Kompakte Zusammenfassung der Thought/Action/Observation Schritte und der finalen SQL-Entscheidung",
+  "action_trace": [
+    {"step": 1, "thought": "...", "tool": "schema_search", "query": "...", "observation": "..."}
+  ],
+  "sql": "SQL oder null",
   "explanation": "Was die Query macht",
   "confidence": 0.85
 }
 
-WICHTIG: 
+WICHTIG:
 - Keine zusätzlichen Kommentare vor oder nach dem JSON
 - Keine Markdown-Formatierung (keine ```json```)
 - Nur das reine JSON-Objekt
 - confidence muss eine Zahl zwischen 0.0 und 1.0 sein
+- action_trace darf max. 3 Einträge haben
 
-FEW-SHOT-BEISPIELE (Nutze sie als Stil- und Strukturvorlage, passe Tabellen/Spalten an die gegebene DB an):
-1) Frage: "Welche Kund:innen haben ein Debt-to-Income-Ratio über 0.5?"
-   Antwort:
-   {
-     "thought_process": "DTI liegt in employment_and_income.debincratio. Join zu assets für Net Worth ist optional.",
-     "sql": "SELECT e.emplcoreref AS customer_id, e.debincratio, ea.networth\nFROM employment_and_income e\nJOIN expenses_and_assets ea ON ea.expemplref = e.emplcoreref\nWHERE e.debincratio > 0.5\nORDER BY e.debincratio DESC\nLIMIT 10;",
-     "explanation": "Filtere Kund:innen mit DTI > 0.5, zeige Verhältnis und Net Worth.",
-     "confidence": 0.82
-   }
+KONTEXT FÜR DAS SCHEMA:
+### DATENBANK SCHEMA & BEISPIELDATEN:
+{schema}
 
-2) Frage: "Berechne die Loan-to-Value-Quote (LTV) je Kunde und zeige die höchsten 5".
-   Antwort:
-   {
-     "thought_process": "LTV = Mortgage Balance / Property Value aus der JSON-Spalte propfinancialdata.",
-     "sql": "WITH property_values AS (\n  SELECT\n    expemplref AS customer_id,\n    CAST(json_extract(propfinancialdata, '$.propvalue') AS REAL) AS prop_value,\n    CAST(json_extract(propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mort_balance\n  FROM expenses_and_assets\n)\nSELECT customer_id,\n       prop_value,\n       mort_balance,\n       CASE WHEN prop_value IS NOT NULL AND prop_value != 0 THEN mort_balance / prop_value ELSE NULL END AS ltv\nFROM property_values\nORDER BY ltv DESC NULLS LAST\nLIMIT 5;",
-     "explanation": "Extrahiert Property- und Mortgage-Werte aus JSON und berechnet LTV.",
-     "confidence": 0.8
-   }
+### SPALTEN BEDEUTUNGEN:
+{meanings}
 
-3) Frage: "Berechne einen Financial Stability Index (FSI) als (networth + liqassets) / NULLIF(totliabs,0)".
-   Antwort:
-   {
-     "thought_process": "FSI-Felder liegen in expenses_and_assets; einfache Kennzahl über vorhandene Spalten.",
-     "sql": "SELECT expemplref AS customer_id,\n       networth,\n       liqassets,\n       totliabs,\n       (networth + liqassets) / NULLIF(totliabs, 0) AS fsi\nFROM expenses_and_assets\nWHERE totliabs IS NOT NULL\nORDER BY fsi DESC\nLIMIT 20;",
-     "explanation": "Addiert Net Worth und liquide Mittel und setzt sie ins Verhältnis zu Verbindlichkeiten.",
-     "confidence": 0.79
-   }
+### DOMAIN WISSEN & FORMELN (WICHTIG - EXAKT UMSETZEN!):
+{kb}
+
+### NUTZER-FRAGE:
+{question}
 """
 
     SQL_VALIDATION = """Du bist ein SQL-Validator für SQLite.
