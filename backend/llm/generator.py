@@ -2,6 +2,7 @@ import json
 from typing import Dict, Any, Optional
 
 from .prompts import SystemPrompts
+from openai import OpenAI
 
 
 class OpenAIGenerator:
@@ -214,7 +215,7 @@ Fasse die wichtigsten Erkenntnisse kurz zusammen.
 """
 
         try:
-            return self._call_gemini(SystemPrompts.RESULT_SUMMARY, prompt)
+            return self._call_openai(SystemPrompts.RESULT_SUMMARY, prompt)
         except Exception as e:
             print(f"⚠️  Zusammenfassung fehlgeschlagen: {str(e)}")
             raise
