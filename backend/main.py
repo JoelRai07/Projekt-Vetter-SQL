@@ -8,12 +8,12 @@ from models import QueryRequest, QueryResponse, AmbiguityResult, ValidationResul
 from database.manager import DatabaseManager
 from utils.context_loader import load_context_files
 from utils.sql_guard import enforce_known_tables, enforce_safety
-from llm.generator import GeminiGenerator
+from llm.generator import OpenAIGenerator
 
 # FastAPI App
 app = FastAPI(
-    title="Text2SQL mit Gemini - Refactored",
-    version="2.0.0",
+    title="Text2SQL mit ChatGPT - Refactored",
+    version="2.1.0",
     description="Modulares Text2SQL System mit Ambiguity Detection und Validation"
 )
 
@@ -26,9 +26,9 @@ app.add_middleware(
 )
 
 # LLM Generator initialisieren
-llm_generator = GeminiGenerator(
-    api_key=Config.GEMINI_API_KEY,
-    model_name=Config.GEMINI_MODEL
+llm_generator = OpenAIGenerator(
+    api_key=Config.OPENAI_API_KEY,
+    model_name=Config.OPENAI_MODEL
 )
 
 
@@ -36,7 +36,7 @@ llm_generator = GeminiGenerator(
 async def root():
     return {
         "message": "Text2SQL API läuft",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "features": ["Ambiguity Detection", "SQL Validation", "Modular Structure"]
     }
 

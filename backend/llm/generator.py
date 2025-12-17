@@ -1,51 +1,51 @@
-import google.generativeai as genai
 import json
 from typing import Dict, Any, Optional
 
 from .prompts import SystemPrompts
 
-class GeminiGenerator:
-    """Handhabt alle LLM-Interaktionen mit Gemini"""
-    
+
+class OpenAIGenerator:
+    """Handhabt alle LLM-Interaktionen mit OpenAI/ChatGPT"""
+
     def __init__(self, api_key: str, model_name: str):
-        genai.configure(api_key=api_key)
+        self.client = OpenAI(api_key=api_key)
         self.model_name = model_name
-    
-    def _call_gemini(self, system_instruction: str, prompt: str) -> str:
-        """Generischer Gemini API Call"""
-        model = genai.GenerativeModel(
-            self.model_name,
-            system_instruction=system_instruction
+
+    def _call_openai(self, system_instruction: str, prompt: str) -> str:
+        """Generischer OpenAI ChatCompletion Call"""
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
         )
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    
+        content = response.choices[0].message.content or ""
+        return content.strip()
+
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
         """Parse JSON Response und entferne Markdown - sehr robust"""
-        # Entferne Markdown Code Blocks
         cleaned = response.replace("```json", "").replace("```", "").strip()
-        
-        # Suche nach dem ersten { und finde das zugehörige schließende }
+
         start = cleaned.find('{')
         if start == -1:
             raise ValueError("Kein JSON-Objekt gefunden in Response")
-        
-        # Zähle geschweifte Klammern um das komplette erste JSON-Objekt zu finden
+
         brace_count = 0
         end = start
         in_string = False
         escape_next = False
-        
+
         for i in range(start, len(cleaned)):
             char = cleaned[i]
-            
-            # String-Handling (um { und } in Strings zu ignorieren)
+
             if char == '"' and not escape_next:
                 in_string = not in_string
             elif char == '\\' and not escape_next:
                 escape_next = True
                 continue
-            
+
             if not in_string:
                 if char == '{':
                     brace_count += 1
@@ -54,14 +54,14 @@ class GeminiGenerator:
                     if brace_count == 0:
                         end = i + 1
                         break
-            
+
             escape_next = False
-        
+
         if brace_count != 0:
             raise ValueError(f"Unbalancierte geschweifte Klammern (count={brace_count})")
-        
+
         json_str = cleaned[start:end]
-        
+
         try:
             return json.loads(json_str)
         except json.JSONDecodeError as e:
@@ -104,7 +104,7 @@ NUTZER-FRAGE:
 Analysiere die Frage auf Mehrdeutigkeit.
 """
         try:
-            response = self._call_gemini(SystemPrompts.AMBIGUITY_DETECTION, prompt)
+            response = self._call_openai(SystemPrompts.AMBIGUITY_DETECTION, prompt)
             return self._parse_json_response(response)
         except Exception as e:
             return {
@@ -137,8 +137,8 @@ Analysiere die Frage auf Mehrdeutigkeit.
 Generiere die SQL-Query im JSON-Format.
 """
         try:
-            response = self._call_gemini(SystemPrompts.SQL_GENERATION, prompt)
-            print(f"📤 LLM Rohe Response (erste 800 Zeichen):")
+            response = self._call_openai(SystemPrompts.SQL_GENERATION, prompt)
+            print("📤 LLM Rohe Response (erste 800 Zeichen):")
             print(f"{response[:800]}\n")
 
             result = self._ensure_generation_fields(self._parse_json_response(response))
@@ -147,7 +147,7 @@ Generiere die SQL-Query im JSON-Format.
             if result.get("sql"):
                 sql = result["sql"].replace("```sql", "").replace("```", "").strip()
                 result["sql"] = sql
-            
+
             return result
         except json.JSONDecodeError as e:
             return {
@@ -163,7 +163,7 @@ Generiere die SQL-Query im JSON-Format.
                 "explanation": f"Fehler bei SQL-Generierung: {str(e)}",
                 "confidence": 0.0
             }
-    
+
     def validate_sql(self, sql: str, schema: str) -> Dict[str, Any]:
         """Validiert die generierte SQL-Query"""
         prompt = f"""
@@ -176,11 +176,11 @@ GENERIERTE SQL-QUERY:
 Validiere die Query.
 """
         try:
-            response = self._call_gemini(SystemPrompts.SQL_VALIDATION, prompt)
+            response = self._call_openai(SystemPrompts.SQL_VALIDATION, prompt)
             return self._parse_json_response(response)
         except Exception as e:
             return {
-                "is_valid": True,  # Im Fehlerfall versuchen wir es trotzdem
+                "is_valid": True,
                 "errors": [f"Validation-Fehler: {str(e)}"],
                 "severity": "low",
                 "suggestions": []
