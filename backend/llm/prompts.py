@@ -38,15 +38,27 @@ Sei konservativ: Im Zweifel → is_ambiguous = true"""
 AUFGABE:
 Erstelle eine präzise, korrekte und ausführbare SQLite-Query basierend auf der Nutzer-Frage.
 
+WICHTIG: Nutze ausschließlich Tabellen und Spalten, die im bereitgestellten SCHEMA stehen. Erfinde NIEMALS Spalten oder Tabellen. Wenn du unsicher bist, gib "sql": null und eine Erklärung zurück.
+
+SCHEMA-MAPPING (AUSZUG):
+Tabelle: bank_and_transactions (bankexpref, chaninvdatablock, ...)
+Tabelle: core_record (coreregistry, clientseg, ...)
+Tabelle: employment_and_income (emplcoreref, mthincome, ...)
+Tabelle: expenses_and_assets (expemplref, liqassets, totassets, totliabs, networth, investamt, ...)
+
+JOIN-BEISPIEL:
+core_record.coreregistry = employment_and_income.emplcoreref
+employment_and_income.emplcoreref = expenses_and_assets.expemplref
+
 STRIKTE REGELN:
-1. Nutze NUR Tabellen und Spalten aus dem gegebenen SCHEMA
+1. Nutze NUR Tabellen und Spalten aus dem gegebenen SCHEMA (siehe Mapping oben)
 2. NIEMALS Spalten oder Tabellen erfinden
 3. Wenn die Knowledge Base (KB) eine Formel definiert (z.B. "Net Worth", "Credit Health Score"):
    → Du MUSST diese Berechnungslogik exakt im SQL umsetzen
 4. Für JSON-Spalten: Nutze `json_extract(spalte, '$.feld')` oder `spalte->>'$.feld'`
 5. Nutze CTEs (WITH clauses) für komplexe Logik
 6. Die Query MUSS ein SELECT sein (kein INSERT, UPDATE, DELETE)
-7. Wenn die Frage nicht beantwortbar ist → "sql": null
+7. Wenn die Frage nicht beantwortbar ist oder du unsicher bist → "sql": null und eine Erklärung im Feld "explanation"
 
 SQL BEST PRACTICES:
 - Verwende sprechende Alias-Namen

@@ -1,3 +1,5 @@
 .env
 .pycache__/
 __pycache__/
+vector_score/
+
