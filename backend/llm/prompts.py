@@ -69,7 +69,36 @@ WICHTIG:
 - Keine zusätzlichen Kommentare vor oder nach dem JSON
 - Keine Markdown-Formatierung (keine ```json```)
 - Nur das reine JSON-Objekt
-- confidence muss eine Zahl zwischen 0.0 und 1.0 sein"""
+- confidence muss eine Zahl zwischen 0.0 und 1.0 sein
+
+FEW-SHOT-BEISPIELE (Nutze sie als Stil- und Strukturvorlage, passe Tabellen/Spalten an die gegebene DB an):
+1) Frage: "Welche Kund:innen haben ein Debt-to-Income-Ratio über 0.5?"
+   Antwort:
+   {
+     "thought_process": "DTI liegt in employment_and_income.debincratio. Join zu assets für Net Worth ist optional.",
+     "sql": "SELECT e.emplcoreref AS customer_id, e.debincratio, ea.networth\nFROM employment_and_income e\nJOIN expenses_and_assets ea ON ea.expemplref = e.emplcoreref\nWHERE e.debincratio > 0.5\nORDER BY e.debincratio DESC\nLIMIT 10;",
+     "explanation": "Filtere Kund:innen mit DTI > 0.5, zeige Verhältnis und Net Worth.",
+     "confidence": 0.82
+   }
+
+2) Frage: "Berechne die Loan-to-Value-Quote (LTV) je Kunde und zeige die höchsten 5".
+   Antwort:
+   {
+     "thought_process": "LTV = Mortgage Balance / Property Value aus der JSON-Spalte propfinancialdata.",
+     "sql": "WITH property_values AS (\n  SELECT\n    expemplref AS customer_id,\n    CAST(json_extract(propfinancialdata, '$.propvalue') AS REAL) AS prop_value,\n    CAST(json_extract(propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mort_balance\n  FROM expenses_and_assets\n)\nSELECT customer_id,\n       prop_value,\n       mort_balance,\n       CASE WHEN prop_value IS NOT NULL AND prop_value != 0 THEN mort_balance / prop_value ELSE NULL END AS ltv\nFROM property_values\nORDER BY ltv DESC NULLS LAST\nLIMIT 5;",
+     "explanation": "Extrahiert Property- und Mortgage-Werte aus JSON und berechnet LTV.",
+     "confidence": 0.8
+   }
+
+3) Frage: "Berechne einen Financial Stability Index (FSI) als (networth + liqassets) / NULLIF(totliabs,0)".
+   Antwort:
+   {
+     "thought_process": "FSI-Felder liegen in expenses_and_assets; einfache Kennzahl über vorhandene Spalten.",
+     "sql": "SELECT expemplref AS customer_id,\n       networth,\n       liqassets,\n       totliabs,\n       (networth + liqassets) / NULLIF(totliabs, 0) AS fsi\nFROM expenses_and_assets\nWHERE totliabs IS NOT NULL\nORDER BY fsi DESC\nLIMIT 20;",
+     "explanation": "Addiert Net Worth und liquide Mittel und setzt sie ins Verhältnis zu Verbindlichkeiten.",
+     "confidence": 0.79
+   }
+"""
 
     SQL_VALIDATION = """Du bist ein SQL-Validator für SQLite.
 

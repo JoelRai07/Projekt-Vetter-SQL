@@ -7,12 +7,13 @@ from config import Config
 from models import QueryRequest, QueryResponse, AmbiguityResult, ValidationResult
 from database.manager import DatabaseManager
 from utils.context_loader import load_context_files
-from llm.generator import GeminiGenerator
+from utils.sql_guard import enforce_known_tables, enforce_safety
+from llm.generator import OpenAIGenerator
 
 # FastAPI App
 app = FastAPI(
-    title="Text2SQL mit Gemini - Refactored",
-    version="2.0.0",
+    title="Text2SQL mit ChatGPT - Refactored",
+    version="2.1.0",
     description="Modulares Text2SQL System mit Ambiguity Detection und Validation"
 )
 
@@ -25,9 +26,9 @@ app.add_middleware(
 )
 
 # LLM Generator initialisieren
-llm_generator = GeminiGenerator(
-    api_key=Config.GEMINI_API_KEY,
-    model_name=Config.GEMINI_MODEL
+llm_generator = OpenAIGenerator(
+    api_key=Config.OPENAI_API_KEY,
+    model_name=Config.OPENAI_MODEL
 )
 
 
@@ -35,7 +36,7 @@ llm_generator = GeminiGenerator(
 async def root():
     return {
         "message": "Text2SQL API läuft",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "features": ["Ambiguity Detection", "SQL Validation", "Modular Structure"]
     }
 
@@ -66,6 +67,7 @@ async def query_database(request: QueryRequest):
         
         db_manager = DatabaseManager(db_path)
         schema = db_manager.get_schema_and_sample()
+        table_columns = db_manager.get_table_columns()
         kb_text, meanings_text = load_context_files(request.database, Config.DATA_DIR)
         
         print(f"✅ Schema geladen ({len(schema)} Zeichen)")
@@ -81,6 +83,7 @@ async def query_database(request: QueryRequest):
                 generated_sql="",
                 results=[],
                 row_count=0,
+                explanation="Kontext konnte nicht geladen werden.",
                 error=error_msg
             )
         
@@ -113,7 +116,11 @@ async def query_database(request: QueryRequest):
         print(f"   Explanation: {sql_result.get('explanation', 'N/A')[:100]}...")
         
         generated_sql = sql_result.get("sql")
-        
+
+        user_explanation = sql_result.get("explanation") or (
+            "Hier sind die wichtigsten Ergebnisse zu deiner Anfrage."
+        )
+
         if not generated_sql:
             error_msg = f"Keine SQL generiert: {sql_result.get('explanation', 'Unbekannter Fehler')}"
             print(f"❌ {error_msg}")
@@ -121,6 +128,23 @@ async def query_database(request: QueryRequest):
                 question=request.question,
                 ambiguity_check=ambiguity_obj,
                 generated_sql="",
+                results=[],
+                row_count=0,
+                explanation=user_explanation,
+                error=error_msg
+            )
+
+        # 3b. Serverside Sicherheits-Checks
+        safety_error = enforce_safety(generated_sql)
+        table_error = enforce_known_tables(generated_sql, table_columns)
+        if safety_error or table_error:
+            error_msg = safety_error or table_error
+            print(f"❌ Server-Side Validation: {error_msg}")
+            return QueryResponse(
+                question=request.question,
+                ambiguity_check=ambiguity_obj,
+                generated_sql=generated_sql,
+                explanation=user_explanation,
                 results=[],
                 row_count=0,
                 error=error_msg
@@ -152,6 +176,7 @@ async def query_database(request: QueryRequest):
                         ambiguity_check=ambiguity_obj,
                         generated_sql=generated_sql,
                         validation=validation_obj,
+                        explanation=user_explanation,
                         results=[],
                         row_count=0,
                         error=error_msg
@@ -161,18 +186,30 @@ async def query_database(request: QueryRequest):
         
         # 5. SQL Ausführen
         print(f"\n⚡ Führe SQL aus...")
-        results = db_manager.execute_query(generated_sql)
+        results, truncated = db_manager.execute_query(
+            generated_sql, max_rows=Config.MAX_RESULT_ROWS
+        )
+        notice_msg = None
+        if truncated:
+            notice_msg = (
+                f"Ergebnis wurde auf {Config.MAX_RESULT_ROWS} Zeilen gekürzt, "
+                "weitere Zeilen wurden aus Performance-Gründen unterdrückt."
+            )
+            print(f"⚠️  Ergebnis gekürzt: {notice_msg}")
+
         print(f"✅ Erfolgreich! {len(results)} Zeilen zurückgegeben")
-        
+
         print(f"{'='*60}\n")
-        
+
         return QueryResponse(
             question=request.question,
             ambiguity_check=ambiguity_obj,
             generated_sql=generated_sql,
             validation=validation_obj,
             results=results,
-            row_count=len(results)
+            row_count=len(results),
+            explanation=user_explanation,
+            notice=notice_msg
         )
     
     except FileNotFoundError as e:
@@ -190,6 +227,7 @@ async def query_database(request: QueryRequest):
             generated_sql="",
             results=[],
             row_count=0,
+            explanation="Interner Fehler – bitte erneut versuchen.",
             error=error_msg
         )
 

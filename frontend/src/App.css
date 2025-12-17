@@ -195,6 +195,20 @@ body {
   line-height: 1.6;
 }
 
+.message-text {
+  margin-bottom: 8px;
+  white-space: pre-line;
+}
+
+.notice-banner {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(16, 163, 127, 0.25);
+  background: rgba(16, 163, 127, 0.08);
+  color: inherit;
+}
+
 .message.user .message-content {
   background: #10a37f;
   color: white;
