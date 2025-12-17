@@ -118,11 +118,23 @@ export default function App() {
       // Call the real API
       const response = await askQuestion(question);
 
+      if (response.error) {
+        const errorMessage = {
+          id: Date.now() + 1,
+          type: "error",
+          content: response.error,
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+        return;
+      }
+
+      const explanation =
+        response.explanation || "Hier sind die wichtigsten Ergebnisse zu Ihrer Anfrage.";
       const assistantMessage = {
         id: Date.now() + 1,
         type: "assistant",
-        content:
-          response.results.length > 0 ? "Ergebnisse gefunden!" : "Keine Ergebnisse gefunden.",
+        content: explanation,
+        notice: response.notice,
         sql: response.generated_sql,
         tableData: response.results,
         showSQL: false,
@@ -201,7 +213,8 @@ export default function App() {
                   </div>{" "}
                   <div className="message-content">
                     {" "}
-                    <div>{msg.content}</div>{" "}
+                    <div className="message-text">{msg.content}</div>
+                    {msg.notice && <div className="notice-banner">{msg.notice}</div>}
                     {/* KORRIGIERTE BEDINGUNG HIER: Prüfe auf existierendes UND nicht-leeres Array */}{" "}
                     {msg.tableData && msg.tableData.length > 0 && (
                       <div className="data-table">
