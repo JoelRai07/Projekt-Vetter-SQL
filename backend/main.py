@@ -83,6 +83,7 @@ async def query_database(request: QueryRequest):
                 generated_sql="",
                 results=[],
                 row_count=0,
+                explanation="Kontext konnte nicht geladen werden.",
                 error=error_msg
             )
         
@@ -123,6 +124,23 @@ async def query_database(request: QueryRequest):
                 question=request.question,
                 ambiguity_check=ambiguity_obj,
                 generated_sql="",
+                results=[],
+                row_count=0,
+                explanation=user_explanation,
+                error=error_msg
+            )
+
+        # 3b. Serverside Sicherheits-Checks
+        safety_error = enforce_safety(generated_sql)
+        table_error = enforce_known_tables(generated_sql, table_columns)
+        if safety_error or table_error:
+            error_msg = safety_error or table_error
+            print(f"❌ Server-Side Validation: {error_msg}")
+            return QueryResponse(
+                question=request.question,
+                ambiguity_check=ambiguity_obj,
+                generated_sql=generated_sql,
+                explanation=user_explanation,
                 results=[],
                 row_count=0,
                 error=error_msg
@@ -169,6 +187,7 @@ async def query_database(request: QueryRequest):
                         ambiguity_check=ambiguity_obj,
                         generated_sql=generated_sql,
                         validation=validation_obj,
+                        explanation=user_explanation,
                         results=[],
                         row_count=0,
                         error=error_msg
@@ -218,6 +237,7 @@ async def query_database(request: QueryRequest):
             generated_sql="",
             results=[],
             row_count=0,
+            explanation="Interner Fehler – bitte erneut versuchen.",
             error=error_msg
         )
 
