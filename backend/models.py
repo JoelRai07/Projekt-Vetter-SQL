@@ -4,6 +4,8 @@ from typing import List, Dict, Any, Optional
 class QueryRequest(BaseModel):
     question: str
     database: str = "credit"
+    limit: Optional[int] = None
+    offset: Optional[int] = None
 
 class AmbiguityResult(BaseModel):
     is_ambiguous: bool
@@ -23,5 +25,7 @@ class QueryResponse(BaseModel):
     validation: Optional[ValidationResult] = None
     results: List[Dict[str, Any]]
     row_count: int
+    limit: Optional[int] = None
+    next_offset: Optional[int] = None
     notice: Optional[str] = None
     error: Optional[str] = None

@@ -65,6 +65,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
+  const DEFAULT_PAGE_SIZE = 20;
 
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -86,13 +87,14 @@ export default function App() {
   };
 
   // Function to call the backend API
-  const askQuestion = async (question) => {
+  const askQuestion = async (question, pagination = {}) => {
     const response = await fetch("http://localhost:8000/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question: question,
         database: "credit",
+        ...pagination,
       }),
     });
 
@@ -102,12 +104,13 @@ export default function App() {
 
   // Handle form submission
   const handleSubmit = async () => {
-    if (!question.trim() || isLoading) return;
+    const trimmedQuestion = question.trim();
+    if (!trimmedQuestion || isLoading) return;
 
     const userMessage = {
       id: Date.now(),
       type: "user",
-      content: question.trim(),
+      content: trimmedQuestion,
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -116,7 +119,8 @@ export default function App() {
 
     try {
       // Call the real API
-      const response = await askQuestion(question);
+      const pagination = { limit: DEFAULT_PAGE_SIZE, offset: 0 };
+      const response = await askQuestion(trimmedQuestion, pagination);
 
       if (response.error) {
         const errorMessage = {
@@ -134,9 +138,12 @@ export default function App() {
         id: Date.now() + 1,
         type: "assistant",
         content: explanation,
-        notice: response.notice,
+        notice: response.next_offset ? response.notice : null,
         sql: response.generated_sql,
         tableData: response.results,
+        nextOffset: response.next_offset,
+        limit: response.limit ?? pagination.limit,
+        questionText: trimmedQuestion,
         showSQL: false,
       };
 
@@ -165,6 +172,55 @@ export default function App() {
     setMessages((prev) =>
       prev.map((msg) => (msg.id === messageId ? { ...msg, showSQL: !msg.showSQL } : msg))
     );
+  };
+
+  const loadMoreResults = async (messageId) => {
+    const targetMessage = messages.find((msg) => msg.id === messageId);
+    if (!targetMessage || targetMessage.nextOffset == null || isLoading) return;
+
+    setIsLoading(true);
+    try {
+      const pagination = {
+        limit: targetMessage.limit ?? DEFAULT_PAGE_SIZE,
+        offset: targetMessage.nextOffset,
+      };
+
+      const response = await askQuestion(targetMessage.questionText, pagination);
+
+      if (response.error) {
+        const errorMessage = {
+          id: Date.now() + 2,
+          type: "error",
+          content: response.error,
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+        return;
+      }
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? {
+                ...msg,
+                tableData: [...msg.tableData, ...(response.results || [])],
+                nextOffset: response.next_offset,
+                notice: response.next_offset ? response.notice : null,
+                sql: response.generated_sql || msg.sql,
+              }
+            : msg
+        )
+      );
+    } catch (error) {
+      const errorMessage = {
+        id: Date.now() + 3,
+        type: "error",
+        content:
+          "Beim Laden weiterer Ergebnisse ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const copyToClipboard = (text, id) => {
@@ -217,31 +273,48 @@ export default function App() {
                     {msg.notice && <div className="notice-banner">{msg.notice}</div>}
                     {/* KORRIGIERTE BEDINGUNG HIER: Prüfe auf existierendes UND nicht-leeres Array */}{" "}
                     {msg.tableData && msg.tableData.length > 0 && (
-                      <div className="data-table">
-                        {" "}
-                        <table>
+                      <div className="data-table-wrapper">
+                        <div className="data-table">
                           {" "}
-                          <thead>
+                          <table>
                             {" "}
-                            <tr>
+                            <thead>
                               {" "}
-                              {Object.keys(msg.tableData[0]).map((key) => (
-                                <th key={key}>{key}</th>
-                              ))}{" "}
-                            </tr>{" "}
-                          </thead>{" "}
-                          <tbody>
-                            {" "}
-                            {msg.tableData.map((row, i) => (
-                              <tr key={i}>
+                              <tr>
                                 {" "}
-                                {Object.values(row).map((val, j) => (
-                                  <td key={j}>{val}</td>
+                                {Object.keys(msg.tableData[0]).map((key) => (
+                                  <th key={key}>{key}</th>
                                 ))}{" "}
-                              </tr>
-                            ))}{" "}
-                          </tbody>{" "}
-                        </table>{" "}
+                              </tr>{" "}
+                            </thead>{" "}
+                            <tbody>
+                              {" "}
+                              {msg.tableData.map((row, i) => (
+                                <tr key={i}>
+                                  {" "}
+                                  {Object.values(row).map((val, j) => (
+                                    <td key={j}>{val}</td>
+                                  ))}{" "}
+                                </tr>
+                              ))}{" "}
+                            </tbody>{" "}
+                          </table>{" "}
+                        </div>
+                        <div className="table-footer">
+                          <div className="table-info">
+                            {msg.tableData.length} Zeilen geladen
+                            {msg.nextOffset != null ? " – weitere verfügbar" : ""}
+                          </div>
+                          {msg.nextOffset != null && (
+                            <button
+                              className="load-more-btn"
+                              onClick={() => loadMoreResults(msg.id)}
+                              disabled={isLoading}
+                            >
+                              Weitere Ergebnisse laden
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
                     {msg.sql && (

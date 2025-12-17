@@ -1,6 +1,6 @@
 import sqlite3
 import json
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from functools import lru_cache
 
 class DatabaseManager:
@@ -53,23 +53,31 @@ class DatabaseManager:
         conn.close()
         return mapping
     
-    def execute_query(self, sql: str, max_rows: int | None = None) -> Tuple[List[Dict[str, Any]], bool]:
-        """Führt SQL Query aus, begrenzt optional die Zeilenzahl und kennzeichnet Kürzungen."""
+    def execute_query(
+        self,
+        sql: str,
+        limit: Optional[int] = None,
+        offset: int = 0
+    ) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+        """Führt eine SQL-Query mit optionalem Limit/Offset aus und liefert den nächsten Offset."""
+
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         try:
-            cursor.execute(sql)
-
-            truncated = False
-            if max_rows is None:
+            if limit is None:
+                cursor.execute(sql)
                 rows = cursor.fetchall()
+                next_offset = None
             else:
-                # Hole maximal max_rows + 1, um zu erkennen, ob mehr Daten vorhanden sind
-                fetched_rows = cursor.fetchmany(max_rows + 1)
-                truncated = len(fetched_rows) > max_rows
-                rows = fetched_rows[:max_rows]
+                paginated_sql = f"SELECT * FROM ({sql}) AS subquery LIMIT ? OFFSET ?"
+                cursor.execute(paginated_sql, (limit + 1, offset))
 
-            return [dict(row) for row in rows], truncated
+                fetched_rows = cursor.fetchall()
+                has_more = len(fetched_rows) > limit
+                rows = fetched_rows[:limit]
+                next_offset = offset + limit if has_more else None
+
+            return [dict(row) for row in rows], next_offset
         finally:
             conn.close()
