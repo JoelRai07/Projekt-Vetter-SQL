@@ -24,4 +24,6 @@ class QueryResponse(BaseModel):
     results: List[Dict[str, Any]]
     row_count: int
     notice: Optional[str] = None
+    summary: Optional[str] = None
+    explanation: Optional[str] = None
     error: Optional[str] = None
