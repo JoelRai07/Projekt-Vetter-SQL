@@ -7,6 +7,7 @@ from config import Config
 from models import QueryRequest, QueryResponse, AmbiguityResult, ValidationResult
 from database.manager import DatabaseManager
 from utils.context_loader import load_context_files
+from utils.sql_guard import enforce_known_tables, enforce_safety
 from llm.generator import GeminiGenerator
 
 # FastAPI App
@@ -66,6 +67,7 @@ async def query_database(request: QueryRequest):
         
         db_manager = DatabaseManager(db_path)
         schema = db_manager.get_schema_and_sample()
+        table_columns = db_manager.get_table_columns()
         kb_text, meanings_text = load_context_files(request.database, Config.DATA_DIR)
         
         print(f"✅ Schema geladen ({len(schema)} Zeichen)")
@@ -113,7 +115,7 @@ async def query_database(request: QueryRequest):
         print(f"   Explanation: {sql_result.get('explanation', 'N/A')[:100]}...")
         
         generated_sql = sql_result.get("sql")
-        
+
         if not generated_sql:
             error_msg = f"Keine SQL generiert: {sql_result.get('explanation', 'Unbekannter Fehler')}"
             print(f"❌ {error_msg}")
@@ -121,6 +123,21 @@ async def query_database(request: QueryRequest):
                 question=request.question,
                 ambiguity_check=ambiguity_obj,
                 generated_sql="",
+                results=[],
+                row_count=0,
+                error=error_msg
+            )
+
+        # 3b. Serverside Sicherheits-Checks
+        safety_error = enforce_safety(generated_sql)
+        table_error = enforce_known_tables(generated_sql, table_columns)
+        if safety_error or table_error:
+            error_msg = safety_error or table_error
+            print(f"❌ Server-Side Validation: {error_msg}")
+            return QueryResponse(
+                question=request.question,
+                ambiguity_check=ambiguity_obj,
+                generated_sql=generated_sql,
                 results=[],
                 row_count=0,
                 error=error_msg
@@ -161,18 +178,29 @@ async def query_database(request: QueryRequest):
         
         # 5. SQL Ausführen
         print(f"\n⚡ Führe SQL aus...")
-        results = db_manager.execute_query(generated_sql)
+        results, truncated = db_manager.execute_query(
+            generated_sql, max_rows=Config.MAX_RESULT_ROWS
+        )
+        notice_msg = None
+        if truncated:
+            notice_msg = (
+                f"Ergebnis wurde auf {Config.MAX_RESULT_ROWS} Zeilen gekürzt, "
+                "weitere Zeilen wurden aus Performance-Gründen unterdrückt."
+            )
+            print(f"⚠️  Ergebnis gekürzt: {notice_msg}")
+
         print(f"✅ Erfolgreich! {len(results)} Zeilen zurückgegeben")
-        
+
         print(f"{'='*60}\n")
-        
+
         return QueryResponse(
             question=request.question,
             ambiguity_check=ambiguity_obj,
             generated_sql=generated_sql,
             validation=validation_obj,
             results=results,
-            row_count=len(results)
+            row_count=len(results),
+            notice=notice_msg
         )
     
     except FileNotFoundError as e:

@@ -1,6 +1,7 @@
 import google.generativeai as genai
 import json
 from typing import Dict, Any, Optional
+
 from .prompts import SystemPrompts
 
 class GeminiGenerator:
@@ -67,6 +68,23 @@ class GeminiGenerator:
             print(f"⚠️  JSON Parse Fehler: {str(e)}")
             print(f"📄 Extrahiertes JSON (erste 1000 Zeichen):\n{json_str[:1000]}\n")
             raise
+
+    def _ensure_generation_fields(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Validiert, dass wichtige Felder in der SQL-Generierung vorhanden sind."""
+        ensured = result.copy()
+        ensured.setdefault("thought_process", "")
+        ensured.setdefault("explanation", "")
+
+        # confidence in Float casten, falls möglich
+        try:
+            ensured["confidence"] = float(ensured.get("confidence", 0.0))
+        except (TypeError, ValueError):
+            ensured["confidence"] = 0.0
+
+        if "sql" not in ensured:
+            ensured["sql"] = None
+
+        return ensured
     
     def check_ambiguity(self, question: str, schema: str, kb: str, meanings: str) -> Dict[str, Any]:
         """Prüft ob die Frage mehrdeutig ist"""
@@ -95,7 +113,13 @@ Analysiere die Frage auf Mehrdeutigkeit.
                 "questions": []
             }
     
-    def generate_sql(self, question: str, schema: str, kb: str, meanings: str) -> Dict[str, Any]:
+    def generate_sql(
+        self,
+        question: str,
+        schema: str,
+        kb: str,
+        meanings: str,
+    ) -> Dict[str, Any]:
         """Generiert SQL aus der Nutzer-Frage"""
         prompt = f"""
 ### DATENBANK SCHEMA & BEISPIELDATEN:
@@ -116,9 +140,9 @@ Generiere die SQL-Query im JSON-Format.
             response = self._call_gemini(SystemPrompts.SQL_GENERATION, prompt)
             print(f"📤 LLM Rohe Response (erste 800 Zeichen):")
             print(f"{response[:800]}\n")
-            
-            result = self._parse_json_response(response)
-            
+
+            result = self._ensure_generation_fields(self._parse_json_response(response))
+
             # SQL säubern falls vorhanden
             if result.get("sql"):
                 sql = result["sql"].replace("```sql", "").replace("```", "").strip()

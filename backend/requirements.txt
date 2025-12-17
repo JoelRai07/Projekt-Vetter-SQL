@@ -1,3 +1,4 @@
+# Backend dependencies (new utilities rely only on stdlib, so no extra packages required)
 fastapi
 uvicorn
 anthropic
