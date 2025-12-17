@@ -28,4 +28,6 @@ class QueryResponse(BaseModel):
     limit: Optional[int] = None
     next_offset: Optional[int] = None
     notice: Optional[str] = None
+    summary: Optional[str] = None
+    explanation: Optional[str] = None
     error: Optional[str] = None
