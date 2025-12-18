@@ -1,5 +1,7 @@
 import os
 import asyncio
+import traceback
+import uvicorn
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -444,7 +446,6 @@ async def query_database(request: QueryRequest):
     except Exception as e:
         error_msg = f"Interner Fehler: {str(e)}"
         print(f"❌ Exception: {error_msg}")
-        import traceback
         print(traceback.format_exc())
         
         return QueryResponse(
@@ -458,5 +459,4 @@ async def query_database(request: QueryRequest):
 
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
