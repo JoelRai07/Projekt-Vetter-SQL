@@ -8,11 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import Config
 from models import QueryRequest, QueryResponse, AmbiguityResult, ValidationResult
 from database.manager import DatabaseManager
-from utils.context_loader import load_context_files
 from utils.sql_guard import enforce_known_tables, enforce_safety
 from utils.cache import get_cached_schema, get_cached_kb, get_cached_meanings, get_cached_query_result, cache_query_result
 from utils.query_optimizer import QueryOptimizer
 from llm.generator import OpenAIGenerator
+
+# Thresholds / constants
+CONFIDENCE_THRESHOLD_LOW = 0.4
 
 # FastAPI App
 app = FastAPI(
@@ -139,6 +141,7 @@ async def query_database(request: QueryRequest):
         
         # Handle Ambiguity Result
         ambiguity_obj = None
+        ambiguity_notice = None
         if isinstance(ambiguity_result, Exception):
             print(f"⚠️  Ambiguity Check fehlgeschlagen: {ambiguity_result}")
             ambiguity_obj = None
@@ -149,6 +152,11 @@ async def query_database(request: QueryRequest):
                     print(f"⚠️  Mehrdeutigkeit erkannt: {ambiguity_obj.reason}")
                     for q in ambiguity_obj.questions:
                         print(f"   - {q}")
+                    # Statt hart abzubrechen: Hinweis mitschicken, aber fortfahren.
+                    ambiguity_notice = (
+                        f"Ambiguity: {ambiguity_obj.reason}. "
+                        f"Klärungsfragen: {', '.join(ambiguity_obj.questions or [])}"
+                    )
                 else:
                     print(f"✅ Frage ist eindeutig")
             except Exception as e:
@@ -175,12 +183,42 @@ async def query_database(request: QueryRequest):
         # ReAct Metadaten anzeigen
         if use_react and "retrieval_info" in sql_result:
             retrieval_info = sql_result.get("retrieval_info", {})
-            print(f"   ReAct: {retrieval_info.get('schema_chunks_used', 0)} Schema-Chunks, "
-                  f"{retrieval_info.get('kb_entries_used', 0)} KB-Einträge verwendet")
-
+            print(
+                f"   ReAct: {retrieval_info.get('schema_chunks_used', 0)} Schema-Chunks, "
+                f"{retrieval_info.get('kb_entries_used', 0)} KB-Einträge verwendet"
+            )
+        
         user_explanation = sql_result.get("explanation", "")
         generated_sql = sql_result.get("sql")
         confidence = sql_result.get("confidence", 0.0)
+
+        # 2a. Self-Correction bei niedriger Confidence
+        if confidence < CONFIDENCE_THRESHOLD_LOW:
+            print(
+                f"⚠️  Niedrige Confidence ({confidence:.2f}) – starte Self-Correction Loop..."
+            )
+            try:
+                corrected_result = llm_generator.generate_sql_with_correction(
+                    request.question,
+                    schema,
+                    kb_text,
+                    meanings_text,
+                    max_iterations=2,
+                )
+                if corrected_result and corrected_result.get("sql"):
+                    sql_result = corrected_result
+                    user_explanation = sql_result.get("explanation", user_explanation)
+                    generated_sql = sql_result.get("sql")
+                    confidence = sql_result.get("confidence", confidence)
+                    print(
+                        f"✅ Self-Correction abgeschlossen nach "
+                        f"{sql_result.get('correction_iterations', 1)} Iteration(en). "
+                        f"Neue Confidence: {confidence:.2f}"
+                    )
+                else:
+                    print("⚠️  Self-Correction hat keine bessere SQL liefern können.")
+            except Exception as e:
+                print(f"⚠️  Self-Correction fehlgeschlagen: {str(e)}")
 
         if not generated_sql:
             error_msg = f"Keine SQL generiert: {sql_result.get('explanation', 'Unbekannter Fehler')}"
@@ -222,10 +260,11 @@ async def query_database(request: QueryRequest):
             for suggestion in query_plan["suggestions"]:
                 print(f"   - {suggestion}")
         
-        # 4. SQL Validation (non-blocking)
+        # 4. SQL Validation (mit optionaler Self-Correction bei schweren Fehlern)
         print(f"\n✓ Starte SQL Validation...")
         validation_obj = None
         try:
+            # Erste Validierung
             validation_result = llm_generator.validate_sql(generated_sql, schema)
             validation_obj = ValidationResult(**validation_result)
             
@@ -236,20 +275,90 @@ async def query_database(request: QueryRequest):
                 for err in validation_obj.errors:
                     print(f"   - {err}")
                 
-                # Nur bei "high" severity abbrechen
+                # Bei schweren Fehlern einen Korrekturversuch starten,
+                # anstatt sofort abzubrechen.
                 if validation_obj.severity == "high":
-                    error_msg = f"SQL Validation fehlgeschlagen: {', '.join(validation_obj.errors)}"
-                    print(f"❌ {error_msg}")
-                    return QueryResponse(
-                        question=request.question,
-                        ambiguity_check=ambiguity_obj,
-                        generated_sql=generated_sql,
-                        validation=validation_obj,
-                        explanation=user_explanation,
-                        results=[],
-                        row_count=0,
-                        error=error_msg
+                    print(
+                        "⚠️  Validation Severity = 'high' – starte SQL-Korrektur "
+                        "basierend auf den Fehlern..."
                     )
+                    try:
+                        corrected_result = llm_generator.generate_sql_with_correction(
+                            request.question,
+                            schema,
+                            kb_text,
+                            meanings_text,
+                            max_iterations=2,
+                        )
+                        if corrected_result and corrected_result.get("sql"):
+                            sql_result = corrected_result
+                            generated_sql = sql_result.get("sql")
+                            user_explanation = sql_result.get(
+                                "explanation", user_explanation
+                            )
+                            confidence = sql_result.get("confidence", confidence)
+                            
+                            # Erneute Validierung nach Korrektur
+                            print("🔁 Validiere korrigierte SQL erneut...")
+                            validation_result = llm_generator.validate_sql(
+                                generated_sql, schema
+                            )
+                            validation_obj = ValidationResult(**validation_result)
+                            
+                            if validation_obj.is_valid or validation_obj.severity != "high":
+                                print(
+                                    f"✅ Korrigierte SQL akzeptiert "
+                                    f"(valid={validation_obj.is_valid}, "
+                                    f"severity={validation_obj.severity})"
+                                )
+                            else:
+                                error_msg = (
+                                    "SQL Validation fehlgeschlagen nach Korrektur: "
+                                    + ", ".join(validation_obj.errors)
+                                )
+                                print(f"❌ {error_msg}")
+                                return QueryResponse(
+                                    question=request.question,
+                                    ambiguity_check=ambiguity_obj,
+                                    generated_sql=generated_sql,
+                                    validation=validation_obj,
+                                    explanation=user_explanation,
+                                    results=[],
+                                    row_count=0,
+                                    error=error_msg,
+                                )
+                        else:
+                            error_msg = (
+                                "SQL Validation fehlgeschlagen: "
+                                + ", ".join(validation_obj.errors)
+                            )
+                            print(f"❌ {error_msg}")
+                            return QueryResponse(
+                                question=request.question,
+                                ambiguity_check=ambiguity_obj,
+                                generated_sql=generated_sql,
+                                validation=validation_obj,
+                                explanation=user_explanation,
+                                results=[],
+                                row_count=0,
+                                error=error_msg,
+                            )
+                    except Exception as e:
+                        error_msg = (
+                            "SQL Validation fehlgeschlagen (Korrekturfehler): "
+                            + str(e)
+                        )
+                        print(f"❌ {error_msg}")
+                        return QueryResponse(
+                            question=request.question,
+                            ambiguity_check=ambiguity_obj,
+                            generated_sql=generated_sql,
+                            validation=validation_obj,
+                            explanation=user_explanation,
+                            results=[],
+                            row_count=0,
+                            error=error_msg,
+                        )
         except Exception as e:
             print(f"⚠️  Validation fehlgeschlagen (wird übersprungen): {str(e)}")
         
@@ -296,6 +405,10 @@ async def query_database(request: QueryRequest):
                 f"Hier die Top {len(results)} Zeilen zu '{request.question}'. "
                 f"Spalten: {preview_keys}"
             )
+
+        # Ambiguity-Hinweis in notice einblenden
+        if ambiguity_notice:
+            notice_msg = (notice_msg or "") + f" Hinweis: {ambiguity_notice}"
 
         print(f"{'='*60}\n")
 

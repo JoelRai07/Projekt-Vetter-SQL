@@ -31,10 +31,10 @@
   6. Result Summarization (LLM)
 - **Zweck**: Jeder Schritt verbessert Qualität und Sicherheit
 
-### 4. **Ambiguity Detection** ✅
+### 4. **Ambiguity Detection mit Rückfragen** ✅
 - **Was**: LLM-basierte Erkennung mehrdeutiger Fragen
-- **Output**: `is_ambiguous`, `reason`, `questions[]` (Klärenden Fragen)
-- **Zweck**: Verhindert falsche SQL-Generierung bei unklaren Anfragen
+- **Output**: `is_ambiguous`, `reason`, `questions[]` (Klärende Fragen)
+- **Zweck**: Verhindert falsche SQL-Generierung bei unklaren Anfragen; bei Mehrdeutigkeit wird die Pipeline gestoppt und die Klärungsfragen an den Nutzer zurückgegeben (keine SQL-Generierung).
 - **Ansatz**: Separate LLM-Call vor SQL-Generierung
 
 ### 5. **Hybrid Validation (2 Ebenen)** ✅
@@ -104,7 +104,7 @@
 ### 14. **Self-Correction Loop** ✅
 - **Was**: Automatische Korrektur von SQL bei niedriger Confidence
 - **Zweck**: 5-10% Accuracy Improvement
-- **Implementierung**: Bei Confidence < 0.5: Korrektur-Loop mit Validation-Feedback
+- **Implementierung**: Bei Confidence < 0.4 oder bei hoher Validierungs-Schwere wird ein Korrektur-Loop mit Validation-Feedback angestoßen (max. 2 Iterationen)
 - **Warum**: System korrigiert sich selbst bei Fehlern
 
 ### 15. **Query Optimization** ✅

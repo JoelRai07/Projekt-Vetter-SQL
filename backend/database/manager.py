@@ -121,31 +121,34 @@ class DatabaseManager:
             conn.close()
     
     def _create_count_query(self, sql: str) -> str:
-        """Erstellt COUNT-Query aus SELECT-Query"""
-        sql_upper = sql.upper()
-        
-        # Finde SELECT ... FROM Teil
-        select_idx = sql_upper.find("SELECT")
-        from_idx = sql_upper.find("FROM")
-        
-        if from_idx == -1:
-            raise ValueError("Kein FROM in SQL gefunden")
-        
-        # Finde Ende der Query (vor ORDER BY, LIMIT, etc.)
-        end_idx = len(sql)
-        for keyword in ["ORDER BY", "LIMIT", "OFFSET", "GROUP BY", "HAVING"]:
-            keyword_idx = sql_upper.find(keyword, from_idx)
-            if keyword_idx != -1 and keyword_idx < end_idx:
-                end_idx = keyword_idx
-        
-        original_query = sql[select_idx:end_idx].strip()
-        
-        # Bei DISTINCT oder GROUP BY: Subquery verwenden
-        if "DISTINCT" in sql_upper or "GROUP BY" in sql_upper:
-            return f"SELECT COUNT(*) FROM ({original_query}) AS count_query"
-        else:
-            # Einfacher Fall: Ersetze SELECT ... mit COUNT(*)
-            return f"SELECT COUNT(*) {sql[from_idx:end_idx]}"
+        """Erstellt eine robuste COUNT-Query aus einer SELECT-Query.
+
+        Statt einzelne Teile herauszuschneiden, wrappen wir die gesamte Query
+        (ohne trailing LIMIT/OFFSET/Semicolon) in eine Subquery. Das ist
+        stabiler für CTEs, UNIONs oder komplexe FROM-Klauseln.
+        """
+        base_sql = self._strip_trailing_limit_offset(sql)
+        return f"SELECT COUNT(*) FROM ({base_sql}) AS count_query"
+
+    def _strip_trailing_limit_offset(self, sql: str) -> str:
+        """Entfernt ein trailing LIMIT/OFFSET am Query-Ende (falls vorhanden)."""
+        sql_no_semicolon = sql.rstrip().rstrip(";")
+        sql_upper = sql_no_semicolon.upper()
+
+        # Suche das letzte LIMIT/OFFSET am Ende der Query
+        limit_idx = sql_upper.rfind("LIMIT")
+        offset_idx = sql_upper.rfind("OFFSET")
+
+        cut_idx = len(sql_no_semicolon)
+
+        # Wenn OFFSET hinter LIMIT steht, schneide ab OFFSET ab
+        if offset_idx != -1 and offset_idx > limit_idx:
+            cut_idx = min(cut_idx, offset_idx)
+        # Sonst ggf. ab LIMIT abschneiden
+        if limit_idx != -1 and limit_idx < cut_idx:
+            cut_idx = min(cut_idx, limit_idx)
+
+        return sql_no_semicolon[:cut_idx].rstrip()
     
     def _add_paging_to_sql(self, sql: str, limit: int, offset: int) -> str:
         """Fügt LIMIT und OFFSET zur SQL-Query hinzu"""

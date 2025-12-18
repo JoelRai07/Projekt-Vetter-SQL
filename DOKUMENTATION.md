@@ -413,7 +413,7 @@ class QueryResponse(BaseModel):
    ↓
 4. AMBIGUITY DETECTION
    LLM prüft: Ist Frage eindeutig?
-   → Wenn mehrdeutig: Rückgabe mit Klärungsfragen
+   → Wenn mehrdeutig: Klärungsfragen werden direkt an den Nutzer zurückgegeben, keine SQL-Generierung
    → Wenn eindeutig: Weiter
    ↓
 5. SQL GENERATION
@@ -576,6 +576,9 @@ Das System implementiert mehrere Optimierungsstrategien in drei Phasen:
 
 **Was**: Intelligentes Caching für Schema, KB, Meanings und Query-Ergebnisse
 
+**Wo im Code**: Implementiert in `backend/utils/cache.py` und verwendet in `backend/main.py` über
+`get_cached_schema`, `get_cached_kb`, `get_cached_meanings`, `get_cached_query_result`, `cache_query_result`.
+
 **Implementierung**:
 ```python
 # LRU Cache für Schema (ändert sich selten)
@@ -599,6 +602,11 @@ query_cache = TTLCache(maxsize=100, ttl=300)
 - **Schema**: LRU Cache (ändert sich selten, kann lange gecacht werden)
 - **KB/Meanings**: TTL 1 Stunde (können sich ändern, aber nicht häufig)
 - **Query Results**: TTL 5 Minuten (kurz genug für Aktualität, lang genug für Performance)
+
+**Wie es im System konkret genutzt wird**:
+- Beim Laden des Schemas wird immer zuerst der LRU‑Cache (`get_cached_schema`) gefragt, bevor erneut auf SQLite zugegriffen wird.
+- Knowledge Base und Spalten‑Bedeutungen werden pro Datenbanknamen mit TTL gecacht (`get_cached_kb`, `get_cached_meanings`), sodass die relativ teuren Datei‑Zugriffe und Prompt‑Aufbereitungen nicht bei jeder Anfrage neu passieren.
+- Für wiederholte Nutzerfragen zur gleichen Datenbank können komplette Query‑Ergebnisse kurzzeitig im `query_cache` liegen (`get_cached_query_result` / `cache_query_result`), wodurch LLM‑Kosten und Datenbank‑Zugriffe eingespart werden.
 
 #### 7.2 Parallelization
 
@@ -682,7 +690,7 @@ sql = llm_generator.generate_sql(question, relevant_schema, relevant_kb)
 
 **Implementierung**:
 ```python
-# Bei Confidence < 0.5: Self-Correction
+# Bei Confidence < 0.4: Self-Correction
 if confidence < CONFIDENCE_THRESHOLD_LOW:
     sql_result = llm_generator.generate_sql_with_correction(
         question, schema, kb, meanings, max_iterations=2
@@ -707,7 +715,7 @@ if confidence < CONFIDENCE_THRESHOLD_LOW:
 - **Nur bei niedriger Confidence**: Aktiviert nur wenn nötig (Performance)
 
 **Strategie**:
-- Aktiviert nur bei Confidence < 0.5
+- Aktiviert nur bei Confidence < 0.4
 - Max. 2 Iterationen (verhindert Endlosschleifen)
 - Nutzt Validation-Fehler für gezielte Korrekturen
 
@@ -727,6 +735,8 @@ query_plan = optimizer.analyze_query_plan(sql)
 # - Full Table Scan?
 # - Optimierungsvorschläge
 ```
+
+**Wo im Code**: Implementiert in `backend/utils/query_optimizer.py` und in `backend/main.py` vor der Ausführung der Query aufgerufen.
 
 **Warum**:
 - **20-50% Execution Time Reduction**: Optimierte Queries sind schneller
@@ -963,6 +973,7 @@ const handlePageChange = async (messageId, newPage) => {
 
 **Strategie**: Graceful Degradation
 
+- **Mehrdeutige Frage**: Pipeline stoppt, gibt Klärungsfragen zurück (keine SQL-Generierung)
 - **Kritische Fehler**: Stoppen Pipeline, geben Fehler zurück
 - **Nicht-kritische Fehler**: Überspringen Schritt, fahren fort
 - **Warnungen**: Loggen, aber nicht stoppen
