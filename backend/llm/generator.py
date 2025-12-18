@@ -10,6 +10,9 @@ from openai import (
     OpenAI,
     RateLimitError,
 )
+from rag.schema_retriever import SchemaRetriever
+from utils.context_loader import load_context_files
+from database.manager import DatabaseManager
 
 
 class OpenAIGenerator:
@@ -276,9 +279,6 @@ Fasse die wichtigsten Erkenntnisse kurz zusammen.
         3. OBSERVE: Erhalte relevante Schema-Teile/KB-Einträge
         4. REASON: Genug Info? → Ja: SQL generieren, Nein: weitere Suchen
         """
-        from rag.schema_retriever import SchemaRetriever
-        from utils.context_loader import load_context_files
-        from database.manager import DatabaseManager
         
         retriever = SchemaRetriever(db_path)
         

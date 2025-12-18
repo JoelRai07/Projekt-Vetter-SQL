@@ -1,11 +1,12 @@
 from functools import lru_cache
 from cachetools import TTLCache
 import hashlib
+from database.manager import DatabaseManager
+from utils.context_loader import load_context_files
 
 # Cache for schemas (rarely change, cache indefinitely)
 @lru_cache(maxsize=32)
 def get_cached_schema(db_path: str) -> str:
-    from database.manager import DatabaseManager
     db_manager = DatabaseManager(db_path)
     return db_manager.get_schema_and_sample()
 
@@ -18,7 +19,6 @@ def get_cached_kb(db_name: str, data_dir: str) -> str:
     if cache_key in kb_cache:
         return kb_cache[cache_key]
     
-    from utils.context_loader import load_context_files
     kb_text, meanings_text = load_context_files(db_name, data_dir)
     kb_cache[cache_key] = kb_text
     meanings_cache[f"{db_name}_meanings"] = meanings_text
@@ -29,7 +29,6 @@ def get_cached_meanings(db_name: str, data_dir: str) -> str:
     if cache_key in meanings_cache:
         return meanings_cache[cache_key]
     
-    from utils.context_loader import load_context_files
     kb_text, meanings_text = load_context_files(db_name, data_dir)
     kb_cache[f"{db_name}_kb"] = kb_text
     meanings_cache[cache_key] = meanings_text
