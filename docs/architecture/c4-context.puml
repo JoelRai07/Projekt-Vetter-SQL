@@ -1,0 +1,11 @@
+@startuml context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+Person(user, "User/Analyst", "Fragt natürlichsprachig nach Daten")
+System(sql_system, "Projekt Vetter SQL", "Text-to-SQL System mit LLM + RAG")
+System_Ext(openai, "OpenAI API", "GPT-4 für SQL-Generierung, Ambiguity-Check, Embeddings")
+
+Rel(user, sql_system, "Stellt Fragen", "Browser/HTTPS")
+Rel(sql_system, openai, "Ruft Completions & Embeddings auf", "HTTPS/API-Key")
+
+@enduml

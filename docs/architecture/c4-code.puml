@@ -1,0 +1,120 @@
+@startuml code
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+' =================== FRONTEND CODE STRUCTURE ===================
+Container_Boundary(frontend_code, "Frontend (src/) - React Components & Modules") {
+  Component(app_jsx, "App.jsx", "React", "Hauptkomponente, Query-State, Fetch-Handler, JSX-Rendering")
+  Component(app_css, "App.css", "CSS", "Styling für Layout, Formular, Ergebnisse, Paging")
+  Component(index_css, "index.css", "CSS", "Global Styles")
+  Component(main_jsx, "main.jsx", "React Entry", "Rendert App in DOM (main div)")
+  Component(vite_config, "vite.config.js", "Vite Config", "Build-Konfiguration, Dev-Server")
+  Component(eslint_config, "eslint.config.js", "ESLint Config", "Code-Qualitätschecks")
+  Component(package_json_fe, "package.json", "NPM Config", "Dependencies: react, vite, axios/fetch")
+}
+
+' =================== BACKEND CODE STRUCTURE ===================
+Container_Boundary(backend_code, "Backend (backend/) - Python Modules") {
+  Container_Boundary(main_backend, "Main Application") {
+    Component(main_py, "main.py", "FastAPI App", "FastAPI()+uvicorn, CORS-Middleware, @app.post('/query'), Error-Handler")
+    Component(config_py, "config.py", "Config", "OPENAI_API_KEY, DB-Paths, Settings")
+    Component(models_py, "models.py", "Pydantic Models", "QueryRequest, QueryResponse Schemas")
+    Component(requirements, "requirements.txt", "Dependencies", "fastapi, uvicorn, langchain, chromadb, sqlite3, openai")
+  }
+
+  Container_Boundary(llm_module, "llm/ - SQL Generation") {
+    Component(generator_py, "generator.py", "LLMGenerator Class", "generate_sql(), ambiguity_check(), validate_sql(), self_correction()")
+    Component(prompts_py, "prompts.py", "Prompt Templates", "System-Messages, Few-Shot Examples, Ambiguity-Prompts")
+  }
+
+  Container_Boundary(rag_module, "rag/ - Retrieval Augmented Generation") {
+    Component(init_py, "__init__.py", "Module Init", "Exports")
+    Component(schema_retriever_py, "schema_retriever.py", "SchemaRetriever Class", "Chroma Vector Stores (schema, kb, meanings), similarity_search(), index_schema(), index_kb(), index_meanings()")
+  }
+
+  Container_Boundary(database_module, "database/ - Data Access") {
+    Component(manager_py, "manager.py", "DatabaseManager Class", "execute_query(), handle_paging(), fetch_results(), column_names")
+  }
+
+  Container_Boundary(utils_module, "utils/ - Helper Functions") {
+    Component(cache_py, "cache.py", "Cache Manager", "get_cached_schema(), set_cached_kb(), clear_cache()")
+    Component(context_loader_py, "context_loader.py", "ContextLoader", "load_schema_txt(), load_kb_jsonl(), load_meanings_json()")
+    Component(query_optimizer_py, "query_optimizer.py", "QueryOptimizer", "optimize_sql(), suggest_index(), analyze_plan()")
+    Component(sql_guard_py, "sql_guard.py", "SQL Guard", "validate_sql(), check_injection(), whitelist_tables()")
+  }
+
+  Container_Boundary(vector_store_module, "vector_store/ - Embeddings Storage") {
+    Component(vector_schema, "schema/", "Chroma Persist Dir", "*.db, data.parquet (Schema-Embeddings)")
+  }
+
+  Container_Boundary(mini_interact_module, "mini-interact/ - Knowledge Bases (per Domain)") {
+    Component(alien_data, "alien/*", "Domain Data", "alien_schema.txt, alien_kb.jsonl, alien_column_meaning_base.json")
+    Component(credit_data, "credit/*", "Domain Data", "credit_schema.txt, credit_kb.jsonl, credit_column_meaning_base.json")
+    Component(fake_data, "fake/*", "Domain Data", "fake_schema.txt, fake_kb.jsonl, fake_column_meaning_base.json")
+    Component(gaming_data, "gaming/*", "Domain Data", "gaming_schema.txt, gaming_kb.jsonl, gaming_column_meaning_base.json")
+    Component(more_domains, "... 20+ mehr", "Domain Data", "archeology, cybermarket, disaster, vaccine, etc.")
+  }
+}
+
+' =================== DOCUMENTATION STRUCTURE ===================
+Container_Boundary(docs_code, "Docs (/) - Documentation") {
+  Component(readme_main, "README.md", "Docs", "Projekt-Übersicht, Quickstart")
+  Component(dokumentation, "DOKUMENTATION.md", "Docs", "Detaillierte technische Docs")
+  Component(funktionen, "FUNKTIONEN_UEBERSICHT.md", "Docs", "Feature-Liste")
+  Component(implementierte, "IMPLEMENTIERTE_FEATURES.md", "Docs", "Implementierungs-Status")
+  Container_Boundary(arch_docs, "docs/architecture/", "Architecture Docs") {
+    Component(c4_context_doc, "c4-context.puml", "C4 Diagram", "System-Kontext")
+    Component(c4_container_doc, "c4-container.puml", "C4 Diagram", "Container-Übersicht")
+    Component(c4_component_doc, "c4-component.puml", "C4 Diagram", "Komponenten-Details (Backend)")
+    Component(c4_code_doc, "c4-code.puml", "C4 Diagram", "Code-Struktur (dieses Diagramm)")
+  }
+}
+
+' =================== RELATIONSHIPS (DEPENDENCIES) ===================
+
+' Frontend -> Frontend
+Rel(app_jsx, app_css, "imports styles", "CSS Link")
+Rel(app_jsx, main_jsx, "is rendered by", "React")
+Rel(main_jsx, index_css, "applies global", "CSS")
+Rel(vite_config, app_jsx, "bundles", "Build")
+Rel(eslint_config, app_jsx, "lints", "Quality Check")
+
+' Frontend <-> Backend
+Rel(app_jsx, main_py, "POST /query", "HTTP")
+
+' Backend Core
+Rel(main_py, config_py, "reads config", "Python Import")
+Rel(main_py, models_py, "uses schemas", "Python Import")
+Rel(main_py, requirements, "depends on", "Pip Install")
+
+' Backend Orchestration
+Rel(main_py, generator_py, "calls generate_sql()", "Python")
+Rel(main_py, schema_retriever_py, "calls retrieve_*()", "Python")
+Rel(main_py, manager_py, "calls execute_query()", "Python")
+Rel(main_py, cache_py, "get/set cache", "Python")
+Rel(main_py, sql_guard_py, "validates SQL", "Python")
+Rel(main_py, query_optimizer_py, "optimizes SQL", "Python")
+
+' LLM Module
+Rel(generator_py, prompts_py, "uses templates", "Python Import")
+Rel(generator_py, config_py, "reads OPENAI_API_KEY", "Python Import")
+
+' RAG Module
+Rel(schema_retriever_py, vector_store_module, "reads/writes embeddings", "Chroma API")
+Rel(schema_retriever_py, context_loader_py, "loads KB/meanings from files", "Python")
+Rel(schema_retriever_py, config_py, "reads OPENAI_API_KEY", "Python Import")
+
+' Knowledge Bases
+Rel(schema_retriever_py, alien_data, "reads schema/kb/meanings", "File I/O")
+Rel(schema_retriever_py, credit_data, "reads schema/kb/meanings", "File I/O")
+Rel(schema_retriever_py, fake_data, "reads schema/kb/meanings", "File I/O")
+Rel(schema_retriever_py, gaming_data, "reads schema/kb/meanings", "File I/O")
+Rel(context_loader_py, mini_interact_module, "loads .txt/.jsonl/.json", "File I/O")
+
+' Database Manager
+Rel(manager_py, mini_interact_module, "queries .db files", "SQLite")
+
+' Utils Dependencies
+Rel(cache_py, context_loader_py, "caches loaded context", "Python")
+Rel(sql_guard_py, config_py, "reads whitelist config", "Python Import")
+
+@enduml

@@ -1,0 +1,40 @@
+@startuml component
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+Container_Boundary(frontend_internal, "React Frontend") {
+  Component(app_component, "App.jsx", "React Component", "Hauptkomponente, State Management (query, results, paging)")
+  Component(ui_form, "Query-Formular", "JSX", "Input: Frage, DB-Auswahl, Seite, Seiten-Größe, React-Flag")
+  Component(results_display, "Ergebnis-Anzeige", "JSX + CSS", "Anzeige SQL, Ergebnisse, Paging-Kontrolle")
+  Component(fetch_handler, "Fetch Handler", "JavaScript", "POST /query zum Backend, Response-Handling")
+}
+
+Container_Boundary(api_internal, "FastAPI Backend") {
+  Component(query_endpoint, "POST /query Endpoint", "FastAPI Route", "Empfängt Anfrage (JSON), koordiniert Verarbeitung, antwortet mit JSON (SQL, results, paging)")
+  Component(cache_mgr, "Cache Manager", "Python (utils/cache.py)", "Cached schema/kb/meanings/results")
+  Component(context_load, "ContextLoader", "Python (utils/context_loader.py)", "Lädt Schema-Info aus .json/.txt Dateien")
+  Component(schema_retriever, "SchemaRetriever", "RAG + Chroma (rag/schema_retriever.py)", "Similarity-Search in Chroma für Schema, KB, Meanings")
+  Component(llm_gen, "LLM Generator", "LangChain + OpenAI (llm/generator.py)", "SQL-Generierung, Ambiguity-Check, Validation, Self-Correction")
+  Component(query_optim, "QueryOptimizer", "Python (utils/query_optimizer.py)", "SQL-Optimierung, Plan-Analyse")
+  Component(sql_sec, "SQL Guard / Validator", "Python (utils/sql_guard.py)", "Sicherheitschecks, SQL Injection Prevention")
+  Component(db_mgr, "DatabaseManager", "SQLite Connector (database/manager.py)", "Query-Ausführung, Paging, Error-Handling")
+  Component(config, "Config & Prompts", "Python (config.py, llm/prompts.py)", "OpenAI API-Key, Prompt-Templates, System-Messages")
+}
+
+Rel(fetch_handler, query_endpoint, "POST /query", "HTTP/JSON")
+Rel(query_endpoint, cache_mgr, "Prüft/Setzt Cache", "Python Call")
+Rel(query_endpoint, context_load, "Lädt Schema", "Python Call")
+Rel(query_endpoint, schema_retriever, "Retrieves Schema, KB, Meanings", "Python Call")
+Rel(query_endpoint, llm_gen, "Generiert SQL", "Python Call")
+Rel(query_endpoint, query_optim, "Optimiert SQL", "Python Call")
+Rel(query_endpoint, sql_sec, "Validiert SQL", "Python Call")
+Rel(query_endpoint, db_mgr, "Führt Query aus", "Python Call")
+Rel(llm_gen, schema_retriever, "Abfrag relevante Kontexte", "Python Call")
+Rel(llm_gen, config, "Liest Prompts", "Python Call")
+Rel(schema_retriever, context_load, "Lädt Knowledge Bases", "Python Call")
+Rel(db_mgr, config, "Liest DB-Config", "Python Call")
+Rel(results_display, fetch_handler, "Sendet Query", "Call")
+Rel(app_component, ui_form, "Renders", "React")
+Rel(app_component, results_display, "Renders", "React")
+Rel(app_component, fetch_handler, "Calls", "Call")
+
+@enduml

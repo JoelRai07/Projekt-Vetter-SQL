@@ -1,0 +1,24 @@
+@startuml container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+Person(user, "User/Analyst", "Nutzt die Web-UI zum Abfragen")
+
+System_Boundary(s1, "Projekt Vetter SQL") {
+  Container(frontend, "Frontend", "React 18 + Vite", "Benutzeroberfläche (App.jsx, CSS, Query-Formular, Ergebnis-Paging)")
+  Container(api, "Backend API", "FastAPI + uvicorn (Port 8000)", "REST-Endpoint POST /query, CORS, Orchestrierung")
+  ContainerDb(sqlite, "SQLite Datenbanken", "SQLite (.db Dateien)", "Zieldatenbanken aus mini-interact (alien, credit, fake, gaming, etc.)")
+  Container(vector_store, "Vector Store / RAG", "Chroma (persist_dir)", "Embeddings für Schema-Chunks, Knowledge Bases, Column Meanings")
+  Container(cache, "Cache", "Python in-memory/Disk", "Gecachte Schemas, KB, Meanings, Query-Results")
+}
+
+System_Ext(openai, "OpenAI API", "GPT-4 / Embeddings")
+
+Rel(user, frontend, "Nutzt", "Browser/HTTPS")
+Rel(frontend, api, "POST /query (question, database, page, page_size)", "HTTP/JSON")
+Rel(api, sqlite, "Führt SQL aus + Paging", "SQL")
+Rel(api, vector_store, "Similarity Search (Schema, KB, Meanings)", "Python API")
+Rel(api, cache, "Get/Set", "Python Memory")
+Rel(api, openai, "Generiert SQL, Ambiguity-Check, Embeddings", "HTTPS/API-Key")
+Rel(vector_store, openai, "OpenAI Embeddings", "HTTPS/API-Key")
+
+@enduml
