@@ -1,0 +1,157 @@
+@startuml datenfluss
+skinparam backgroundColor #ffffff
+skinparam ArrowColor #333333
+skinparam componentBackgroundColor #ffffcc
+skinparam databaseBackgroundColor #lightblue
+skinparam cloudBackgroundColor #ffccff
+
+title Text2SQL System - Datenflussdiagramm (Input → Output)
+
+' =================== DATENSPEICHER ===================
+storage "D1: Schema Files\n(.txt)" as D1_Schema
+storage "D2: KB (.jsonl)" as D2_KB
+storage "D3: Meanings (.json)" as D3_Meanings
+storage "D4: Vector Store\n(Chroma)" as D4_Vector
+storage "D5: Query Cache" as D5_Cache
+storage "D6: SQLite DBs" as D6_SQLite
+
+' =================== INPUT: BENUTZER ===================
+actor "👤 User" as User
+
+' =================== FRONTEND ===================
+component "Frontend\n(React)" as Frontend
+
+' =================== PROZESSE (HAUPTFLOW VON LINKS NACH RECHTS) ===================
+
+' P1: INPUT HANDLER
+component "P1: Input\nHandler" as P1_Input
+
+' P2: SCHEMA LOADING
+component "P2: Schema\nLoader" as P2_Schema
+
+' P3: KB LOADING
+component "P3: KB/Meanings\nLoader" as P3_KB
+
+' P4+P5: PARALLEL LLM PROCESSING
+component "P4: Ambiguity\nDetector" as P4_Ambig
+component "P5: SQL\nGenerator" as P5_SQL
+
+' P6: VALIDATION
+component "P6: Validator\n(3-fach)" as P6_Valid
+
+' P7: EXECUTION
+component "P7: Query\nExecutor" as P7_Exec
+
+' P8: RESPONSE
+component "P8: Response\nBuilder" as P8_Resp
+
+' =================== EXTERNE SYSTEME ===================
+cloud "☁️ OpenAI API\n(GPT-4)" as E1_OpenAI
+
+' =================== HAUPTFLUSS: INPUT PHASE ===================
+User --> Frontend: 1. Frage eingeben\n(question, db, page)
+Frontend --> P1_Input: 2. POST /query\n{question, database, page, page_size}
+
+' =================== PHASE 2: CONTEXT LOADING (PARALLEL) ===================
+
+P1_Input --> P2_Schema: 3a. Load Schema
+P1_Input --> P3_KB: 3b. Load KB
+
+P2_Schema -.up-> D5_Cache: Cache Check
+D5_Cache -.down-> P2_Schema: Hit/Miss
+P2_Schema -.down-> D1_Schema: Load (cache miss)
+D1_Schema -.down-> P2_Schema: schema_text
+P2_Schema -.up-> D4_Vector: Index embeddings
+D4_Vector -.down-> P2_Schema: chunks
+
+P3_KB -.up-> D2_KB: Load KB
+D2_KB -.down-> P3_KB: kb_text
+P3_KB -.up-> D3_Meanings: Load Meanings
+D3_Meanings -.down-> P3_KB: meanings_text
+
+' =================== PHASE 3: PARALLEL LLM PROCESSING ===================
+
+P2_Schema --> P4_Ambig: schema_context
+P3_KB --> P4_Ambig: kb_text, meanings
+
+P2_Schema --> P5_SQL: schema_context
+P3_KB --> P5_SQL: kb_text, meanings
+
+P4_Ambig --> E1_OpenAI: 4a. Ambiguity\nPrompt
+E1_OpenAI --> P4_Ambig: ambiguity_score
+
+P5_SQL --> E1_OpenAI: 4b. SQL Gen\nPrompt (ReAct)
+E1_OpenAI --> P5_SQL: generated_sql
+
+' =================== PHASE 4: VALIDIERUNG ===================
+
+P4_Ambig --> P6_Valid: ambiguity_result
+P5_SQL --> P6_Valid: sql_candidate
+
+P6_Valid -.up-> D1_Schema: 5a. Schema Check
+D1_Schema -.down-> P6_Valid: valid/invalid
+
+P6_Valid --> E1_OpenAI: 5b. Semantic Check
+E1_OpenAI --> P6_Valid: validation_score
+
+P6_Valid -.up-> D4_Vector: 5c. Context Check
+D4_Vector -.down-> P6_Valid: context_ok
+
+' =================== PHASE 5: EXECUTION ===================
+
+P6_Valid --> P7_Exec: safe_sql\n+ db_name
+
+P7_Exec -.down-> D6_SQLite: Execute SQL
+D6_SQLite -.down-> P7_Exec: raw_rows\nrow_count
+
+P7_Exec -.up-> D5_Cache: Cache results
+D5_Cache -.down-> P7_Exec: cached
+
+P7_Exec --> P7_Exec: Apply Paging
+
+' =================== PHASE 6: RESPONSE ===================
+
+P7_Exec --> P8_Resp: results_page\nrow_count
+
+P8_Resp --> Frontend: QueryResponse\n{sql, results, row_count, explanation}
+
+Frontend --> User: 6. Display Results\n(Web UI mit Paging)
+
+' =================== NOTIZEN ===================
+
+note right of D1_Schema
+  **Datenspeicher (OBEN):**
+  Alle Datenspeicher sind oben
+  angeordnet und werden von
+  Prozessen abgerufen
+end note
+
+note right of D6_SQLite
+  **Datenspeicher (UNTEN):**
+  SQLite-Datenbanken mit
+  Abfrage und Caching
+end note
+
+note right of P4_Ambig
+  **Parallele Verarbeitung:**
+  P4 & P5 laufen parallel
+  → OpenAI wird effizient genutzt
+  → Zeitersparnis
+end note
+
+note right of P6_Valid
+  **3-fache Validierung:**
+  ✓ Schema-Compliance (D1)
+  ✓ Semantic-Check (E1)
+  ✓ Context-Integrity (D4)
+end note
+
+legend right
+  |<#ffcccc> INPUT |
+  |<#ffffcc> PROZESSE |
+  |<#ffe6ff> FRONTEND |
+  |<#ffccff> EXTERN |
+  |<#lightblue> DATENSPEICHER |
+end legend
+
+@enduml

@@ -1,0 +1,108 @@
+@startuml ablauf
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+' =================== STYLING ===================
+skinparam backgroundColor #f5f5f5
+skinparam sequenceArrowColor #1a73e8
+skinparam actorBackgroundColor #e8f0fe
+skinparam actorBorderColor #1a73e8
+skinparam participantBackgroundColor #ffffff
+skinparam participantBorderColor #1a73e8
+skinparam noteBkgColor #fff4e6
+skinparam noteBorderColor #ff9800
+skinparam noteTextColor #333333
+skinparam legendBackgroundColor #ffffff
+
+title Text2SQL System - Prozessablauf (vereinfacht)
+
+actor User as user
+participant "Frontend\n(React)" as frontend
+participant "Backend\n(FastAPI)" as backend
+participant "LLM\nGenerator" as llm
+participant "RAG\n(Vector)" as retriever
+participant "Cache" as cache
+participant "SQL\nGuard" as guard
+participant "Database" as db
+participant "OpenAI\nAPI" as openai
+
+user ->> frontend: 📝 Frage eingeben
+
+activate frontend
+frontend ->> backend: 📤 POST /query
+deactivate frontend
+
+activate backend
+
+note over backend: 🔍 Phase 1: Kontext laden
+backend ->> cache: Cache prüfen
+activate cache
+cache -->> backend: Hit/Miss
+deactivate cache
+
+alt Cache-Miss
+  backend ->> retriever: Schema abrufen
+  activate retriever
+  retriever ->> openai: Embeddings
+  openai -->> retriever: ✓
+  retriever -->> backend: schema_text
+  deactivate retriever
+end
+
+backend ->> backend: KB + Meanings laden
+
+note over backend: 🚀 Phase 2: LLM Processing (Parallel)
+par Ambiguity Check
+  backend ->> llm: Ambiguity
+  activate llm
+  llm ->> openai: Analyze
+  openai -->> llm: score
+  llm -->> backend: ✓
+  deactivate llm
+else SQL Generation
+  backend ->> llm: SQL Gen (ReAct)
+  activate llm
+  llm ->> openai: Generate
+  openai -->> llm: SQL
+  llm -->> backend: ✓
+  deactivate llm
+end
+
+note over backend: 🛡️ Phase 3: Validierung
+backend ->> guard: Security Check
+activate guard
+guard -->> backend: OK/FAIL
+deactivate guard
+
+alt SQL sicher
+  note over backend: ⚡ Phase 4: Ausführung
+  backend ->> db: Execute SQL
+  activate db
+  db -->> backend: Results
+  deactivate db
+  
+  backend ->> cache: Cache Results
+  activate cache
+  cache -->> backend: ✓
+  deactivate cache
+else SQL unsicher
+  backend -->> frontend: ❌ Error
+end
+
+deactivate backend
+
+backend -->> frontend: 📥 QueryResponse
+
+activate frontend
+frontend ->> user: ✅ Ergebnisse anzeigen
+deactivate frontend
+
+note right of user
+  **5 Phasen:**
+  1️⃣ Kontext laden + Cache
+  2️⃣ LLM Parallel (Ambiguity + SQL)
+  3️⃣ Sicherheits-Validierung
+  4️⃣ Query Execution
+  5️⃣ Response + Cache
+end note
+
+@enduml
