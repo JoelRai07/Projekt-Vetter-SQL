@@ -304,8 +304,6 @@ Analysiere die Frage und identifiziere:
 3. Welche Berechnungen/Formeln werden benötigt?
 4. Welche Suchanfragen würden relevante Schema-Teile/KB-Einträge finden?
 
-WICHTIG: Generiere 3-5 spezifische Suchanfragen die verschiedene Aspekte abdecken.
-
 Antworte als JSON."""
             else:
                 reasoning_prompt = f"""NUTZER-FRAGE: {question}
@@ -316,11 +314,7 @@ BEREITS GEFUNDEN:
 - Meanings: {len(collected_meanings)}
 - Durchgeführte Suchen: {', '.join(all_search_queries)}
 
-GEFUNDENE TABELLEN:
-{', '.join(set([line.split()[0] for chunk in collected_schema for line in chunk.split('\n') if 'TABLE:' in line])) if collected_schema else 'Keine'}
-
 Was fehlt noch? Welche weiteren Suchanfragen sind nötig?
-Wenn genug Information vorhanden ist, setze "sufficient_info": true.
 
 Antworte als JSON."""
             
@@ -332,12 +326,9 @@ Antworte als JSON."""
                 reasoning = self._parse_json_response(reasoning_result)
             except Exception as e:
                 print(f"⚠️  Reasoning-Fehler: {str(e)}")
-                reasoning = {
-                    "search_queries": [question], 
-                    "sufficient_info": iteration >= max_iterations - 1
-                }
+                reasoning = {"search_queries": [question], "sufficient_info": iteration >= max_iterations - 1}
             
-            # ACT: Führe Retrieval durch mit erhöhtem top_k
+            # ACT: Führe Retrieval durch
             search_queries = reasoning.get("search_queries", [])
             if not search_queries and iteration == 0:
                 # Fallback: Nutze Frage direkt als Suchanfrage
@@ -345,24 +336,19 @@ Antworte als JSON."""
             
             all_search_queries.extend(search_queries)
             
-            # Erhöhte top_k Werte für besseres Retrieval
-            schema_top_k = 6 if iteration == 0 else 4
-            kb_top_k = 6 if iteration == 0 else 4
-            meanings_top_k = 10 if iteration == 0 else 6
-            
             for query in search_queries:
                 # Schema Retrieval
-                schema_chunk = retriever.retrieve_relevant_schema(query, top_k=schema_top_k)
+                schema_chunk = retriever.retrieve_relevant_schema(query, top_k=3)
                 if schema_chunk and schema_chunk not in collected_schema:
                     collected_schema.append(schema_chunk)
                 
                 # KB Retrieval
-                kb_chunk = retriever.retrieve_relevant_kb(query, top_k=kb_top_k)
+                kb_chunk = retriever.retrieve_relevant_kb(query, top_k=3)
                 if kb_chunk and kb_chunk not in collected_kb:
                     collected_kb.append(kb_chunk)
                 
                 # Meanings Retrieval
-                meanings_chunk = retriever.retrieve_relevant_meanings(query, top_k=meanings_top_k)
+                meanings_chunk = retriever.retrieve_relevant_meanings(query, top_k=5)
                 if meanings_chunk and meanings_chunk not in collected_meanings:
                     collected_meanings.append(meanings_chunk)
             
@@ -375,72 +361,13 @@ Antworte als JSON."""
         relevant_kb = "\n".join(collected_kb) if collected_kb else ""
         relevant_meanings = "\n".join(collected_meanings) if collected_meanings else ""
         
-        # NEUER ROBUSTNESS CHECK: Mindestanforderungen prüfen
-        min_schema_chunks = 3
-        min_kb_entries = 2
-        
-        print(f"📊 Retrieval Statistik: {len(collected_schema)} Schema-Chunks, "
-              f"{len(collected_kb)} KB-Einträge, {len(collected_meanings)} Meanings")
-        
-        if (len(collected_schema) < min_schema_chunks or 
-            len(collected_kb) < min_kb_entries):
-            print(f"⚠️  Unzureichendes Retrieval - erweitere Suche mit breiten Anfragen...")
-            
-            # Zusätzliche breite Suchen
-            broad_queries = [
-                question,  # Die originale Frage
-                " ".join(question.split()[:4]),  # Erste 4 Wörter
-                " ".join(question.split()[-4:])  # Letzte 4 Wörter
-            ]
-            
-            # Extrahiere Key-Begriffe aus der Frage
-            key_terms = []
-            financial_terms = ['financial', 'debt', 'income', 'asset', 'liability', 
-                              'credit', 'vulnerability', 'hardship', 'net worth', 
-                              'delinquency', 'payment', 'customer', 'segment',
-                              'engagement', 'digital', 'cohort', 'tenure', 'investment',
-                              'liquidity', 'score', 'ratio', 'balance']
-            for term in financial_terms:
-                if term.lower() in question.lower():
-                    key_terms.append(term)
-            
-            if key_terms:
-                broad_queries.extend(key_terms[:3])  # Top 3 gefundene Begriffe
-            
-            for query in broad_queries:
-                schema_chunk = retriever.retrieve_relevant_schema(query, top_k=8)
-                if schema_chunk and schema_chunk not in collected_schema:
-                    collected_schema.append(schema_chunk)
-                    print(f"  ✓ Zusätzlicher Schema-Chunk gefunden für: '{query}'")
-                
-                kb_chunk = retriever.retrieve_relevant_kb(query, top_k=8)
-                if kb_chunk and kb_chunk not in collected_kb:
-                    collected_kb.append(kb_chunk)
-                    print(f"  ✓ Zusätzlicher KB-Eintrag gefunden für: '{query}'")
-                
-                meanings_chunk = retriever.retrieve_relevant_meanings(query, top_k=10)
-                if meanings_chunk and meanings_chunk not in collected_meanings:
-                    collected_meanings.append(meanings_chunk)
-            
-            relevant_schema = "\n\n".join(collected_schema) if collected_schema else None
-            relevant_kb = "\n".join(collected_kb) if collected_kb else ""
-            relevant_meanings = "\n".join(collected_meanings) if collected_meanings else ""
-            
-            print(f"📊 Nach Erweiterung: {len(collected_schema)} Schema-Chunks, "
-                  f"{len(collected_kb)} KB-Einträge")
-        
-        # FALLBACK: Wenn IMMER NOCH nichts oder sehr wenig gefunden
-        if not relevant_schema or len(collected_schema) < 2:
-            print("⚠️  Kritisch wenig Information gefunden - verwende komplettes Schema als Fallback")
+        # Fallback: Wenn nichts gefunden, verwende komplettes Schema
+        if not relevant_schema:
+            print("⚠️  Keine relevanten Schema-Teile gefunden, verwende komplettes Schema")
             db_manager = DatabaseManager(db_path)
             relevant_schema = db_manager.get_schema_and_sample()
             relevant_kb = kb_text
             relevant_meanings = meanings_text
-            
-            # Markiere als Fallback in Metadaten
-            fallback_used = True
-        else:
-            fallback_used = False
         
         # Generiere SQL
         prompt = f"""### RELEVANTE DATENBANK SCHEMA-TEILE:
@@ -461,37 +388,22 @@ Generiere die SQL-Query im JSON-Format."""
             response = self._call_openai(SystemPrompts.REACT_SQL_GENERATION, prompt)
             result = self._ensure_generation_fields(self._parse_json_response(response))
             
-            # Metadaten für Debugging und Monitoring
+            # Metadaten
             result["retrieval_info"] = {
                 "schema_chunks_used": len(collected_schema),
                 "kb_entries_used": len(collected_kb),
-                "meanings_entries_used": len(collected_meanings),
-                "search_queries": all_search_queries,
-                "iterations": iteration + 1,
-                "fallback_to_full_schema": fallback_used
+                "search_queries": all_search_queries
             }
             
-            # SQL säubern
             if result.get("sql"):
                 result["sql"] = result["sql"].replace("```sql", "").replace("```", "").strip()
             
-            # Warnung wenn Fallback verwendet wurde
-            if fallback_used and result.get("sql"):
-                result["explanation"] += " [Hinweis: Vollständiges Schema als Fallback verwendet]"
-            
             return result
-            
         except Exception as e:
             return {
                 "sql": None,
                 "explanation": f"Fehler bei ReAct SQL-Generierung: {str(e)}",
-                "confidence": 0.0,
-                "retrieval_info": {
-                    "schema_chunks_used": len(collected_schema),
-                    "kb_entries_used": len(collected_kb),
-                    "search_queries": all_search_queries,
-                    "error": str(e)
-                }
+                "confidence": 0.0
             }
     
     def generate_sql_with_correction(

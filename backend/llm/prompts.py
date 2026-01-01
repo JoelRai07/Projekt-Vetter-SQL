@@ -199,21 +199,86 @@ Return a short plain-text paragraph only (no lists, no JSON, no Markdown)."""
 TASK:
 Analyze the user's question and identify which information from the database schema and knowledge base is required.
 
+SEARCH QUERY STRATEGY:
+- Generate MULTIPLE specific search queries (minimum 3-5 queries)
+- Cover different aspects: entities, metrics, calculations, relationships
+- Include both broad terms and specific column/table names
+- Think about JOIN relationships that might be needed
+
+EXAMPLES of EFFECTIVE search strategies:
+
+Example 1:
+Question: "Show customers facing financial hardship with vulnerability scores"
+GOOD search queries:
+1. "financial vulnerability score" (metric/calculation)
+2. "net worth assets liabilities" (financial data)
+3. "delinquency late payment" (payment behavior)
+4. "customer financial data" (entity/tables)
+5. "debt income ratio" (additional metric)
+
+Example 2:
+Question: "Analyze debt burden by customer segment"
+GOOD search queries:
+1. "customer segment" (grouping dimension)
+2. "debt burden liabilities" (main metric)
+3. "total assets" (context metric)
+4. "customer financial summary" (aggregate data)
+
+Example 3:
+Question: "Digital engagement trends by cohort"
+GOOD search queries:
+1. "digital engagement online mobile" (main concept)
+2. "customer tenure cohort" (grouping)
+3. "channel usage autopay" (engagement indicators)
+4. "customer relationship score" (related metrics)
+
+BAD search queries (too vague):
+- "customers" (too broad)
+- "data" (meaningless)
+- "show me" (not a concept)
+
 PROCESS (ReAct):
-1. THINK: Analyze the question → identify needed tables/KB entries.
-2. ACT: Formulate search queries for the retrieval system.
-3. OBSERVE: Receive relevant schema chunks and KB entries.
-4. REASON: Decide whether you have enough information.
+1. THINK: Break down the question into key concepts
+   - What entities? (customers, accounts, transactions)
+   - What metrics? (scores, ratios, amounts)
+   - What filters? (segments, thresholds, conditions)
+   - What relationships? (which tables need to be joined)
+
+2. ACT: Generate 3-5 targeted search queries
+   - Mix of broad and specific terms
+   - Cover all key concepts identified
+   - Include metric names if calculations are needed
+
+3. OBSERVE: You will receive schema chunks and KB entries
+
+4. REASON: Evaluate if you have enough information
+   - Do you have all necessary tables?
+   - Do you have the columns for calculations?
+   - Do you know how to join the tables?
+   - Are formulas/metrics defined in KB?
 
 OUTPUT as JSON:
 {
-  "concepts": ["Concept1", "Concept2"],
-  "potential_tables": ["Table1", "Table2"],
-  "calculations_needed": ["Calculation1"],
-  "search_queries": ["Search query 1", "Search query 2"],
+  "concepts": ["Concept1", "Concept2", "Concept3"],
+  "potential_tables": ["Table1", "Table2", "Table3"],
+  "calculations_needed": ["Calculation1", "Calculation2"],
+  "search_queries": [
+    "Specific search query 1",
+    "Specific search query 2", 
+    "Specific search query 3",
+    "Specific search query 4",
+    "Specific search query 5"
+  ],
   "sufficient_info": true/false,
-  "missing_info": ["What is still missing"]
-}"""
+  "missing_info": ["What specific information is still needed"]
+}
+
+IMPORTANT:
+- Always generate at least 3 search queries
+- Be specific and targeted in your queries
+- Think about what columns and tables are needed
+- Consider JOIN relationships between tables
+"""
 
     REACT_SQL_GENERATION = """You are a SQLite expert for Text-to-SQL generation.
 
