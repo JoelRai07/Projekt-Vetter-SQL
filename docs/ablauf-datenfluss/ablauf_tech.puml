@@ -1,0 +1,166 @@
+@startuml ablauf_tech
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+' =================== STYLING (Technical View) ===================
+skinparam backgroundColor #f5f5f5
+skinparam sequenceArrowColor #1976d2
+skinparam actorBackgroundColor #bbdefb
+skinparam actorBorderColor #1976d2
+skinparam participantBackgroundColor #e3f2fd
+skinparam participantBorderColor #1976d2
+skinparam noteBkgColor #f3e5f5
+skinparam noteBorderColor #7b1fa2
+skinparam noteTextColor #1a1a1a
+
+title Text2SQL System - Technischer Ablauf (Developer View)
+
+' =================== PARTICIPANTS ===================
+actor User
+participant "App.jsx\n(React)" as frontend
+participant "main.py\n(FastAPI)" as backend
+participant "generator.py\n(LLM)" as llm
+participant "schema_retriever.py\n(RAG)" as retriever
+participant "cache.py\n(Cache)" as cache
+participant "sql_guard.py\n(Security)" as guard
+participant "manager.py\n(DB)" as db
+participant "Chroma\n(Vector)" as vector
+participant "OpenAI API" as openai
+
+' =================== FLOW ===================
+
+user ->> frontend: input: question, database, page
+
+activate frontend
+frontend ->> backend: POST /query(QueryRequest)
+deactivate frontend
+
+activate backend
+
+note over backend: Phase 1: Cache & Context Loading
+backend ->> cache: get_cached_schema(db_name)
+activate cache
+cache -->> backend: schema_text | null
+deactivate cache
+
+alt schema_text == null
+  backend ->> retriever: retrieve_schema(db_name)
+  activate retriever
+  
+  retriever ->> vector: similarity_search(chunks)
+  activate vector
+  vector ->> openai: embedding_api(chunks)
+  openai -->> vector: embedded_vectors
+  vector -->> retriever: top_k_chunks
+  deactivate vector
+  
+  retriever -->> backend: schema_text
+  deactivate retriever
+  
+  backend ->> cache: cache_schema(db_name, schema)
+  activate cache
+  cache -->> backend: ✓
+  deactivate cache
+end
+
+backend ->> cache: get_cached_kb(db_name)
+activate cache
+cache -->> backend: kb_text
+deactivate cache
+
+backend ->> cache: get_cached_meanings(db_name)
+activate cache
+cache -->> backend: meanings_text
+deactivate cache
+
+note over backend: Phase 2: Parallel LLM Processing
+par Ambiguity Detection
+  backend ->> llm: check_ambiguity(\n  question, schema, kb, meanings)
+  activate llm
+  llm ->> openai: POST /completions\n  (ambiguity_prompt)
+  openai -->> llm: {ambiguity_score,\n   ambiguities[]}
+  llm -->> backend: AmbiguityResult
+  deactivate llm
+else SQL Generation (ReAct)
+  backend ->> llm: generate_sql_with_react(\n  question, schema, kb, meanings)
+  activate llm
+  loop ReAct Loop: Thought→Action→Observation
+    llm ->> openai: POST /completions\n  (react_prompt)
+    openai -->> llm: thought, action, sql
+  end
+  llm -->> backend: generated_sql
+  deactivate llm
+end
+
+note over backend: Phase 3: Validation (3-Layer)
+backend ->> guard: validate_sql(generated_sql, schema)
+activate guard
+guard ->> guard: check_injection(sql)
+guard ->> guard: enforce_known_tables(sql)
+guard -->> backend: security_ok: boolean
+deactivate guard
+
+alt security_ok == false
+  backend -->> frontend: QueryResponse(error=injection)
+  activate frontend
+  frontend ->> user: ❌ SQL Injection detected
+  deactivate frontend
+end
+
+backend ->> retriever: context_check(generated_sql)
+activate retriever
+retriever ->> vector: validate_context(sql)
+vector -->> retriever: context_valid
+retriever -->> backend: ✓
+deactivate retriever
+
+note over backend: Phase 4: Query Execution
+backend ->> db: execute_query(generated_sql, db_name)
+activate db
+db ->> db: paginate(\n  results, page, page_size)
+db -->> backend: {rows[], row_count,\n  columns[]}
+deactivate db
+
+alt row_count > 0
+  backend ->> cache: cache_query_result(question, rows)
+  activate cache
+  cache -->> backend: ✓
+  deactivate cache
+else error
+  backend -->> frontend: QueryResponse(error=execution)
+end
+
+note over backend: Phase 5: Semantic Validation
+backend ->> llm: validate_sql_semantic(sql, results)
+activate llm
+llm ->> openai: POST /completions\n  (semantic_prompt)
+openai -->> llm: {validation_score,\n   feedback}
+llm -->> backend: ValidationResult
+deactivate llm
+
+deactivate backend
+
+backend -->> frontend: QueryResponse(\n  sql, results, row_count,\n  explanation, validation_score)
+
+activate frontend
+frontend ->> frontend: render_results(\n  sql, rows, paging)
+frontend ->> user: Display Results\n  + SQL + Pagination
+deactivate frontend
+
+note right of backend
+  **Data Flow Summary:**
+  → Input: QueryRequest
+  → Output: QueryResponse
+  → Caching: Schema, Results
+  → External: OpenAI API
+  → Database: SQLite
+  → Security: 3-layer validation
+end note
+
+legend right
+  |<#bbdefb> Frontend |
+  |<#e3f2fd> Backend |
+  |<#f3e5f5> AI/LLM |
+  |<#fff3e0> Database |
+end legend
+
+@enduml

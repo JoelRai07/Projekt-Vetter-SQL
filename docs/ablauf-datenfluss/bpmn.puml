@@ -1,0 +1,89 @@
+@startuml bpmn
+!theme plain
+skinparam backgroundColor #ffffff
+skinparam activityBackgroundColor #e3f2fd
+skinparam activityBorderColor #1976d2
+skinparam decisionBackgroundColor #fff9c4
+skinparam decisionBorderColor #fbc02d
+skinparam noteBackgroundColor #f3e5f5
+skinparam noteBorderColor #7b1fa2
+skinparam arrowColor #1976d2
+
+title Text2SQL System - Prozessmodell (Activity Diagram)
+
+start
+:👤 User fragt Frage;
+:Frontend empfängt Input;
+
+:Backend: Schema laden;
+if (Cache vorhanden?) then (ja)
+  :Von Cache laden;
+else (nein)
+  :Schema aus Dateien laden;
+  :Vektorisieren;
+end if
+
+if (Schema OK?) then (ja)
+  :KB & Meanings laden;
+else (nein)
+  :❌ Fehler zurückgeben;
+  stop
+end if
+
+fork
+  :🔍 Ambiguity Detection;
+  :OpenAI: Ambiguity prüfen;
+  :Score erhalten;
+fork again
+  :🚀 SQL Generation (ReAct);
+  :OpenAI: SQL generieren;
+  :SQL-Kandidat erhalten;
+end fork
+
+:Backend: Sicherheit prüfen;
+if (SQL sicher?) then (ja)
+  :Schema validieren;
+else (nein)
+  :❌ SQL Injection erkannt;
+  stop
+end if
+
+if (Schema valid?) then (ja)
+  :OpenAI: Semantic Check;
+else (nein)
+  :❌ Schema-Fehler;
+  stop
+end if
+
+if (Semantik OK?) then (ja)
+  :Database: SQL ausführen;
+else (nein)
+  :⚠️ Semantik-Feedback;
+  stop
+end if
+
+if (Ergebnisse OK?) then (ja)
+  :Paging anwenden;
+  :Results cachen;
+else (nein)
+  :❌ Execution-Fehler;
+  stop
+end if
+
+:Response formatieren;
+:Frontend: Ergebnisse anzeigen;
+:✅ User sieht Daten;
+stop
+
+note right
+  **Validierungs-Gates:**
+  ✓ Cache-Check
+  ✓ Kontext-Verfügbarkeit
+  ✓ SQL-Security (Injection)
+  ✓ Schema-Compliance
+  ✓ Semantic Validation
+  ✓ Execution Success
+  ✓ Paging & Caching
+end note
+
+@enduml
