@@ -11,7 +11,15 @@ from config import Config
 from models import QueryRequest, QueryResponse, AmbiguityResult, ValidationResult
 from database.manager import DatabaseManager
 from utils.sql_guard import enforce_known_tables, enforce_safety
-from utils.cache import get_cached_schema, get_cached_kb, get_cached_meanings, get_cached_query_result, cache_query_result
+from utils.cache import (
+    get_cached_schema,
+    get_cached_kb,
+    get_cached_meanings,
+    get_cached_query_result,
+    cache_query_result,
+    create_query_session,
+    get_query_session,
+)
 from utils.query_optimizer import QueryOptimizer
 from llm.generator import OpenAIGenerator
 
@@ -75,14 +83,111 @@ async def query_database(request: QueryRequest):
             raise FileNotFoundError(error_msg)
         
         print(f"✅ Datenbank gefunden: {db_path}")
+
+        if request.page > 1 and not request.query_id:
+            error_msg = "Paging erfordert query_id aus der ersten Anfrage."
+            print(f"❌ {error_msg}")
+            return QueryResponse(
+                question=request.question,
+                generated_sql="",
+                results=[],
+                row_count=0,
+                explanation="Paging ohne query_id ist nicht erlaubt.",
+                error=error_msg,
+            )
         
         # Check cache first (Phase 1: Caching)
-        cached_result = get_cached_query_result(request.question, request.database)
-        if cached_result and request.page == 1:  # Nur bei Seite 1 cachen
-            print("✅ Cache Hit - verwende gecachtes Ergebnis")
-            return QueryResponse(**cached_result)
-        
+        cached_result = None
+        if not request.query_id:
+            cached_result = get_cached_query_result(request.question, request.database)
+            if cached_result and request.page == 1:  # Nur bei Seite 1 cachen
+                print("✅ Cache Hit - verwende gecachtes Ergebnis")
+                if not cached_result.get("query_id"):
+                    db_manager = DatabaseManager(db_path)
+                    base_sql = db_manager.normalize_sql_for_paging(
+                        cached_result.get("generated_sql", "")
+                    )
+                    cached_result["generated_sql"] = base_sql
+                    cached_result["query_id"] = create_query_session(
+                        request.database, base_sql, request.question
+                    )
+                return QueryResponse(**cached_result)
+
         db_manager = DatabaseManager(db_path)
+        if request.query_id:
+            session = get_query_session(request.query_id)
+            if not session:
+                error_msg = f"Unbekannte query_id: {request.query_id}"
+                print(f"❌ {error_msg}")
+                return QueryResponse(
+                    question=request.question,
+                    generated_sql="",
+                    results=[],
+                    row_count=0,
+                    explanation="query_id ist abgelaufen oder unbekannt.",
+                    error=error_msg,
+                )
+            if session.get("database") != request.database:
+                error_msg = "query_id passt nicht zur angefragten Datenbank."
+                print(f"❌ {error_msg}")
+                return QueryResponse(
+                    question=request.question,
+                    generated_sql="",
+                    results=[],
+                    row_count=0,
+                    explanation="query_id ist ungueltig fuer diese Datenbank.",
+                    error=error_msg,
+                )
+
+            base_sql = session.get("sql") or ""
+            table_columns = db_manager.get_table_columns()
+
+            safety_error = enforce_safety(base_sql)
+            table_error = enforce_known_tables(base_sql, table_columns)
+            if safety_error or table_error:
+                error_msg = safety_error or table_error
+                print(f"❌ Server-Side Validation: {error_msg}")
+                return QueryResponse(
+                    question=request.question,
+                    generated_sql=base_sql,
+                    results=[],
+                    row_count=0,
+                    explanation="SQL aus query_id ist unsicher.",
+                    error=error_msg,
+                    query_id=request.query_id,
+                )
+
+            results, paging_info = db_manager.execute_query_with_paging(
+                base_sql,
+                page=request.page,
+                page_size=request.page_size,
+            )
+
+            notice_msg = None
+            if paging_info["total_pages"] > 1:
+                notice_msg = (
+                    f"Seite {paging_info['page']} von {paging_info['total_pages']} "
+                    f"({paging_info['rows_on_page']} von {paging_info['total_rows']} Zeilen). "
+                )
+                if paging_info["has_next_page"]:
+                    notice_msg += "Weitere Seiten verfügbar. "
+                if paging_info["has_previous_page"]:
+                    notice_msg += "Vorherige Seite verfügbar."
+
+            return QueryResponse(
+                question=request.question,
+                generated_sql=base_sql,
+                results=results,
+                row_count=len(results),
+                page=paging_info["page"],
+                page_size=paging_info["page_size"],
+                total_pages=paging_info["total_pages"],
+                total_rows=paging_info["total_rows"],
+                has_next_page=paging_info["has_next_page"],
+                has_previous_page=paging_info["has_previous_page"],
+                notice=notice_msg,
+                query_id=request.query_id,
+            )
         # Use cached schema/KB (Phase 1: Caching)
         schema = get_cached_schema(db_path)
         table_columns = db_manager.get_table_columns()
@@ -234,6 +339,9 @@ async def query_database(request: QueryRequest):
                 explanation=user_explanation,
                 error=error_msg
             )
+
+        # Normalisiere SQL, damit Paging deterministisch im Backend erfolgt
+        generated_sql = db_manager.normalize_sql_for_paging(generated_sql)
 
         # 3b. Serverside Sicherheits-Checks
         safety_error = enforce_safety(generated_sql)
@@ -414,6 +522,8 @@ async def query_database(request: QueryRequest):
 
         print(f"{'='*60}\n")
 
+        query_id = create_query_session(request.database, generated_sql, request.question)
+
         # Cache result (nur bei Seite 1)
         result_dict = {
             "question": request.question,
@@ -431,6 +541,7 @@ async def query_database(request: QueryRequest):
             "notice": notice_msg,
             "summary": summary_text,
             "explanation": user_explanation,
+            "query_id": query_id,
         }
         
         # Cache nur bei Seite 1 (um Cache-Hits zu ermöglichen)

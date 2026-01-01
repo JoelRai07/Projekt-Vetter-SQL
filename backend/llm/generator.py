@@ -284,10 +284,8 @@ Fasse die wichtigsten Erkenntnisse kurz zusammen.
         
         # KB/Meanings einmalig laden und indexieren (falls nötig)
         kb_text, meanings_text = load_context_files(database_name, Config.DATA_DIR)
-        if len(retriever.kb_store.get()['ids']) == 0:
-            retriever.index_kb(kb_text)
-        if len(retriever.meanings_store.get()['ids']) == 0:
-            retriever.index_meanings(meanings_text)
+        retriever.index_kb(kb_text)
+        retriever.index_meanings(meanings_text)
         
         # ReAct-Loop
         collected_schema = []

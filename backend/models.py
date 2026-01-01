@@ -7,6 +7,7 @@ class QueryRequest(BaseModel):
     page: int = 1  # Paging: Seitenzahl
     page_size: int = 100  # Paging: Zeilen pro Seite
     use_react: bool = True  # ReAct + Retrieval Modus
+    query_id: Optional[str] = None  # Session-ID fuer deterministisches Paging
 
 class AmbiguityResult(BaseModel):
     is_ambiguous: bool
@@ -26,6 +27,7 @@ class QueryResponse(BaseModel):
     validation: Optional[ValidationResult] = None
     results: List[Dict[str, Any]]
     row_count: int
+    query_id: Optional[str] = None
     # Paging-Felder
     page: int = 1
     page_size: int = 100

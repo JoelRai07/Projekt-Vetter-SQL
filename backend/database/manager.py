@@ -124,10 +124,9 @@ class DatabaseManager:
         """Erstellt eine robuste COUNT-Query aus einer SELECT-Query.
 
         Statt einzelne Teile herauszuschneiden, wrappen wir die gesamte Query
-        (ohne trailing LIMIT/OFFSET/Semicolon) in eine Subquery. Das ist
-        stabiler für CTEs, UNIONs oder komplexe FROM-Klauseln.
+        in eine Subquery. Das ist stabiler fuer CTEs, UNIONs oder komplexe FROM-Klauseln.
         """
-        base_sql = self._strip_trailing_limit_offset(sql)
+        base_sql = sql.rstrip().rstrip(";")
         return f"SELECT COUNT(*) FROM ({base_sql}) AS count_query"
 
     def _strip_trailing_limit_offset(self, sql: str) -> str:
@@ -149,32 +148,12 @@ class DatabaseManager:
             cut_idx = min(cut_idx, limit_idx)
 
         return sql_no_semicolon[:cut_idx].rstrip()
+
+    def normalize_sql_for_paging(self, sql: str) -> str:
+        """Normalisiert SQL fuer Paging (entfernt nur trailing Semicolons/Whitespace)."""
+        return sql.rstrip().rstrip(";")
     
     def _add_paging_to_sql(self, sql: str, limit: int, offset: int) -> str:
-        """Fügt LIMIT und OFFSET zur SQL-Query hinzu"""
-        sql_upper = sql.upper()
-        
-        # Entferne vorhandene LIMIT/OFFSET
-        limit_idx = sql_upper.rfind("LIMIT")
-        if limit_idx != -1:
-            limit_end = sql_upper.find(";", limit_idx)
-            if limit_end == -1:
-                limit_end = len(sql)
-            else:
-                limit_end += 1
-            sql = sql[:limit_idx].rstrip() + sql[limit_end:]
-        
-        offset_idx = sql_upper.rfind("OFFSET")
-        if offset_idx != -1:
-            offset_end = sql_upper.find(";", offset_idx)
-            if offset_end == -1:
-                offset_end = len(sql)
-            else:
-                offset_end += 1
-            sql = sql[:offset_idx].rstrip() + sql[offset_end:]
-        
-        # Füge neues LIMIT und OFFSET hinzu
-        sql = sql.rstrip().rstrip(";")
-        sql += f" LIMIT {limit} OFFSET {offset};"
-        
-        return sql
+        """Fuegt LIMIT/OFFSET als Wrapper hinzu, ohne das Original-SQL zu veraendern."""
+        base_sql = sql.rstrip().rstrip(";")
+        return f"SELECT * FROM ({base_sql}) AS paged_query LIMIT {limit} OFFSET {offset};"

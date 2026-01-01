@@ -1,6 +1,7 @@
 from functools import lru_cache
 from cachetools import TTLCache
 import hashlib
+import uuid
 from database.manager import DatabaseManager
 from utils.context_loader import load_context_files
 
@@ -36,6 +37,7 @@ def get_cached_meanings(db_name: str, data_dir: str) -> str:
 
 # Query result caching (TTL = 5 minutes)
 query_cache = TTLCache(maxsize=100, ttl=300)
+query_session_cache = TTLCache(maxsize=200, ttl=3600)
 
 def get_cache_key(question: str, database: str) -> str:
     """Generate cache key from question and database"""
@@ -49,4 +51,16 @@ def get_cached_query_result(question: str, database: str):
 def cache_query_result(question: str, database: str, result: dict):
     cache_key = get_cache_key(question, database)
     query_cache[cache_key] = result
+
+def create_query_session(database: str, sql: str, question: str | None = None) -> str:
+    query_id = uuid.uuid4().hex
+    query_session_cache[query_id] = {
+        "database": database,
+        "sql": sql,
+        "question": question,
+    }
+    return query_id
+
+def get_query_session(query_id: str):
+    return query_session_cache.get(query_id)
 

@@ -88,7 +88,7 @@ export default function App() {
   };
 
   // Function to call the backend API
-  const askQuestion = async (question, page = 1, pageSize = 100) => {
+  const askQuestion = async (question, page = 1, pageSize = 100, queryId = null) => {
     const response = await fetch("http://localhost:8000/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -98,6 +98,7 @@ export default function App() {
         page: page,
         page_size: pageSize,
         use_react: true,
+        query_id: queryId,
       }),
     });
 
@@ -156,6 +157,7 @@ export default function App() {
         hasNextPage: response.has_next_page || false,
         hasPreviousPage: response.has_previous_page || false,
         originalQuestion: currentQuestion, // Store for pagination
+        queryId: response.query_id || null,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -176,13 +178,18 @@ export default function App() {
   const handlePageChange = async (messageId, newPage) => {
     const message = messages.find((m) => m.id === messageId);
     if (!message || !message.originalQuestion) return;
+    if (!message.queryId) {
+      alert("Paging nicht moeglich: query_id fehlt.");
+      return;
+    }
 
     setIsLoading(true);
     try {
       const response = await askQuestion(
         message.originalQuestion,
         newPage,
-        message.pageSize || pageSize
+        message.pageSize || pageSize,
+        message.queryId
       );
 
       if (response.error) {

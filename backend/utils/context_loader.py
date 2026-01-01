@@ -24,6 +24,39 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
             kb_text = "\n".join(entries)
     except Exception as e:
         kb_text = f"[FEHLER beim Laden der KB: {str(e)}]"
+
+    # 1b. Optional: Metric SQL Templates (deterministische SQL-Snippets)
+    metric_templates_path = f"{data_dir}/{db_name}/{db_name}_metric_sql_templates.json"
+    try:
+        if os.path.exists(metric_templates_path):
+            with open(metric_templates_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if isinstance(data, dict):
+                entries = list(data.values())
+            elif isinstance(data, list):
+                entries = data
+            else:
+                entries = []
+
+            metric_lines = []
+            for item in entries:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("name") or item.get("metric") or item.get("knowledge")
+                sql = item.get("sql") or item.get("sql_example")
+                desc = item.get("description") or ""
+                if not name or not sql:
+                    continue
+                line = f"- {name}: {sql}"
+                if desc:
+                    line += f" -- {desc}"
+                metric_lines.append(line)
+
+            if metric_lines:
+                kb_text += "\n\nMETRIC SQL TEMPLATES:\n" + "\n".join(metric_lines)
+    except Exception as e:
+        kb_text += f"\n\n[FEHLER beim Laden der Metric SQL Templates: {str(e)}]"
     
     # 2. Column Meanings
     meanings_path = f"{data_dir}/{db_name}/{db_name}_column_meaning_base.json"

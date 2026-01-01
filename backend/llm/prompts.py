@@ -53,6 +53,7 @@ STRICT RULES:
 2. NEVER invent tables or columns.
 3. If the Knowledge Base (KB) defines a formula (e.g. "Net Worth", "Credit Health Score"):
    → You MUST implement this calculation logic exactly in SQL.
+   If METRIC SQL TEMPLATES are provided, you MUST use the given SQL snippet exactly.
 4. For JSON columns: use functions like `json_extract(column, '$.field')` or `column->>'$.field'` as appropriate for SQLite.
 5. Use CTEs (WITH clauses) for complex logic.
 6. The query MUST be a SELECT (no INSERT, UPDATE, DELETE).
@@ -68,7 +69,7 @@ SQL BEST PRACTICES:
 - Use COALESCE for NULL handling where appropriate.
 - For non-trivial computations, use CTEs and keep expressions readable.
 - Avoid SELECT * (except on very small tables or for diagnostics).
-- Use LIMIT if the result set might be large.
+- Do NOT add LIMIT/OFFSET unless the user explicitly asks for a specific number (e.g. top 10). Paging is handled by the backend.
 
 OUTPUT FORMAT (CRITICAL):
 You MUST return EXACTLY this JSON format, NOTHING ELSE:
@@ -228,6 +229,8 @@ STRICT RULES:
 1. Use ONLY the provided tables/columns.
 2. If information is missing → return "sql": null, "explanation": "Missing information: ...".
 3. If KB formulas are present → implement them exactly.
+   If METRIC SQL TEMPLATES are provided, use the given SQL snippet exactly.
+   Do NOT add LIMIT/OFFSET unless the user explicitly asks for a specific number (e.g. top 10). Paging is handled by the backend.
 4. Only SELECT statements (no writes).
 5. If you use HAVING you MUST also use GROUP BY with matching grouping columns, and HAVING must only contain aggregate conditions.
 6. When using UNION or UNION ALL, every SELECT must return the same number of columns in the same order and with compatible data types.
