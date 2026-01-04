@@ -692,8 +692,54 @@ Status: **Production Ready** ✅
 - 99.8% Safety Rate
 - 88% Accuracy
 
+## Noch zu beantwortende Fragen
+
+### Q: "Warum startet ihr mit dem credit Datensatz?"
+
+### Q: "Wie habt ihr die Lernziele aus dem Modulhandbuch abgedeckt?"
+
+### Q: "Wie habt ihr euch als Team organisiert?"
+
+### Q: "Welche Artefakte liefert ihr fuer die Bewertung ab?"
+
+Bsp: Prototyp mit Live-Demo, Architekturdiagramm, Prozessdiagramm, Datenmodell-Beschreibung, ADRs, Testergebnisse, Limitationen, To-dos für Produktion, Projektplan und Retrospektive.
+
+### Q: "Wie ist der Nutzer-Workflow modelliert?"
+
+Datenmodell - Daten Workflow modellieren
+
+### Q: "Wie ist das Datenmodell aufgebaut und wie werden JOINs bestimmt?"
+
+### Q: "Welche wichtigen Architekturentscheidungen (ADRs) habt ihr getroffen?"
+
+Bsp: Beispiele sind: FastAPI statt Flask/Django, SQLite fuer Prototyping, OpenAI API fuer SQL-Generierung, ChromaDB als Vector Store, RAG/ReAct statt vollem Schema, LRU/TTL Caching usw.
+
+### Q: "Wie evaluiert ihr die Korrektheit der Antworten?"
+
+Bsp: Wir vergleichen SQL und Resultate, nutzen zusätzlich Validation und Confidence Scores als Qualitätsindikatoren.
+
+### Q: "Welche Tests habt ihr durchgeführt?"
+
+Wir haben keine Tests lol
+
+### Q: "Was sind die größten Limitationen?"
+
+### Q: "Was würde für einen produktiven Einsatz fehlen?"
+
+A: Authentifizierung, Rollen/Rechte, Monitoring, Rate Limiting, stabile Testabdeckung, skalierbares Caching, Index-Strategien.
+
+### Q: "Wie skaliert das System?"
+
+(Also wenn ich ehrlich bin, frage ich mich das auch. Würde mich aber wundern wenn er das frägt)
+
+### Q: "Welche Risiken gab es und wie habt ihr sie mitigiert?"
+
+A: LLM-Fehler -> Validation + Ambiguity Detection, Token-Kosten -> RAG + Caching, Performance -> Paging + Query Optimizer, Security -> SQL Guard + Read-Only DB.
+
+### Q: "Was waren die wichtigsten Learnings aus der Retrospektive?"
+
 ---
 
-**Viel Spaß beim Projekt! 🚀**
+**Das wars**
 
-Fragen? → Check die ARCHITEKTUR_UND_PROZESSE.md oder IMPLEMENTIERTE_FEATURES.md für technischere Details!
+Die ARCHITEKTUR_UND_PROZESSE.md oder IMPLEMENTIERTE_FEATURES.md für technischere Details checken.
