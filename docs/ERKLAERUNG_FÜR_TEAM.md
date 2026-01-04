@@ -1,7 +1,6 @@
 # Erklärung für das Team - Text2SQL System
 
 ## 📖 Inhaltsverzeichnis
-1. [Was ist dieses Projekt?](#was-ist-dieses-projekt)
 2. [Wie funktioniert es im Überblick?](#wie-funktioniert-es-im-überblick)
 3. [Frontend: Was der Nutzer sieht](#frontend-was-der-nutzer-sieht)
 4. [Backend: Was im Hintergrund passiert](#backend-was-im-hintergrund-passiert)
@@ -9,35 +8,6 @@
 6. [Wichtige Komponenten erklärt](#wichtige-komponenten-erklärt)
 7. [Wie wird Qualität sichergestellt?](#wie-wird-qualität-sichergestellt)
 8. [Performance & Optimierungen](#performance--optimierungen)
-
----
-
-## Was ist dieses Projekt?
-
-**Text2SQL** ist ein System, das **natürlichsprachige Fragen in SQL-Queries übersetzt**.
-
-### Beispiel:
-```
-User: "Zeige mir Kunden mit hoher Schuldenlast pro Segment"
-                    ↓
-System übersetzt zu:
-                    ↓
-SQL: SELECT clientseg, AVG(debincratio) AS avg_dti
-     FROM core_record cr
-     JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref
-     WHERE debincratio > 0.43
-     GROUP BY clientseg
-                    ↓
-Database führt aus
-                    ↓
-User sieht: Ergebnisse + Visualization
-```
-
-**Warum ist das cool?**
-- ✅ Non-technische User können Daten abfragen (kein SQL-Wissen nötig!)
-- ✅ Schneller als manuell SQL zu schreiben
-- ✅ Fehler werden automatisch erkannt & behoben
-- ✅ Sicher (Injections werden verhindert)
 
 ---
 
@@ -88,11 +58,11 @@ User sieht: Ergebnisse + Visualization
 
 ```
 ┌────────────────────────────────────────────┐
-│  🌙/☀️ Theme Toggle                        │
+│  🌙/☀️ Theme Toggle                       │
 ├────────────────────────────────────────────┤
 │  Database: [Dropdown: credit, fake, ...]   │
 │  Question: [Textfeld]                      │
-│  [Send Button] 🚀                          │
+│  [Send Button]                             │
 ├────────────────────────────────────────────┤
 │  Generated SQL:                            │
 │  SELECT ... FROM ... WHERE ...   [Copy]    │
@@ -104,7 +74,7 @@ User sieht: Ergebnisse + Visualization
 │  │ val1  │ val2     │ val3              │  │
 │  │ val4  │ val5     │ val6              │  │
 │  └──────────────────────────────────────┘  │
-│  [<] [1] [2] [3] [4] [5] [>]  (Paging)    │
+│  [<] [1] [2] [3] [4] [5] [>]  (Paging)     │
 └────────────────────────────────────────────┘
 ```
 
@@ -124,9 +94,6 @@ User sieht: Ergebnisse + Visualization
      method: 'POST',
      body: JSON.stringify({
        question,
-       database,
-       page,
-       page_size
      })
    })
    ```
@@ -145,13 +112,13 @@ User sieht: Ergebnisse + Visualization
 
 ---
 
-## Backend: Was im Hintergrund passiert
+## Backend
 
 **Datei**: `backend/main.py` - Funktion `query_database()`
 
 Der Backend orchestriert 6 Phasen nacheinander:
 
-### Phase 1️⃣: Context Loading (500ms - 2s)
+### Phase 1️⃣: Context Loading
 ```
 Purpose: Schema, KB, Meanings für LLM laden
 
@@ -172,7 +139,7 @@ cache.get_meanings(db_name)
 
 **Resultat**: 3 Text-Blöcke (schema, kb, meanings) für nächste Phase
 
-### Phase 2️⃣: Ambiguity Detection (1-2s, parallel zu Phase 3!)
+### Phase 2️⃣: Ambiguity Detection 
 
 ```
 Purpose: Prüfen ob Frage mehrdeutig ist
@@ -203,7 +170,7 @@ Falls nicht mehrdeutig:
 
 **Wichtig**: Diese Phase läuft **parallel** zu Phase 3! Während der LLM denkt, laden wir bereits den Context.
 
-### Phase 3️⃣: SQL Generation mit ReAct (2-4s)
+### Phase 3️⃣: SQL Generation mit ReAct
 
 ```
 Purpose: Generiere SQL-Query basierend auf Frage
@@ -244,7 +211,7 @@ Result:
 - ✅ Bessere Qualität (16 Chunks vs. 7.5KB Schema)
 - ✅ Schneller (weniger zu verarbeiten)
 
-### Phase 4️⃣: SQL Validation (1-2s)
+### Phase 4️⃣: SQL Validation
 
 ```
 Purpose: Stellen sicher dass generierte SQL sicher ist
@@ -276,7 +243,7 @@ Result:
 }
 ```
 
-### Phase 5️⃣: SQL Execution (500ms - 10s)
+### Phase 5️⃣: SQL Execution
 
 ```
 Purpose: Query ausführen und Ergebnisse holen
@@ -316,7 +283,7 @@ Result:
 }
 ```
 
-### Phase 6️⃣: Result Summarization (1-2s, optional)
+### Phase 6️⃣: Result Summarization
 
 ```
 Purpose: Natürlichsprachliche Zusammenfassung
@@ -568,19 +535,16 @@ Einsparung: 73%! 🎯
 
 ## Zusammenfassung für schnelles Onboarding
 
-### Wenn dir jemand fragt "Wie funktioniert das?"
+### Wenn jemand fragt "Wie funktioniert das?"
 
-**30-Sekunden-Version:**
-> "Nutzer gibt eine Frage ein. Das System übersetzt das mit KI in SQL, führt es aus und zeigt die Ergebnisse. Es validiert alles mehrfach und cacht um schnell zu sein."
-
-**3-Minuten-Version:**
+**Schnelle-Version:**
 > "Die App hat einen React-Frontend wo Nutzer tippen. Das geht an einen FastAPI-Backend der:
 > 1. Context lädt (Schema, KB)
 > 2. Parallel prüft ob Frage klar ist und SQL generiert (mit KI/OpenAI)
 > 3. Die SQL mehrfach validiert (Sicherheit + Semantik)
 > 4. Die SQL in der Datenbank ausführt mit Paging
 > 5. Die Ergebnisse zusammenfasst
-> Caching macht es 42x schneller bei wiederholten Fragen!"
+> Caching macht es rund 42x schneller bei wiederholten Fragen!"
 
 ### Wichtigste Dateien zum Verstehen:
 
