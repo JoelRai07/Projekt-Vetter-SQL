@@ -14,7 +14,7 @@ tags:
 
 [🌐 Website](https://bird-interact.github.io) • [📄 Paper](https://arxiv.org/abs/2510.05318) • [💻 GitHub](https://github.com/bird-bench/BIRD-Interact) • [🗄️ bird-interact-lite](https://huggingface.co/datasets/birdsql/bird-interact-lite) • [🗄️ bird-interact-full](https://huggingface.co/datasets/birdsql/bird-interact-full) • [🗄️ LiveSQLBench](https://livesqlbench.ai)
 
-Testing
+
 ## 🧸 Overview: Mini-Interact
 
 Mini-Interact is a lightweight version of [BIRD-INTERACT](https://bird-interact.github.io) (**re-imagines Text-to-SQL evaluation via lens of dynamic interactions**), which facilitates the quick development of interactive text-to-SQL methods.
