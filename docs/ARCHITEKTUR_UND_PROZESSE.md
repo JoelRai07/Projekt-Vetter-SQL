@@ -22,18 +22,18 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                    FRONTEND (React)                         │
 │  • Nutzer-Interface                                         │
-│  • Frage-Input, Paging-Steuerung                           │
-│  • Ergebnisanzeige mit SQL-Visualization                   │
+│  • Frage-Input, Paging-Steuerung                            │
+│  • Ergebnisanzeige mit SQL-Visualization                    │
 └────────────────────────┬────────────────────────────────────┘
                          │ HTTP/REST (JSON)
                          │
 ┌────────────────────────▼────────────────────────────────────┐
 │                 FASTAPI BACKEND                             │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  API Endpoint: POST /query                           │  │
-│  │  • Entgegennahme der Nutzer-Anfrage                 │  │
-│  │  • Koordination aller 6 Pipeline-Stufen             │  │
-│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  API Endpoint: POST /query                           │   │
+│  │  • Entgegennahme der Nutzer-Anfrage                  │   │
+│  │  • Koordination aller 6 Pipeline-Stufen              │   │
+│  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                          │
      ┌───────────────────┼───────────────────┐
