@@ -44,10 +44,6 @@ Table: core_record (coreregistry, clientseg, ...)
 Table: employment_and_income (emplcoreref, mthincome, ...)
 Table: expenses_and_assets (expemplref, liqassets, totassets, totliabs, networth, investamt, ...)
 
-JOIN EXAMPLE:
-core_record.coreregistry = employment_and_income.emplcoreref
-employment_and_income.emplcoreref = expenses_and_assets.expemplref
-
 STRICT RULES:
 1. Use ONLY tables and columns from the given SCHEMA (see mapping above).
 2. NEVER invent tables or columns.
@@ -63,6 +59,15 @@ STRICT RULES:
    - Every SELECT in the UNION must return the SAME number of columns,
    - in the SAME order,
    - with COMPATIBLE data types (e.g. all numeric or all text in each position).
+10. CRITICAL FOR JOINs: Always check the schema for FOREIGN KEY constraints to determine correct JOIN conditions.
+   - Look for "FOREIGN KEY (columnA) REFERENCES tableB(columnB)" in the schema to understand relationships.
+   - Use the exact column names from the schema's FOREIGN KEY definitions.
+   - Do NOT guess JOIN conditions - verify them in the schema.
+11. CRITICAL FOR JSON FIELDS: When extracting JSON paths (e.g., json_extract), you MUST use the correct table and column name from the schema.
+   - Check the schema chunks to identify which table contains which JSON column.
+   - Check schema examples or KB entries to see which JSON fields are in which columns.
+   - If a KB entry mentions "table.column.field", use that exact table.column when extracting the field.
+   - You may need JOINs to access JSON fields from different tables.
 
 SQL BEST PRACTICES:
 - Use meaningful alias names.
@@ -155,19 +160,36 @@ VALIDATION CRITERIA:
 ✓ JOIN conditions are consistent and well-formed?
 ✓ Only SELECT statements (no dangerous operations like INSERT/UPDATE/DELETE/DROP)?
 ✓ JSON functions are used correctly?
+✓ JSON paths are extracted from the CORRECT table and column (CRITICAL: json_extract must use the right table.column for each JSON field)?
 ✓ Aggregations using GROUP BY and HAVING are consistent?
 ✓ UNION / UNION ALL branches have the same number of columns and compatible data types in each position?
 
 SEVERITY LEVELS:
 - "low": Style issues or minor improvements, query should still run.
-- "medium": Query might run but could produce misleading or logically wrong results.
+- "medium": Query might run but could produce misleading or logically wrong results (e.g., JSON path in wrong table/column may return NULL for all rows).
 - "high": Query is not executable or clearly incorrect.
 
-IMPORTANT SPECIAL CASES (usually severity = "high"):
+IMPORTANT SPECIAL CASES (usually severity = "high" or "medium"):
 - HAVING is used without a GROUP BY clause.
 - HAVING contains non-aggregated columns that are not listed in GROUP BY.
 - UNION or UNION ALL combines SELECT statements with different numbers of columns.
 - UNION or UNION ALL combines columns with clearly incompatible types in the same position (e.g. text vs numeric).
+- JSON paths extracted from wrong table/column (check schema/KB to verify which table.column contains which JSON fields) → severity "medium" or "high" if it would cause query to return no results.
+
+JSON FIELD VALIDATION:
+When validating json_extract(table.column, '$.path'), verify:
+1. The table.column exists in the schema.
+2. The JSON path matches what's actually stored in that column (check schema examples or KB entries).
+3. If KB mentions "tableA.columnA.field", json_extract must use tableA.columnA, not another table's column.
+4. IMPORTANT: Do NOT flag an error if the JSON path is correctly extracted from the table/column mentioned in the KB or schema examples. Only flag if it's extracted from the WRONG table/column.
+5. Always check the schema examples and KB entries to verify which JSON fields belong to which table.column combination.
+
+JOIN VALIDATION:
+When validating JOIN conditions, verify:
+1. Check the schema for FOREIGN KEY constraints (e.g., "FOREIGN KEY (columnA) REFERENCES tableB(columnB)").
+2. JOIN conditions should match the FOREIGN KEY relationships defined in the schema.
+3. Do NOT suggest JOIN conditions that are not based on the schema's FOREIGN KEY constraints.
+4. If a JOIN condition matches a FOREIGN KEY constraint in the schema, it is likely correct.
 
 OUTPUT ONLY as JSON:
 {
@@ -182,6 +204,7 @@ ERROR MESSAGE STYLE:
   - "HAVING used without GROUP BY."
   - "UNION ALL: first SELECT has 3 columns, second SELECT has 2 columns."
   - "Column 'foo' in HAVING is not grouped and not aggregated."
+  - "JSON path '$.invcluster.investport' extracted from wrong table: expenses_and_assets.propfinancialdata. Should use bank_and_transactions.chaninvdatablock."
 """
 
     RESULT_SUMMARY = """You are a data analyst who summarizes query results in 2-3 sentences.
@@ -299,6 +322,15 @@ STRICT RULES:
 4. Only SELECT statements (no writes).
 5. If you use HAVING you MUST also use GROUP BY with matching grouping columns, and HAVING must only contain aggregate conditions.
 6. When using UNION or UNION ALL, every SELECT must return the same number of columns in the same order and with compatible data types.
+7. CRITICAL FOR JOINs: Always check the schema for FOREIGN KEY constraints to determine correct JOIN conditions.
+   - Look for "FOREIGN KEY (columnA) REFERENCES tableB(columnB)" in the schema to understand relationships.
+   - Use the exact column names from the schema's FOREIGN KEY definitions.
+   - Do NOT guess JOIN conditions - verify them in the schema.
+8. CRITICAL FOR JSON FIELDS: When extracting JSON paths (e.g., json_extract), you MUST use the correct table and column name from the schema.
+   - Check the schema chunks to identify which table contains which JSON column.
+   - Check schema examples or KB entries to see which JSON fields are in which columns.
+   - If a KB entry mentions "table.column.field", use that exact table.column when extracting the field.
+   - You may need JOINs to access JSON fields from different tables.
 
 OUTPUT as JSON:
 {

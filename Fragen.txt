@@ -1,0 +1,10 @@
+Can you show me the top wealthy customers with their financial value? Including their IDs, total assets, total liabilities, the computed net worth value, and their ranking.
+Please find all the customer IDs who are highly digital.
+Can you identify all customers focused on investments in our database? I need to see their IDs, investment amounts and total assets.
+Analyze customer credit scores by credit classification. Show the credit category, and the customers' details for each category.
+To analyze customer property leverage, please show the customer ID, property value, mortgage balance, and the calculated ratio.
+I want to analyze customer financial standing. Please show the customer identifier, each customer's financial metrics.
+To analyze digital engagement trends, please group customers into quarterly cohorts based on their tenure and identify digital natives. For each combination of cohort with whether they are digital natives, show the cohort quarter, bool value, the cohort size, engagement score, the percentage of the cohort with high engagement, and high-engagement percentage broken down by digital native status.
+I need to analyze debt burden across different customer segments. Can you provide a summary for each segment with relevant debt metrics? Also add a grant total row. Exclude any customer segment with few customers and order the results.
+For each customer, show their ID, liquid and total assets, liquidity measure, monthly income, investment amount and label of their investment potential.
+To pinpoint customers who might be facing financial hardship, I'd like to see their customer ID, the calculated vulnerability score, their net worth, delinquency count, and late payment count. Only output the customers with signs of financial hardship.

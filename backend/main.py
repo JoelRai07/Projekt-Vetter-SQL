@@ -361,6 +361,9 @@ async def query_database(request: QueryRequest):
         
         print(f"\n📝 Generierte SQL:")
         print(f"   {generated_sql[:200]}{'...' if len(generated_sql) > 200 else ''}")
+        if len(generated_sql) > 200:
+            print(f"\n📝 Vollständige SQL:")
+            print(f"   {generated_sql}")
         
         # 3d. Query Optimization (Phase 3: Query Optimization)
         optimizer = QueryOptimizer(db_path)
