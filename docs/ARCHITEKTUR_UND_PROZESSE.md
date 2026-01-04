@@ -462,74 +462,74 @@ LLM generiert:
 ### End-to-End Request Flow
 
 ```
-╔════════════════════════════════════════════════════════════╗
-║                    USER SENDS QUESTION                     ║
+╔═══════════════════════════════════════════════════════════╗
+║                    USER SENDS QUESTION                    ║
 ║        "Zeige Schuldenlast pro Kundengruppe"              ║
-╚═════════════┬════════════════════════════════════════════╝
+╚═════════════┬═════════════════════════════════════════════╝
               │
               ▼
-╔════════════════════════════════════════════════════════════╗
+╔═══════════════════════════════════════════════════════════╗
 ║  PHASE 1: CONTEXT LOADING (Parallel, mit Caching)         ║
 ║  └─ Schema: CREATE TABLE + Beispielzeilen (7.5 KB)        ║
 ║  └─ KB: 51 Metriken & Formeln (10 KB)                     ║
 ║  └─ Meanings: Spalten-Definitionen (15 KB)                ║
-╚═════════════┬════════════════════════════════════════════╝
+╚═════════════┬═════════════════════════════════════════════╝
               │
               ▼
-╔════════════════════════════════════════════════════════════╗
+╔═══════════════════════════════════════════════════════════╗
 ║  PHASE 2: AMBIGUITY DETECTION (Parallel mit SQL Gen)      ║
 ║  └─ LLM prüft: Ist Frage mehrdeutig?                      ║
-║  └─ if mehrdeutig → STOP & Rückfragen an Nutzer          ║
+║  └─ if mehrdeutig → STOP & Rückfragen an Nutzer           ║
 ║  └─ if klar → Weiter zu Phase 3                           ║
-╚═════════════┬════════════════════════════════════════════╝
+╚═════════════┬═════════════════════════════════════════════╝
               │
               ▼
-╔════════════════════════════════════════════════════════════╗
+╔═══════════════════════════════════════════════════════════╗
 ║  PHASE 3: SQL GENERATION (ReAct + Retrieval)              ║
 ║  └─ Iteration 1: Thinking + Search Queries                ║
 ║  └─ ChromaDB Retrieval: Top-K relevante Chunks            ║
 ║  └─ Iteration 2: Observation + Reasoning                  ║
 ║  └─ Weiter bis genug Info vorhanden                       ║
 ║  └─ SQL wird generiert mit Confidence Score               ║
-╚═════════════┬════════════════════════════════════════════╝
+╚═════════════┬═════════════════════════════════════════════╝
               │
               ▼
-╔════════════════════════════════════════════════════════════╗
+╔═══════════════════════════════════════════════════════════╗
 ║  PHASE 4: SQL VALIDATION (Hybrid: Rule + LLM)             ║
 ║  └─ SQL Guard: Sicherheitsprüfungen (Regex-basiert)       ║
 ║  └─ LLM Validator: Semantische Korrektheit                ║
 ║  └─ if Fehler → Optional: Self-Correction Loop            ║
 ║  └─ if valide → Weiter zu Phase 5                         ║
-╚═════════════┬════════════════════════════════════════════╝
+╚═════════════┬═════════════════════════════════════════════╝
               │
               ▼
-╔════════════════════════════════════════════════════════════╗
+╔═══════════════════════════════════════════════════════════╗
 ║  PHASE 5: EXECUTION + PAGING                              ║
 ║  └─ SQLite führt Query aus                                ║
 ║  └─ Paging: OFFSET & LIMIT anwenden                       ║
 ║  └─ Berechne: Total Pages, has_next_page, etc.            ║
 ║  └─ Return: Results (100 Zeilen) + Metadaten              ║
-╚═════════════┬════════════════════════════════════════════╝
+╚═════════════┬═════════════════════════════════════════════╝
               │
               ▼
 ╔════════════════════════════════════════════════════════════╗
-║  PHASE 6: RESULT SUMMARIZATION                            ║
-║  └─ LLM erstellt natürlichsprachliche Zusammenfassung     ║
-║  └─ Zeigt wichtigste Insights                             ║
-║  └─ Fallback: Wenn LLM-Call fehlschlägt, alternative      ║
-╚═════════════┬════════════════════════════════════════════╝
+║  PHASE 6: RESULT SUMMARIZATION                             ║
+║  └─ LLM erstellt natürlichsprachliche Zusammenfassung      ║
+║  └─ Zeigt wichtigste Insights                              ║
+║  └─ Fallback: Wenn LLM-Call fehlschlägt, alternative       ║
+╚═════════════┬══════════════════════════════════════════════╝
               │
               ▼
 ╔════════════════════════════════════════════════════════════╗
 ║             JSON RESPONSE AN FRONTEND                      ║
-║  {                                                          ║
+║  {                                                         ║
 ║    question: "...",                                        ║
 ║    generated_sql: "SELECT ...",                            ║
 ║    results: [...],                                         ║
 ║    page: 1, total_pages: 47,                               ║
 ║    summary: "Die Analyse zeigt...",                        ║
 ║    ambiguity_check, validation, query_id, ...              ║
-║  }                                                          ║
+║  }                                                         ║
 ╚════════════════════════════════════════════════════════════╝
               │
               ▼
@@ -631,12 +631,12 @@ Content-Type: application/json
 
 ### 3. OpenAI API vs. Open-Source LLMs
 
-**Entscheidung: OpenAI (GPT-4o-mini)** ✅
+**Entscheidung: OpenAI (GPT-5.2)** ✅
 
 **Gründe:**
 - Beste Qualität für SQL-Generierung
 - Zuverlässige API
-- Kosteneffizient (GPT-4o-mini)
+- Kosteneffizient (GPT-5.2)
 - Schnelle Updates & neue Modelle
 
 **Geplante Migration zu GPT-5.2:**
@@ -687,7 +687,7 @@ query_cache = TTLCache(maxsize=100, ttl=300)
 | **Frontend** | React | Modern, Reactive, User-Friendly |
 | **Backend API** | FastAPI | Async, Type-Safe, High-Performance |
 | **Database** | SQLite | Static Data, No Setup, Fast Reads |
-| **LLM** | OpenAI GPT-4o-mini | Best Quality, API, Reliable |
+| **LLM** | OpenAI GPT-5.2 | Best Quality, API, Reliable |
 | **Retrieval** | ChromaDB | Local, Free, Simple, Effective |
 | **Caching** | LRU + TTL | Fast, Consistent, In-Process |
 | **Validation** | Hybrid | Defense in Depth, Robust |
