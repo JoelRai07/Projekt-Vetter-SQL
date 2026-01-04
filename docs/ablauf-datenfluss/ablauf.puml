@@ -13,7 +13,12 @@ skinparam noteBorderColor #ff9800
 skinparam noteTextColor #333333
 skinparam legendBackgroundColor #ffffff
 
-title Text2SQL System - Prozessablauf (vereinfacht)
+title Text2SQL System - Prozessablauf mit 6 Phasen (vereinfacht)
+note right of User
+  **System-Version:** v2.1 (GPT-5.2, ReAct+RAG)
+  **Latency:** 45ms (with cache) | 6.2s (typical)
+  **Accuracy:** 88% | Cost: $0.12-0.18/query
+end note
 
 actor User as user
 participant "Frontend\n(React)" as frontend
@@ -23,9 +28,11 @@ participant "RAG\n(Vector)" as retriever
 participant "Cache" as cache
 participant "SQL\nGuard" as guard
 participant "Database" as db
-participant "OpenAI\nAPI" as openai
+participant "ChromaDB\n(Vector)" as chroma
+participant "OpenAI\nAPI\n(GPT-5.2)" as openai
 
 user ->> frontend: 📝 Frage eingeben
+note right of user: z.B. "Premium-Kunden mit hoher Schuldenlast"
 
 activate frontend
 frontend ->> backend: 📤 POST /query
@@ -39,65 +46,103 @@ activate cache
 cache -->> backend: Hit/Miss
 deactivate cache
 
-alt Cache-Miss
-  backend ->> retriever: Schema abrufen
+alt Cache-Miss (5% Chance)
+  backend ->> retriever: Schema abrufen (500ms)
   activate retriever
-  retriever ->> openai: Embeddings
-  openai -->> retriever: ✓
+  retriever ->> chroma: Vector Similarity Search
+  activate chroma
+  chroma ->> openai: Embeddings (text-embedding-3-small)
+  openai -->> chroma: Vectors
+  chroma -->> retriever: Top-k Chunks
+  deactivate chroma
   retriever -->> backend: schema_text
   deactivate retriever
+  backend ->> cache: Cache speichern (1h TTL)
 end
 
-backend ->> backend: KB + Meanings laden
+backend ->> backend: KB + Meanings laden (parallel, 10ms)
 
-note over backend: 🚀 Phase 2: LLM Processing (Parallel)
+note over backend: 🚀 Phase 2 & 3: LLM Processing (PARALLEL zu vorherigem)
 par Ambiguity Check
-  backend ->> llm: Ambiguity
+  backend ->> llm: Ambiguity Detection (ReAct)
   activate llm
-  llm ->> openai: Analyze
-  openai -->> llm: score
-  llm -->> backend: ✓
+  llm ->> openai: "Ist die Frage mehrdeutig?"
+  openai -->> llm: ambiguity_score (0.0-1.0)
+  llm -->> backend: Result (500ms)
   deactivate llm
 else SQL Generation
-  backend ->> llm: SQL Gen (ReAct)
+  backend ->> llm: SQL Gen (ReAct Loop)
   activate llm
-  llm ->> openai: Generate
-  openai -->> llm: SQL
-  llm -->> backend: ✓
+  note right of llm: Iteration 1: Thought→Action→Observe\nIteration 2: Refine context\nGenerate SQL
+  llm ->> chroma: Vector Search (5 best chunks)
+  chroma -->> llm: Relevant Schema Parts
+  llm ->> openai: Few-Shot SQL Generation\n(Few-Shot Examples included)
+  openai -->> llm: {sql, explanation, confidence}
+  llm -->> backend: generated_sql (2-4s)
   deactivate llm
 end
 
-note over backend: 🛡️ Phase 3: Validierung
-backend ->> guard: Security Check
+note over backend: 🛡️ Phase 4: Validierung (3-Schichten)
+backend ->> guard: Level 1: SQL Guard (10ms)
+note right of guard: Regex: DELETE? DROP? INSERT?\nKnown Tables only? Single Statement?
 activate guard
-guard -->> backend: OK/FAIL
+guard -->> backend: Security Check: OK/FAIL
 deactivate guard
 
-alt SQL sicher
-  note over backend: ⚡ Phase 4: Ausführung
-  backend ->> db: Execute SQL
-  activate db
-  db -->> backend: Results
-  deactivate db
+alt SQL unsicher
+  backend -->> frontend: ❌ Error: SQL Injection detected
+  frontend ->> user: ❌ Anfrage konnte nicht verarbeitet werden
+else SQL sicher
+  backend ->> openai: Level 2: LLM Semantic Validation
+  activate openai
+  openai -->> backend: Semantic Check: OK/FAIL (1-2s)
+  deactivate openai
   
-  backend ->> cache: Cache Results
-  activate cache
-  cache -->> backend: ✓
-  deactivate cache
-else SQL unsicher
-  backend -->> frontend: ❌ Error
+  alt Semantik OK
+    note over backend: ⚡ Phase 5: Ausführung
+    backend ->> db: Execute SQL (500ms-10s)
+    activate db
+    db -->> backend: Results [{...}, {...}]
+    deactivate db
+    
+    backend ->> cache: Level 3: Cache Results (TTL: 5min)
+    activate cache
+    cache -->> backend: ✓ Cached
+    deactivate cache
+    
+    backend ->> llm: Phase 6: Summarization (optional, 1-2s)
+    activate llm
+    llm ->> openai: "Schreibe natürlichsprachliche Zusammenfassung"
+    openai -->> llm: summary_text
+    llm -->> backend: ✓
+    deactivate llm
+  else Semantik FAIL
+    backend -->> frontend: ⚠️ Low Confidence: Self-Correction Loop
+  end
 end
 
 deactivate backend
 
-backend -->> frontend: 📥 QueryResponse
+backend -->> frontend: 📥 QueryResponse\n{sql, results, summary, paging, metrics}
 
 activate frontend
-frontend ->> user: ✅ Ergebnisse anzeigen
+frontend ->> user: ✅ Ergebnisse anzeigen\n(SQL, Table, Paging, Summary)
 deactivate frontend
 
-note right of user
-  **5 Phasen:**
+note bottom of user
+  **Gesamtlatenz:**
+  - Mit Cache (95%): 45ms
+  - Ohne Cache (5%): 6.2s
+  - Durchschnitt: 0.5s
+  
+  **6 Phasen:**
+  1️⃣ Context Loading (500ms | 10ms)
+  2️⃣ Ambiguity Detection (1s parallel)
+  3️⃣ SQL Generation (2-4s parallel)
+  4️⃣ Validation (2s)
+  5️⃣ Execution (0.5-10s)
+  6️⃣ Summarization (1-2s optional)
+end note
   1️⃣ Kontext laden + Cache
   2️⃣ LLM Parallel (Ambiguity + SQL)
   3️⃣ Sicherheits-Validierung

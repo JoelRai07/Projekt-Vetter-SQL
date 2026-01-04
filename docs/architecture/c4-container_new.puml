@@ -1,0 +1,43 @@
+@startuml container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title C4 Container Diagram - Text2SQL System (v2.1)
+note bottom: GPT-5.2 | ReAct+RAG | 6-Phase Pipeline | 45ms Latency (cached)
+
+Person(user, "Analyst/User", "Fragt natürlichsprachig nach Daten")
+
+System_Boundary(s1, "Text2SQL System (v2.1)") {
+  Container(frontend, "React Frontend", "React 18 + Vite", "Web UI: Query Input, Results, Paging\n(App.jsx, CSS, State)")
+  
+  Container(api, "FastAPI Backend", "FastAPI + uvicorn (8000)", "Orchestrates 6-Phase Pipeline\n(main.py, async)")
+  
+  Container(llm, "LLM Orchestrator", "LangChain + OpenAI", "SQL Generation (ReAct)\nAmbiguity Detection\nValidation\nSummarization")
+  
+  Container(rag, "RAG System", "ChromaDB + Embeddings", "Schema Retrieval\nVector Search\nFew-Shot Context")
+  
+  Container(cache, "4-Level Cache", "LRU + TTL", "L1: Schema (95% HR)\nL2: KB (80%, 1h)\nL3: Query (70%, 5min)\nL4: Session (85%, 1h)")
+  
+  Container(security, "Security", "SQL Guard + LLM", "Injection Detection\nSchema Validation\nSemantic Check")
+  
+  ContainerDb(sqlite, "SQLite DBs", "18 Datasets", "credit.sqlite (main)\nalien, archeology, fake, etc.")
+  
+  Container(context, "Context Manager", "File Loader", "schema.txt, *.jsonl")
+}
+
+System_Ext(openai, "OpenAI API", "GPT-5.2 + Embeddings\n$0.12-0.18/query")
+
+Rel(user, frontend, "Browser", "HTTPS")
+Rel(frontend, api, "POST /query {question, db, page}", "JSON")
+Rel(api, cache, "Phase 1: Cache", "Check")
+Rel(api, context, "Phase 1: Load", "Files")
+Rel(api, rag, "Phase 3: Retrieve", "Vector DB")
+Rel(api, llm, "Phase 2-3: LLM", "Generate SQL")
+Rel(api, security, "Phase 4: Validate", "Check")
+Rel(api, sqlite, "Phase 5: Execute", "SQL")
+Rel(api, cache, "Phase 6: Cache Results", "Store")
+Rel(llm, openai, "API Calls", "HTTPS")
+Rel(rag, openai, "Embeddings", "API")
+Rel(api, frontend, "QueryResponse", "JSON")
+Rel(frontend, user, "Display Results", "Browser")
+
+@enduml

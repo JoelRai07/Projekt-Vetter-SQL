@@ -42,10 +42,17 @@ CRITICAL RULES:
    - Example: bankrelscore is in bank_and_transactions, NOT credit_accounts_and_history. Use bt.bankrelscore, NOT cai.bankrelscore.
    - Example: delinqcount is in credit_and_compliance. Use cc.delinqcount.
 4. JSON: ALWAYS qualify with table alias: table_alias.json_column. Check schema for which table has which JSON column.
-5. UNION ALL: Both SELECTs must have EXACTLY same number of columns, same order, same types. ORDER BY goes AFTER UNION ALL, not before.
-   - First SELECT: CTE with GROUP BY and HAVING
-   - Second SELECT: Aggregate functions WITHOUT GROUP BY, same column count
-   - Example: SELECT col1, COUNT(*), AVG(val) FROM ... GROUP BY col1 HAVING COUNT(*) > 10 UNION ALL SELECT 'Total', COUNT(*), AVG(val) FROM ...
+5. UNION ALL: Both SELECTs must have EXACTLY same number of columns, same order, same types. 
+   - CRITICAL: When using UNION ALL with complex queries or ORDER BY, wrap the entire UNION result in a CTE before applying ORDER BY.
+   - Example structure:
+     WITH results AS (
+       SELECT col1, COUNT(*), AVG(val) FROM ... GROUP BY col1 HAVING COUNT(*) > 10
+       UNION ALL
+       SELECT 'Total', COUNT(*), AVG(val) FROM ...
+     )
+     SELECT * FROM results ORDER BY col1 DESC, col2
+   - This avoids SQLite error "ORDER BY term does not match any column in the result set"
+   - NEVER use CASE WHEN in ORDER BY after UNION ALL without wrapping in CTE first.
 6. HAVING: Must use GROUP BY first. HAVING only contains aggregate conditions.
 7. KB formulas: Implement exactly as defined.
 8. LIMIT: Only if user asks for "top N" or "first N".
@@ -97,6 +104,8 @@ IMPORTANT SPECIAL CASES (usually severity = "high" or "medium"):
 - UNION or UNION ALL combines SELECT statements with different numbers of columns.
 - UNION or UNION ALL combines columns with clearly incompatible types in the same position (e.g. text vs numeric).
 - JSON paths extracted from wrong table/column (check schema/KB to verify which table.column contains which JSON fields) → severity "medium" or "high" if it would cause query to return no results.
+- UNION ALL with ORDER BY: If ORDER BY uses CASE WHEN or calculated expressions directly without a CTE wrapper → severity "high". Should wrap UNION ALL result in CTE first.
+- UNION ALL with ORDER BY reference: ORDER BY should reference columns that exist in the final result set. After UNION ALL, use column position numbers (1, 2, 3) or ensure the ORDER BY column exists in all SELECT branches of the UNION.
 
 JSON FIELD VALIDATION:
 When validating json_extract(table.column, '$.path'), verify:

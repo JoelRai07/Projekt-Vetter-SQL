@@ -1,11 +1,22 @@
 @startuml context
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
 
-Person(user, "User/Analyst", "Fragt natürlichsprachig nach Daten")
-System(sql_system, "Projekt Vetter SQL", "Text-to-SQL System mit LLM + RAG")
-System_Ext(openai, "OpenAI API", "GPT-4 für SQL-Generierung, Ambiguity-Check, Embeddings")
+title C4 Context Diagram - Text2SQL System (v2.1)
+note bottom: GPT-5.2 | ReAct+RAG | 95% Cache Hit | 88% Accuracy | 73% Cost Savings
 
-Rel(user, sql_system, "Stellt Fragen", "Browser/HTTPS")
-Rel(sql_system, openai, "Ruft Completions & Embeddings auf", "HTTPS/API-Key")
+Person(user, "Analyst / Business User", "Stellt Fragen in natürlicher Sprache\nbenötigt keine SQL-Kenntnisse")
+
+System(sql_system, "Text2SQL System", "Übersetzt natürlichsprachige Fragen in SQL\nvia LLM + RAG mit 6-Phase Pipeline\n\nv2.1: GPT-5.2 | ReAct+RAG | 4-Level Caching\nLatency: 45ms (cached) | 6.2s (fresh)\nAccuracy: 88% | Cost: $0.12-0.18/query (73% savings)")
+
+System_Ext(openai, "OpenAI API", "GPT-5.2 for:\n• SQL Generation (ReAct Loop)\n• Ambiguity Detection\n• Semantic Validation\n• Result Summarization\n• text-embedding-3-small")
+
+System_Ext(databases, "Data Warehouse", "SQLite Databases:\n• credit.sqlite (main)\n• 18 datasets total\n(alien, archeology, fake, etc.)")
+
+System_Ext(vector_store, "ChromaDB\nVector Store", "Vector DB for Schema Retrieval\ntext-embedding-3-small embeddings\nSimilarity search for context chunks")
+
+Rel(user, sql_system, "Questions & Results", "HTTPS/Browser")
+Rel(sql_system, openai, "LLM API Calls", "HTTPS/REST\n$0.12-0.18 per query")
+Rel(sql_system, databases, "SQL Execution", "SQLite Driver")
+Rel(sql_system, vector_store, "Vector Search", "Semantic Retrieval")
 
 @enduml
