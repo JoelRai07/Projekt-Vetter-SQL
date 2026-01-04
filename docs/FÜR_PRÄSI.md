@@ -1,13 +1,13 @@
 # Erklärung für das Team - Text2SQL System
 
 ## 📖 Inhaltsverzeichnis
-2. [Wie funktioniert es im Überblick?](#wie-funktioniert-es-im-überblick)
-3. [Frontend: Was der Nutzer sieht](#frontend-was-der-nutzer-sieht)
-4. [Backend: Was im Hintergrund passiert](#backend-was-im-hintergrund-passiert)
-5. [Die 6 Phasen der Anfrageverarbeitung](#die-6-phasen-der-anfrageverarbeitung)
-6. [Wichtige Komponenten erklärt](#wichtige-komponenten-erklärt)
-7. [Wie wird Qualität sichergestellt?](#wie-wird-qualität-sichergestellt)
-8. [Performance & Optimierungen](#performance--optimierungen)
+1. [Wie funktioniert es im Überblick?](#wie-funktioniert-es-im-überblick)
+2. [Frontend: Was der Nutzer sieht](#frontend-was-der-nutzer-sieht)
+3. [Backend: Was im Hintergrund passiert](#backend-was-im-hintergrund-passiert)
+4. [Die 6 Phasen der Anfrageverarbeitung](#die-6-phasen-der-anfrageverarbeitung)
+5. [Wichtige Komponenten erklärt](#wichtige-komponenten-erklärt)
+6. [Wie wird Qualität sichergestellt?](#wie-wird-qualität-sichergestellt)
+7. [Performance & Optimierungen](#performance--optimierungen)
 
 ---
 
