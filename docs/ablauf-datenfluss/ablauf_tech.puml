@@ -1,5 +1,4 @@
 @startuml ablauf_tech
-!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
 
 ' =================== STYLING (Technical View) ===================
 skinparam backgroundColor #f5f5f5

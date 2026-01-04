@@ -1,5 +1,6 @@
 @startuml context
-!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+!define ABS_BASE_REPOSITORY https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master
+!include ABS_BASE_REPOSITORY/C4/C4_Context.puml
 
 title C4 Context Diagram - Text2SQL System (v2.1)
 note bottom: GPT-5.2 | ReAct+RAG | 95% Cache Hit | 88% Accuracy | 73% Cost Savings

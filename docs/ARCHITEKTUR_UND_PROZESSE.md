@@ -446,7 +446,7 @@ LLM generiert:
 
 ### LLM-Generator (OpenAI)
 
-**Modell**: Aktuell GPT-4o-mini (vorher untersucht, Migration zu GPT-5.2 geplant)
+**Modell**: Aktuell GPT-5.2
 
 **Methoden:**
 1. `check_ambiguity()` - Mehrdeutigkeitsprüfung

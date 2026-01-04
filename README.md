@@ -20,7 +20,7 @@ npm run dev
 
 ## 📚 Dokumentation
 
-**Vollständige Dokumentation**: Siehe [DOKUMENTATION.md](./DOKUMENTATION.md)
+**Vollständige Dokumentation**: Siehe andere Dokumente
 
 Die Dokumentation erklärt:
 - ✅ **Was** wurde gebaut (Projektübersicht)

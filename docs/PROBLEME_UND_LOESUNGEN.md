@@ -1095,7 +1095,7 @@ Nach: ~10KB pro Request (-99.99%)
 
 ---
 
-## Key Learnings für IT-Architekten
+## Key Learnings
 
 1. **Prompt Engineering ist kritisch** - Few-Shot + explizite Anweisungen machen großen Unterschied
 2. **Validation muss mehrstufig sein** - LLM + Rule-based für Robustheit

@@ -1,5 +1,4 @@
 @startuml ablauf
-!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
 
 ' =================== STYLING ===================
 skinparam backgroundColor #f5f5f5
@@ -142,12 +141,6 @@ note bottom of user
   4️⃣ Validation (2s)
   5️⃣ Execution (0.5-10s)
   6️⃣ Summarization (1-2s optional)
-end note
-  1️⃣ Kontext laden + Cache
-  2️⃣ LLM Parallel (Ambiguity + SQL)
-  3️⃣ Sicherheits-Validierung
-  4️⃣ Query Execution
-  5️⃣ Response + Cache
 end note
 
 @enduml
