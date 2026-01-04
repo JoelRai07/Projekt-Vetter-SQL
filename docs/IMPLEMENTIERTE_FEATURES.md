@@ -22,8 +22,7 @@
   - Debt-to-Income-Ratio Filter
   - Loan-to-Value-Berechnung mit JSON-Extraktion
   - Financial Stability Index Berechnung mit CTEs
-- **Effekt**: +15% Accuracy, konsistenteres Output-Format
-- **Token-Overhead**: 1,200 tokens (spart aber 2,000+ durch bessere Quality)
+- **Effekt**: Konsistenteres Output-Format
 
 ### 3. **Multi-Stage Pipeline** ✅
 - **Was**: 6-stufige Verarbeitungspipeline
@@ -35,7 +34,6 @@
   5. **SQL Execution** (SQLite)
   6. **Result Summarization** (LLM, optional)
 - **Zweck**: Jeder Schritt verbessert Qualität und Sicherheit
-- **Gesamtlatenz**: 2-4 Sekunden (normal), 6-8s (komplexe Queries)
 - **Code-Location**: `backend/main.py` (query_database Funktion)
 
 ### 4. **Ambiguity Detection mit Rückfragen** ✅
@@ -54,7 +52,6 @@
   ```
 - **Zweck**: Verhindert falsche SQL-Generierung; Pipeline stoppt, keine SQL-Ausführung
 - **Ansatz**: Separate LLM-Call vor SQL-Generierung
-- **Accuracy**: 92% (erkennt echte Mehrdeutigkeiten)
 - **Code-Location**: `backend/llm/generator.py` (check_ambiguity Methode)
 
 ### 5. **Hybrid Validation (2 Ebenen)** ✅
@@ -70,7 +67,7 @@
     - Entspricht die SQL der ursprünglichen Frage?
     - Fehlerhafte JOINs oder Logik?
 - **Defense in Depth**: Beide Ebenen müssen bestanden werden
-- **Zweck**: Multi-Layer Security, kombinierte Accuracy 99.8%
+- **Zweck**: Multi-Layer Security
 - **Code-Location**: `backend/utils/sql_guard.py` + `backend/llm/generator.py`
 
 ### 6. **Structured Output (JSON)** ✅
@@ -181,7 +178,7 @@
   - Während LLM prüft ob mehrdeutig, laden wir bereits Kontext
   - Wenn nicht mehrdeutig, haben wir Kontext schon bereit
 - **Implementierung**: `ThreadPoolExecutor` mit `concurrent.futures`
-- **Zweck**: 30-50% Latency Reduction
+- **Zweck**: Latency Reduction
 - **Beispiel**: 
   ```
   Sequential: Context (1,900ms) + Ambiguity (1,500ms) = 3,400ms
@@ -208,7 +205,7 @@
   - Identifiziert fehlende Indizes
   - Warnt vor langsamen Full-Table-Scans
   - Schlägt Optimierungen vor (z.B. "Nutze INDEX on X")
-- **Zweck**: 20-50% Execution Time Reduction (potenziell)
+- **Zweck**: Time Reduction
 - **Code-Location**: `backend/utils/query_optimizer.py`
 
 ### 16. **Paging** ✅
@@ -300,7 +297,7 @@
 
 ---
 
-## 🎓 Features - Einfach erklärt (für alle ohne viel technisches Know-how)
+## 🎓 Features - Einfach erklärt
 
 ### 1. **ReAct + Retrieval (RAG)**
 **Was ist ReAct?** ReAct = "Reasoning + Acting". Das ist ein Muster wo der KI in Schleifen arbeitet: denken (Reasoning) → eine Aktion ausführen (Acting) → das Ergebnis beobachten (Observing) → wieder denken. Statt den KI alles auf einmal zu geben (30 KB Datenbank-Info), sagen wir ihm: "Du brauchst etwas? Suche es selbst!" 
