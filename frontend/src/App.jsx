@@ -71,6 +71,10 @@ export default function App() {
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null);
   const isDark = theme === "dark";
+  const apiBaseUrl = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(
+    /\/$/,
+    ""
+  );
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -89,7 +93,7 @@ export default function App() {
 
   // Function to call the backend API
   const askQuestion = async (question, page = 1, pageSize = 100, queryId = null) => {
-    const response = await fetch("http://localhost:8000/query", {
+    const response = await fetch(`${apiBaseUrl}/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

@@ -339,8 +339,12 @@ core_record → employment_and_income → expenses_and_assets
 
 ### Docker
 ```bash
-docker-compose up -d
+# Stelle sicher, dass backend/.env einen OPENAI_API_KEY enthält.
+docker compose up --build
 ```
+
+Frontend: http://localhost:5173
+Backend: http://localhost:8000
 
 ## 📖 Dokumentation
 
