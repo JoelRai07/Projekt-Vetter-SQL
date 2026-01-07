@@ -98,7 +98,7 @@ export default function App() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question: question,
-        database: "credit",
+        auto_select: true,
         page: page,
         page_size: pageSize,
         use_react: true,
