@@ -8,7 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Lokale Imports
 from config import Config
-from models import QueryRequest, QueryResponse, AmbiguityResult, ValidationResult
+from models import (
+    QueryRequest,
+    QueryResponse,
+    AmbiguityResult,
+    ValidationResult,
+    RouteRequest,
+    RouteResponse,
+)
 from database.manager import DatabaseManager
 from utils.sql_guard import enforce_known_tables, enforce_safety
 from utils.cache import (
@@ -25,6 +32,10 @@ from llm.generator import OpenAIGenerator
 
 # Thresholds / constants
 CONFIDENCE_THRESHOLD_LOW = 0.4
+ROUTE_CONFIDENCE_THRESHOLD = 0.55
+MAX_PROFILE_SCHEMA_CHARS = 1500
+MAX_PROFILE_KB_CHARS = 1200
+MAX_PROFILE_MEANINGS_CHARS = 1200
 
 # FastAPI App
 app = FastAPI(
@@ -50,6 +61,52 @@ llm_generator = OpenAIGenerator(
 # Thread Pool für Parallel Processing
 executor = ThreadPoolExecutor(max_workers=4)
 
+def list_available_databases() -> list[str]:
+    data_dir = Config.DATA_DIR
+    if not os.path.isdir(data_dir):
+        return []
+    databases = []
+    for entry in os.listdir(data_dir):
+        db_dir = os.path.join(data_dir, entry)
+        if not os.path.isdir(db_dir):
+            continue
+        db_path = os.path.join(db_dir, f"{entry}.sqlite")
+        if os.path.exists(db_path):
+            databases.append(entry)
+    return sorted(databases)
+
+def build_database_profiles(db_names: list[str]) -> list[dict[str, str]]:
+    profiles = []
+    for db_name in db_names:
+        db_path = os.path.join(Config.DATA_DIR, db_name, f"{db_name}.sqlite")
+        schema = get_cached_schema(db_path)
+        kb_text = get_cached_kb(db_name, Config.DATA_DIR)
+        meanings_text = get_cached_meanings(db_name, Config.DATA_DIR)
+        profiles.append(
+            {
+                "database": db_name,
+                "schema_snippet": schema[:MAX_PROFILE_SCHEMA_CHARS],
+                "kb_snippet": kb_text[:MAX_PROFILE_KB_CHARS],
+                "meanings_snippet": meanings_text[:MAX_PROFILE_MEANINGS_CHARS],
+            }
+        )
+    return profiles
+
+def build_routing_ambiguity(
+    reason: str,
+    available_dbs: list[str],
+    confidence: float,
+) -> AmbiguityResult:
+    questions = [
+        "Welche Datenbank soll verwendet werden?",
+        f"Verfügbare Datenbanken: {', '.join(available_dbs)}",
+    ]
+    return AmbiguityResult(
+        is_ambiguous=True,
+        reason=f"{reason} (confidence={confidence:.2f})",
+        questions=questions,
+    )
+
 
 @app.get("/")
 async def root():
@@ -58,6 +115,55 @@ async def root():
         "version": "2.1.0",
         "features": ["Ambiguity Detection", "SQL Validation", "Modular Structure"]
     }
+
+@app.post("/route", response_model=RouteResponse)
+async def route_database(request: RouteRequest):
+    try:
+        db_names = list_available_databases()
+        if not db_names:
+            return RouteResponse(
+                question=request.question,
+                error=f"Keine Datenbanken gefunden unter {Config.DATA_DIR}.",
+            )
+
+        profiles = build_database_profiles(db_names)
+        loop = asyncio.get_event_loop()
+        selection = await loop.run_in_executor(
+            executor,
+            llm_generator.route_database,
+            request.question,
+            profiles,
+        )
+        selected_db = selection.get("selected_database")
+        confidence = selection.get("confidence", 0.0)
+        if selected_db not in db_names:
+            confidence = 0.0
+            selected_db = None
+
+        ambiguity_obj = None
+        if confidence < ROUTE_CONFIDENCE_THRESHOLD or not selected_db:
+            ambiguity_obj = build_routing_ambiguity(
+                selection.get("reason", "Datenbank unklar."),
+                db_names,
+                confidence,
+            )
+            return RouteResponse(
+                question=request.question,
+                selected_database=None,
+                confidence=confidence,
+                ambiguity_check=ambiguity_obj,
+            )
+
+        return RouteResponse(
+            question=request.question,
+            selected_database=selected_db,
+            confidence=confidence,
+        )
+    except Exception as e:
+        return RouteResponse(
+            question=request.question,
+            error=f"Routing fehlgeschlagen: {str(e)}",
+        )
 
 
 @app.post("/query", response_model=QueryResponse)
@@ -72,7 +178,83 @@ async def query_database(request: QueryRequest):
     try:
         print(f"\n{'='*60}")
         print(f"📝 NEUE ANFRAGE: {request.question}")
-        print(f"🗄️  Datenbank: {request.database}")
+        print(f"🗄️  Datenbank (Request): {request.database}")
+
+        selected_database = request.database
+        if request.query_id:
+            request.auto_select = False
+            session = get_query_session(request.query_id)
+            if not session:
+                error_msg = f"Unbekannte query_id: {request.query_id}"
+                print(f"❌ {error_msg}")
+                return QueryResponse(
+                    question=request.question,
+                    generated_sql="",
+                    results=[],
+                    row_count=0,
+                    explanation="query_id ist abgelaufen oder unbekannt.",
+                    error=error_msg,
+                )
+            session_db = session.get("database")
+            if not selected_database:
+                selected_database = session_db
+            elif selected_database != session_db:
+                error_msg = "query_id passt nicht zur angefragten Datenbank."
+                print(f"❌ {error_msg}")
+                return QueryResponse(
+                    question=request.question,
+                    generated_sql="",
+                    results=[],
+                    row_count=0,
+                    explanation="query_id ist ungueltig fuer diese Datenbank.",
+                    error=error_msg,
+                )
+
+        if not selected_database or request.auto_select:
+            db_names = list_available_databases()
+            if not db_names:
+                error_msg = f"Keine Datenbanken gefunden unter {Config.DATA_DIR}."
+                print(f"❌ {error_msg}")
+                return QueryResponse(
+                    question=request.question,
+                    generated_sql="",
+                    results=[],
+                    row_count=0,
+                    explanation="Keine Datenbanken verfügbar.",
+                    error=error_msg,
+                )
+            profiles = build_database_profiles(db_names)
+            loop = asyncio.get_event_loop()
+            selection = await loop.run_in_executor(
+                executor,
+                llm_generator.route_database,
+                request.question,
+                profiles,
+            )
+            selected_database = selection.get("selected_database")
+            confidence = selection.get("confidence", 0.0)
+            if selected_database not in db_names:
+                confidence = 0.0
+                selected_database = None
+
+            if confidence < ROUTE_CONFIDENCE_THRESHOLD or not selected_database:
+                ambiguity_obj = build_routing_ambiguity(
+                    selection.get("reason", "Datenbank unklar."),
+                    db_names,
+                    confidence,
+                )
+                return QueryResponse(
+                    question=request.question,
+                    ambiguity_check=ambiguity_obj,
+                    generated_sql="",
+                    results=[],
+                    row_count=0,
+                    explanation="Bitte Datenbank auswählen oder Frage präzisieren.",
+                    error="Datenbankauswahl unklar.",
+                )
+
+        request.database = selected_database
+        print(f"🗄️  Datenbank (Auswahl): {request.database}")
         
         # 1. Datenbank und Kontext laden
         db_path = f"{Config.DATA_DIR}/{request.database}/{request.database}.sqlite"
@@ -116,29 +298,6 @@ async def query_database(request: QueryRequest):
         db_manager = DatabaseManager(db_path)
         if request.query_id:
             session = get_query_session(request.query_id)
-            if not session:
-                error_msg = f"Unbekannte query_id: {request.query_id}"
-                print(f"❌ {error_msg}")
-                return QueryResponse(
-                    question=request.question,
-                    generated_sql="",
-                    results=[],
-                    row_count=0,
-                    explanation="query_id ist abgelaufen oder unbekannt.",
-                    error=error_msg,
-                )
-            if session.get("database") != request.database:
-                error_msg = "query_id passt nicht zur angefragten Datenbank."
-                print(f"❌ {error_msg}")
-                return QueryResponse(
-                    question=request.question,
-                    generated_sql="",
-                    results=[],
-                    row_count=0,
-                    explanation="query_id ist ungueltig fuer diese Datenbank.",
-                    error=error_msg,
-                )
-
             base_sql = session.get("sql") or ""
             table_columns = db_manager.get_table_columns()
 

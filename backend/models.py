@@ -3,7 +3,8 @@ from typing import List, Dict, Any, Optional
 
 class QueryRequest(BaseModel):
     question: str
-    database: str = "credit"
+    database: Optional[str] = None
+    auto_select: bool = False
     page: int = 1  # Paging: Seitenzahl
     page_size: int = 100  # Paging: Zeilen pro Seite
     use_react: bool = True  # ReAct + Retrieval Modus
@@ -38,4 +39,14 @@ class QueryResponse(BaseModel):
     notice: Optional[str] = None
     summary: Optional[str] = None
     explanation: Optional[str] = None
+    error: Optional[str] = None
+
+class RouteRequest(BaseModel):
+    question: str
+
+class RouteResponse(BaseModel):
+    question: str
+    selected_database: Optional[str] = None
+    confidence: float = 0.0
+    ambiguity_check: Optional[AmbiguityResult] = None
     error: Optional[str] = None
