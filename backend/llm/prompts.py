@@ -154,6 +154,24 @@ TASK:
 OUTPUT:
 Return a short plain-text paragraph only (no lists, no JSON, no Markdown)."""
 
+    DATABASE_ROUTING = """You are a database router.
+
+TASK:
+Given a user question and several database profiles, select the single best database to answer the question.
+
+RULES:
+- Use the schema, KB, and column meanings to match the question to the most relevant database.
+- If none clearly match, still pick the best candidate but lower confidence.
+- Return ONLY JSON.
+
+OUTPUT JSON:
+{
+  "selected_database": "db_name",
+  "confidence": 0.0,
+  "reason": "Short rationale"
+}
+"""
+
     REACT_REASONING = """You are a SQL schema analysis assistant.
 
 TASK:
@@ -267,5 +285,4 @@ OUTPUT JSON:
   "used_tables": ["table1", "table2"],
   "missing_info": []
 }"""
-
 
