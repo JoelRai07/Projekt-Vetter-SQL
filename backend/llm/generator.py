@@ -129,6 +129,17 @@ class OpenAIGenerator:
             ensured["sql"] = None
 
         return ensured
+
+    def _ensure_routing_fields(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Validiert, dass wichtige Felder in der DB-Routing-Antwort vorhanden sind."""
+        ensured = result.copy()
+        ensured.setdefault("selected_database", None)
+        ensured.setdefault("reason", "")
+        try:
+            ensured["confidence"] = float(ensured.get("confidence", 0.0))
+        except (TypeError, ValueError):
+            ensured["confidence"] = 0.0
+        return ensured
     
     def check_ambiguity(self, question: str, schema: str, kb: str, meanings: str) -> Dict[str, Any]:
         """Prüft ob die Frage mehrdeutig ist"""
@@ -207,6 +218,34 @@ Generiere die SQL-Query im JSON-Format.
                 "explanation": f"Fehler bei SQL-Generierung: {str(e)}",
                 "confidence": 0.0
             }
+
+    def route_database(
+        self,
+        question: str,
+        profiles: list[dict[str, str]],
+    ) -> Dict[str, Any]:
+        """Wählt die passende Datenbank anhand der Profile aus."""
+        profiles_text = "\n\n".join(
+            [
+                (
+                    f"DATABASE: {profile['database']}\n"
+                    f"SCHEMA SNIPPET:\n{profile['schema_snippet']}\n\n"
+                    f"KB SNIPPET:\n{profile['kb_snippet']}\n\n"
+                    f"MEANINGS SNIPPET:\n{profile['meanings_snippet']}"
+                )
+                for profile in profiles
+            ]
+        )
+
+        prompt = f"""
+USER QUESTION:
+{question}
+
+DATABASE PROFILES:
+{profiles_text}
+"""
+        response = self._call_openai(SystemPrompts.DATABASE_ROUTING, prompt)
+        return self._ensure_routing_fields(self._parse_json_response(response))
 
     def validate_sql(self, sql: str, schema: str) -> Dict[str, Any]:
         """Validiert die generierte SQL-Query"""
