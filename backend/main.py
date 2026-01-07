@@ -258,7 +258,7 @@ async def query_database(request: QueryRequest):
         print(f"🗄️  Datenbank (Auswahl): {request.database}")
         
         # 1. Datenbank und Kontext laden
-        db_path = f"{get_data_dir()}/{request.database}/{request.database}.sqlite"
+        db_path = os.path.join(Config.DATA_DIR, request.database, f"{request.database}.sqlite")
         
         if not os.path.exists(db_path):
             error_msg = f"Datenbank nicht gefunden: {db_path}"
@@ -351,8 +351,8 @@ async def query_database(request: QueryRequest):
         # Use cached schema/KB (Phase 1: Caching)
         schema = get_cached_schema(db_path)
         table_columns = db_manager.get_table_columns()
-        kb_text = get_cached_kb(request.database, get_data_dir())
-        meanings_text = get_cached_meanings(request.database, get_data_dir())
+        kb_text = get_cached_kb(request.database, Config.DATA_DIR)
+        meanings_text = get_cached_meanings(request.database, Config.DATA_DIR)
         
         print(f"✅ Schema geladen ({len(schema)} Zeichen)")
         print(f"✅ KB geladen ({len(kb_text)} Zeichen)")
