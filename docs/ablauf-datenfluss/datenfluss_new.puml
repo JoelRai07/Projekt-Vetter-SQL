@@ -7,7 +7,9 @@ skinparam cloudBackgroundColor #ffccff
 skinparam noteBackgroundColor #f0f0f0
 
 title Text2SQL System - Datenflussdiagramm (6 Phasen, Detailliert)
-note top: GPT-5.2 | ReAct+RAG | 45ms (cached) | 88% Accuracy | 4-Level Caching
+note as N1
+  GPT-5.2 | ReAct+RAG | 45ms (cached) | 88% Accuracy | 4-Level Caching
+end note
 
 ' =================== DATENSPEICHER ===================
 storage "D1: Schema\n(*.txt, 7.5KB)" as D1_Schema
@@ -49,17 +51,17 @@ P0_Input --> P1_Context: 3. Load Context
 P1_Context -.-> D5_Cache: Cache Check\n(95% Hit Rate)
 D5_Cache -.-> P1_Context: Hit/Miss
 
-alt Cache Hit (95%)
-  P1_Context --> P1_Context: schema_text [10ms]
-else Cache Miss (5%)
-  P1_Context --> D1_Schema: Load schema.txt
-  D1_Schema --> P1_Context: raw_schema [500ms]
-  P1_Context --> D4_Vector: Vectorize chunks\n(text-embedding-3-small)
-  D4_Vector --> E1_OpenAI: Embedding API
-  E1_OpenAI --> D4_Vector: vectors
-  D4_Vector --> P1_Context: indexed_chunks
-  P1_Context --> D5_Cache: Cache (TTL: 1h)
-end
+' Cache Hit Path (95%)
+P1_Context --> P1_Context: schema_text [10ms]\n(Cache Hit 95%)
+
+' Cache Miss Path (5%)
+P1_Context --> D1_Schema: Load schema.txt\n(Cache Miss 5%)
+D1_Schema --> P1_Context: raw_schema [500ms]
+P1_Context --> D4_Vector: Vectorize chunks\n(text-embedding-3-small)
+D4_Vector --> E1_OpenAI: Embedding API
+E1_OpenAI --> D4_Vector: vectors
+D4_Vector --> P1_Context: indexed_chunks
+P1_Context --> D5_Cache: Cache (TTL: 1h)
 
 P1_Context --> D2_KB: Load KB (parallel)
 D2_KB --> P1_Context: kb_text
@@ -108,20 +110,20 @@ P4a_Guard -.-> D1_Schema: Validate against\nschema
 
 P4a_Guard --> P4a_Guard: Check Regex:\n✓ No DELETE/DROP/INSERT\n✓ Only SELECT/WITH\n✓ Known tables only\n✓ Single statement
 
-alt Injection Detected
-  P4a_Guard --> P7_Resp: STOP: Error
-else Safe
-  P4a_Guard --> P4b_Valid: SQL passed\nsecurity check
-end
+' If Injection Detected
+P4a_Guard --> P7_Resp: STOP: Error\n(Injection Detected)
+
+' If Safe
+P4a_Guard --> P4b_Valid: SQL passed\nsecurity check\n(Safe)
 
 P4b_Valid --> E1_OpenAI: POST /completions\n(validation_prompt)\n"Is SQL semantically\ncorrect and safe?"\n[1-2s]
 E1_OpenAI --> P4b_Valid: {is_valid: bool,\n validation_score,\n issues[], severity}
 
-alt Validation FAIL (High Severity)
-  P4b_Valid --> P7_Resp: STOP: Error
-else Validation OK
-  P4b_Valid --> P5_Exec: validated_sql
-end
+' If Validation FAIL (High Severity)
+P4b_Valid --> P7_Resp: STOP: Error\n(Validation FAIL)
+
+' If Validation OK
+P4b_Valid --> P5_Exec: validated_sql\n(Validation OK)
 
 ' =================== PHASE 5: EXECUTION ===================
 

@@ -1,146 +1,247 @@
 @startuml ablauf
 
 ' =================== STYLING ===================
-skinparam backgroundColor #f5f5f5
-skinparam sequenceArrowColor #1a73e8
-skinparam actorBackgroundColor #e8f0fe
-skinparam actorBorderColor #1a73e8
+skinparam backgroundColor #f9fafb
+skinparam sequenceArrowColor #2563eb
+skinparam sequenceLifeLineBorderColor #94a3b8
+skinparam actorBackgroundColor #dbeafe
+skinparam actorBorderColor #2563eb
 skinparam participantBackgroundColor #ffffff
-skinparam participantBorderColor #1a73e8
-skinparam noteBkgColor #fff4e6
-skinparam noteBorderColor #ff9800
-skinparam noteTextColor #333333
+skinparam participantBorderColor #64748b
+skinparam noteBkgColor #fef3c7
+skinparam noteBorderColor #f59e0b
+skinparam noteTextColor #1f2937
 skinparam legendBackgroundColor #ffffff
+skinparam boxPadding 10
+skinparam sequenceGroupBackgroundColor #f0f9ff
+skinparam sequenceGroupBorderColor #0284c7
+skinparam dividerBackgroundColor #e0f2fe
+skinparam dividerFontColor #0369a1
+skinparam dividerFontSize 14
+skinparam dividerFontStyle bold
 
-title Text2SQL System - Prozessablauf mit 6 Phasen (vereinfacht)
-note right of User
-  **System-Version:** v2.1 (GPT-5.2, ReAct+RAG)
-  **Latency:** 45ms (with cache) | 6.2s (typical)
-  **Accuracy:** 88% | Cost: $0.12-0.18/query
+title Text2SQL System - Prozessablauf mit 6 Phasen
+
+note across
+  <b>System:</b> v2.1 (GPT-5.2, ReAct+RAG) | <b>Latency:</b> 45ms (cached) / 6.2s (typical) | <b>Accuracy:</b> 88% | <b>Cost:</b> $0.12-0.18/query
 end note
 
-actor User as user
-participant "Frontend\n(React)" as frontend
-participant "Backend\n(FastAPI)" as backend
-participant "LLM\nGenerator" as llm
-participant "RAG\n(Vector)" as retriever
-participant "Cache" as cache
-participant "SQL\nGuard" as guard
-participant "Database" as db
-participant "ChromaDB\n(Vector)" as chroma
-participant "OpenAI\nAPI\n(GPT-5.2)" as openai
+actor "👤 User" as user
+box "Frontend Layer" #e0f2fe
+  participant "React\nApp" as frontend
+end box
+
+box "Backend Layer" #fef3c7
+  participant "FastAPI\nBackend" as backend
+  participant "Cache\n(Redis)" as cache
+  participant "SQL\nGuard" as guard
+end box
+
+box "AI Layer" #f3e8ff
+  participant "LLM\nGenerator" as llm
+  participant "RAG\nRetriever" as retriever
+  participant "OpenAI\nGPT-5.2" as openai
+end box
+
+box "Data Layer" #dcfce7
+  participant "ChromaDB\nVector Store" as chroma
+  participant "SQLite\nDatabase" as db
+end box
 
 user ->> frontend: 📝 Frage eingeben
-note right of user: z.B. "Premium-Kunden mit hoher Schuldenlast"
+note right of user
+  Beispiel:
+  "Premium-Kunden mit
+  hoher Schuldenlast"
+end note
 
 activate frontend
-frontend ->> backend: 📤 POST /query
+frontend ->> backend: POST /query
 deactivate frontend
 
 activate backend
 
-note over backend: 🔍 Phase 1: Kontext laden
-backend ->> cache: Cache prüfen
-activate cache
-cache -->> backend: Hit/Miss
-deactivate cache
+== 🔍 PHASE 1: Context Loading ==
 
-alt Cache-Miss (5% Chance)
-  backend ->> retriever: Schema abrufen (500ms)
-  activate retriever
-  retriever ->> chroma: Vector Similarity Search
-  activate chroma
-  chroma ->> openai: Embeddings (text-embedding-3-small)
-  openai -->> chroma: Vectors
-  chroma -->> retriever: Top-k Chunks
-  deactivate chroma
-  retriever -->> backend: schema_text
-  deactivate retriever
-  backend ->> cache: Cache speichern (1h TTL)
+group Kontext laden [Cache: 95% Hit Rate]
+  backend ->> cache: Cache-Prüfung
+  activate cache
+  cache -->> backend: Hit (95%) / Miss (5%)
+  deactivate cache
+  
+  alt Cache-Miss (5%)
+    backend ->> retriever: Schema abrufen
+    activate retriever
+    retriever ->> chroma: Vector Similarity Search
+    activate chroma
+    chroma ->> openai: text-embedding-3-small
+    openai -->> chroma: Vectors
+    chroma -->> retriever: Top-k Chunks
+    deactivate chroma
+    retriever -->> backend: schema_text
+    deactivate retriever
+    backend ->> cache: Speichern (TTL: 1h)
+    note right: 500ms
+  else Cache-Hit (95%)
+    note right: 10ms
+  end
+  
+  backend ->> backend: KB + Column Meanings laden
+  note right: 10ms (parallel)
+end group
+
+== 🚀 PHASE 2 & 3: LLM Processing (Parallel) ==
+
+par Ambiguity Detection (Phase 2)
+  group Mehrdeutigkeitserkennung [ReAct Agent]
+    backend ->> llm: Ambiguity Check
+    activate llm
+    llm ->> openai: "Ist die Frage mehrdeutig?"
+    note right
+      Prüft auf:
+      - Unklare Begriffe
+      - Fehlende Kontext
+      - Mehrere Interpretationen
+    end note
+    openai -->> llm: ambiguity_score (0.0-1.0)
+    llm -->> backend: Result
+    deactivate llm
+    note right: ~500ms
+  end group
+else SQL Generation (Phase 3)
+  group SQL-Generierung [ReAct + RAG]
+    backend ->> llm: Generate SQL
+    activate llm
+    
+    note right of llm
+      <b>ReAct Loop:</b>
+      1. Thought: Analysiere Frage
+      2. Action: Hole relevanten Context
+      3. Observe: Verfeinere Verständnis
+      4. Generate: Erstelle SQL
+    end note
+    
+    llm ->> chroma: Vector Search (Top-5)
+    chroma -->> llm: Relevante Schema-Teile
+    llm ->> openai: Few-Shot Prompt
+    openai -->> llm: {sql, explanation, confidence}
+    llm -->> backend: generated_sql
+    deactivate llm
+    note right: 2-4s
+  end group
 end
 
-backend ->> backend: KB + Meanings laden (parallel, 10ms)
+== 🛡️ PHASE 4: Validation (3-Layer Security) ==
 
-note over backend: 🚀 Phase 2 & 3: LLM Processing (PARALLEL zu vorherigem)
-par Ambiguity Check
-  backend ->> llm: Ambiguity Detection (ReAct)
-  activate llm
-  llm ->> openai: "Ist die Frage mehrdeutig?"
-  openai -->> llm: ambiguity_score (0.0-1.0)
-  llm -->> backend: Result (500ms)
-  deactivate llm
-else SQL Generation
-  backend ->> llm: SQL Gen (ReAct Loop)
-  activate llm
-  note right of llm: Iteration 1: Thought→Action→Observe\nIteration 2: Refine context\nGenerate SQL
-  llm ->> chroma: Vector Search (5 best chunks)
-  chroma -->> llm: Relevant Schema Parts
-  llm ->> openai: Few-Shot SQL Generation\n(Few-Shot Examples included)
-  openai -->> llm: {sql, explanation, confidence}
-  llm -->> backend: generated_sql (2-4s)
-  deactivate llm
-end
-
-note over backend: 🛡️ Phase 4: Validierung (3-Schichten)
-backend ->> guard: Level 1: SQL Guard (10ms)
-note right of guard: Regex: DELETE? DROP? INSERT?\nKnown Tables only? Single Statement?
-activate guard
-guard -->> backend: Security Check: OK/FAIL
-deactivate guard
+group Layer 1: SQL Guard [Regex-basiert]
+  backend ->> guard: Security Check
+  activate guard
+  note right of guard
+    <b>Prüfungen:</b>
+    ✓ Keine DELETE/DROP/INSERT
+    ✓ Nur SELECT/WITH erlaubt
+    ✓ Bekannte Tabellen
+    ✓ Single Statement
+  end note
+  guard -->> backend: OK / FAIL
+  deactivate guard
+  note right: ~10ms
+end group
 
 alt SQL unsicher
-  backend -->> frontend: ❌ Error: SQL Injection detected
-  frontend ->> user: ❌ Anfrage konnte nicht verarbeitet werden
+  backend -->> frontend: ❌ Injection detected
+  frontend ->> user: ❌ Anfrage abgelehnt
+  
 else SQL sicher
-  backend ->> openai: Level 2: LLM Semantic Validation
-  activate openai
-  openai -->> backend: Semantic Check: OK/FAIL (1-2s)
-  deactivate openai
+  group Layer 2: LLM Semantic Validation
+    backend ->> openai: Semantic Check
+    activate openai
+    note right
+      Prüft:
+      - SQL passt zu Frage?
+      - JOINs korrekt?
+      - Logik plausibel?
+    end note
+    openai -->> backend: OK / FAIL + Confidence
+    deactivate openai
+    note right: 1-2s
+  end group
   
   alt Semantik OK
-    note over backend: ⚡ Phase 5: Ausführung
-    backend ->> db: Execute SQL (500ms-10s)
-    activate db
-    db -->> backend: Results [{...}, {...}]
-    deactivate db
     
-    backend ->> cache: Level 3: Cache Results (TTL: 5min)
-    activate cache
-    cache -->> backend: ✓ Cached
-    deactivate cache
+    == ⚡ PHASE 5: Query Execution ==
     
-    backend ->> llm: Phase 6: Summarization (optional, 1-2s)
-    activate llm
-    llm ->> openai: "Schreibe natürlichsprachliche Zusammenfassung"
-    openai -->> llm: summary_text
-    llm -->> backend: ✓
-    deactivate llm
+    group SQL-Ausführung [SQLite]
+      backend ->> db: Execute SQL
+      activate db
+      note right: LIMIT 100 OFFSET 0
+      db -->> backend: Results [{...}, {...}]
+      deactivate db
+      note right: 500ms - 10s
+    end group
+    
+    group Layer 3: Result Caching
+      backend ->> cache: Cache Results
+      activate cache
+      cache -->> backend: ✓ Cached
+      deactivate cache
+      note right: TTL: 5min
+    end group
+    
+    == 📝 PHASE 6: Summarization (Optional) ==
+    
+    group Natürlichsprachliche Zusammenfassung
+      backend ->> llm: Summarize Results
+      activate llm
+      llm ->> openai: "Fasse Ergebnisse zusammen"
+      openai -->> llm: summary_text
+      llm -->> backend: ✓ Summary
+      deactivate llm
+      note right: 1-2s
+    end group
+    
   else Semantik FAIL
-    backend -->> frontend: ⚠️ Low Confidence: Self-Correction Loop
+    backend -->> frontend: ⚠️ Low Confidence
+    note right: Self-Correction Loop möglich
   end
 end
 
 deactivate backend
 
-backend -->> frontend: 📥 QueryResponse\n{sql, results, summary, paging, metrics}
+== ✅ Response ==
+
+backend -->> frontend: QueryResponse
+note right
+  <b>Response enthält:</b>
+  • generated_sql
+  • results (Rows)
+  • summary (NL-Text)
+  • pagination (page, total)
+  • metrics (latency, confidence)
+end note
 
 activate frontend
-frontend ->> user: ✅ Ergebnisse anzeigen\n(SQL, Table, Paging, Summary)
+frontend ->> user: ✅ Ergebnisse anzeigen
 deactivate frontend
 
-note right of user
-  **Gesamtlatenz:**
-  - Mit Cache (95%): 45ms
-  - Ohne Cache (5%): 6.2s
-  - Durchschnitt: 0.5s
-  
-  **6 Phasen:**
-  1️⃣ Context Loading (500ms | 10ms)
-  2️⃣ Ambiguity Detection (1s parallel)
-  3️⃣ SQL Generation (2-4s parallel)
-  4️⃣ Validation (2s)
-  5️⃣ Execution (0.5-10s)
-  6️⃣ Summarization (1-2s optional)
+note over user
+  <b>Performance-Metriken:</b>
+  • Cache-Hit (95%): 45ms
+  • Cache-Miss (5%): 6.2s
+  • Durchschnitt: ~500ms
 end note
+
+legend right
+  <b>6-Phasen-Übersicht:</b>
+  
+  <b>Phase 1:</b> Context Loading (10-500ms)
+  <b>Phase 2:</b> Ambiguity Detection (~500ms)
+  <b>Phase 3:</b> SQL Generation (2-4s)
+  <b>Phase 4:</b> Validation (1-2s)
+  <b>Phase 5:</b> Execution (0.5-10s)
+  <b>Phase 6:</b> Summarization (1-2s, optional)
+  
+  <b>Gesamt:</b> 45ms (cached) bis 6.2s (uncached)
+end legend
 
 @enduml
