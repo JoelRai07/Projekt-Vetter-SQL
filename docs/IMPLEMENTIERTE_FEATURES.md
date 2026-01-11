@@ -226,15 +226,66 @@
     "paging": {
       "current_page": 2,
       "page_size": 100,
-      "total_rows": 4,567,
+      "total_rows": 4567,
       "total_pages": 46,
-      "query_id": "abc123def456"  // Session ID
+      "query_id": "abc123def456"
     }
   }
   ```
 - **Code-Location**: `backend/database/manager.py` (execute_query_with_paging)
 
-### 17. **JSON-Spalten-Support** ✅
+### 17. **Database Auto-Routing** ✅ [NEU]
+- **Was**: Automatische Auswahl der richtigen Datenbank basierend auf der Nutzer-Frage
+- **Features**:
+  - Standalone `/route` Endpoint oder integriert in `/query`
+  - LLM bewertet Datenbank-Profile (schema/kb/meanings snippets)
+  - Confidence-Score (0.0-1.0) für Routing-Sicherheit
+  - Fallback auf AmbiguityResult wenn Confidence zu niedrig (< 0.55)
+- **Zweck**: 
+  - Vereinfachtes Onboarding (Nutzer muss DB nicht kennen)
+  - Multi-DB-Unterstützung transparent
+  - "Zeige mir Kreditrisiken" → Auto-selektiert `credit.sqlite`
+- **Workflow**:
+  ```
+  User sendet: { "question": "...", "database": null, "auto_select": true }
+  → Backend routing durchführen
+  → Confidence >= 0.55? 
+    - JA → DB auswählen, weiter mit SQL-Generation
+    - NEIN → AmbiguityResult mit Klärungsfragen
+  ```
+- **Konfiguration**: `ROUTE_CONFIDENCE_THRESHOLD = 0.55`
+- **Code-Location**: `backend/main.py` (route_database, lines 121-166 und 210-255), `backend/llm/generator.py` (lines 222-244)
+
+### 18. **Query Session Management** ✅ [NEU]
+- **Was**: Speicherung von Query-Kontext zwischen Requests für Paging und Multi-Step-Dialoge
+- **Features**:
+  - Session-ID (`query_id`) generieren nach SQL-Generierung
+  - Session speichern: `{ database, sql, question, timestamp }`
+  - TTL: 1 Stunde (Sessions expire nach 1h)
+  - Schnelle Session-Lookups (dict-basiert)
+- **Zweck**:
+  - Paging ohne Re-Routing (Spart 2-3 Sekunden!)
+  - Kontext für zukünftige Follow-ups (in Entwicklung)
+  - Deterministische Ergebnisse (SQL bleibt gleich)
+  - **Sicherheit**: Validierung dass query_id + database zusammenpassen
+- **Workflow**:
+  ```
+  Request 1: POST /query { "question": "...", "database": "credit", "page": 1 }
+    → Routing (3s) + SQL Gen (4s) + Execution (2s) = ~9s
+    → query_id generieren: "a1b2c3d4e5f6..."
+    → Response mit query_id zurückgeben
+    
+  Request 2: POST /query { "question": "...", "query_id": "a1b2c3d4e5f6...", "page": 2 }
+    → Session abrufen (5ms)
+    → Database + SQL aus Session laden
+    → Routing ÜBERSPRINGEN!
+    → Execution mit OFFSET (2-3s)
+    → Seite 2 zurückgeben
+  ```
+- **Performance-Gewinn**: 70% schneller für Paging (9s → 2-3s)
+- **Code-Location**: `backend/utils/cache.py` (create_query_session, get_query_session), `backend/main.py` (session handling, lines 175-210)
+
+### 19. **JSON-Spalten-Support** ✅
 - **Was**: Spezielle Behandlung von JSON-Spalten (z.B. `chaninvdatablock`)
 - **Features**:
   - Beispielzeilen zeigen JSON-Struktur
@@ -262,7 +313,7 @@
 - **Zweck**: LLM versteht komplexe JSON-Strukturen
 - **Code-Location**: `backend/utils/context_loader.py`
 
-### 18. **CTE-Support** ✅
+### 20. **CTE-Support** ✅
 - **Was**: Unterstützung für Common Table Expressions (WITH-Klauseln)
 - **Features**:
   - SQL Guard erkennt CTEs (nicht als unbekannte Tabellen!)

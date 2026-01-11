@@ -116,7 +116,111 @@
 
 **Datei**: `backend/main.py` - Funktion `query_database()`
 
-Der Backend orchestriert 6 Phasen nacheinander:
+Der Backend orchestriert **8 Schritte** (inkl. Auto-Routing und Sessions):
+
+### Schritt 0️⃣: Database Routing (Optional)
+```
+Purpose: Falls keine Datenbank angegeben → automatisch auswählen
+
+Input: 
+{
+  "question": "Zeige mir Kreditrisiken",
+  "database": null,      // ← Nicht gesetzt!
+  "auto_select": true
+}
+
+Was passiert:
+1. Backend prüft: Ist database gesetzt UND auto_select=false?
+   - JA → Routing ÜBERSPRINGEN (schneller!)
+   - NEIN → Weiter mit Routing
+
+2. Routing durchführen:
+   a) DB-Profile erstellen (schema_snippet, kb_snippet, meanings_snippet)
+   b) LLM bewertet: "Welche DB passt am besten?"
+   c) Rückgabe: selected_database + confidence
+
+3. Confidence >= 0.55?
+   - JA → DB auswählen, weiter zu Phase 1
+   - NEIN → AmbiguityResult zurückgeben, STOP
+
+Result (if successful):
+{
+  "question": "Zeige mir Kreditrisiken",
+  "selected_database": "credit",  // ← Auto-ausgewählt!
+  "confidence": 0.82,
+  ...weiter mit Phasen...
+}
+
+Result (if ambiguous):
+{
+  "question": "Zeige mir Kreditrisiken",
+  "selected_database": null,
+  "ambiguity_check": {
+    "is_ambiguous": true,
+    "reason": "Datenbank unklar",
+    "questions": ["Verfügbare DBs: credit, museum, ..."]
+  }
+}
+
+⏱️  Timing: +2-3 Sekunden für Routing (bei erstem Request)
+💡 Optimization: Wird übersprungen wenn query_id vorhanden (Paging)!
+```
+
+### Schritt 0.5️⃣: Session Management
+```
+Purpose: Speichern von Query-Kontext für Paging und Follow-ups
+
+First Request:
+POST /query {
+  "question": "Zeige mir Kreditrisiken",
+  "database": "credit",
+  "page": 1
+}
+
+Verarbeitung:
+  1. Query durchführen (wie bisher)
+  2. query_id = uuid.uuid4().hex generieren
+  3. Session speichern:
+     {
+       "database": "credit",
+       "sql": "SELECT * FROM core_record WHERE fraudrisk > 0.7",
+       "question": "Zeige mir Kreditrisiken"
+     }
+     TTL: 1 Stunde
+  4. Response mit query_id zurückgeben
+
+Response:
+{
+  "question": "...",
+  "generated_sql": "SELECT ...",
+  "results": [...],
+  "row_count": 47,
+  "query_id": "a1b2c3d4e5f6g7h8...",  // ← NEW!
+  "page": 1,
+  "total_pages": 1
+}
+
+Second Request (Paging):
+POST /query {
+  "question": "...",
+  "query_id": "a1b2c3d4e5f6g7h8...",  // ← Verwende gespeicherte Session!
+  "page": 2
+}
+
+Verarbeitung:
+  1. query_id prüfen → Session laden
+  2. database, sql, question AUS Session nutzen
+  3. Routing ÜBERSPRINGEN (spart 2-3s!)
+  4. Direkt zu Phase 1 mit gecachtem Context
+  5. Seite 2 ausführen, Results zurückgeben
+
+Benefits:
+  ✅ Schneller Paging (Routing übersprungen)
+  ✅ Konsistenter Kontext (gleiche DB, gleiche SQL)
+  ✅ User kann Konversation fortsetzen
+```
+
+Der Backend orchestriert **7 Phasen** nacheinander:
 
 ### Phase 1️⃣: Context Loading
 ```
@@ -307,20 +411,32 @@ Result:
 Falls LLM fehlschlägt: Fallback-Text verwenden (nicht blocking)
 ```
 
----
-
-## Die 6 Phasen der Anfrageverarbeitung
+## Die 8 Schritte der Anfrageverarbeitung (mit Routing & Sessions)
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ User: "Zeige mir Premium-Kunden mit hoher Schuldenlast"  │
+│ User: "Zeige mir Kreditrisiken" (ohne DB-Auswahl!)       │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│ SCHRITT 0: DATABASE ROUTING (2-3s) [OPTIONAL]            │
+│ - Keine DB angegeben? → Auto-Select!                     │
+│ - LLM wählt beste DB basierend auf Profilen             │
+│ - Confidence < 0.55? → AmbiguityResult, STOP              │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│ SCHRITT 0.5: SESSION MANAGEMENT                          │
+│ - Generiere query_id für diese Session                   │
+│ - Speichere database, sql, question (TTL: 1h)            │
+│ - Wird für Paging verwendet                              │
 └────────────────────┬─────────────────────────────────────┘
                      ↓
 ┌──────────────────────────────────────────────────────────┐
 │ PHASE 1: CONTEXT LOADING (500ms)                         │
-│ - Schema aus Datei/Cache                                 │
-│ - KB aus jsonl                                           │
-│ - Column Meanings aus json                               │
+│ - Schema aus Datei/Cache (LRU: 95% Hit!)                 │
+│ - KB aus jsonl (TTL: 1h)                                 │
+│ - Column Meanings aus json (TTL: 1h)                     │
 └────────────────────┬─────────────────────────────────────┘
                      ↓
 ┌──────────────────────────────────────────────────────────┐
@@ -349,12 +465,50 @@ Falls LLM fehlschlägt: Fallback-Text verwenden (nicht blocking)
 └────────────────────┬─────────────────────────────────────┘
                      ↓
 ┌──────────────────────────────────────────────────────────┐
-│ Response an User:                                        │
-│ - SQL: SELECT clientseg, AVG(debincratio) FROM ...       │
-│ - Results: [{...}, {...}]                                │
-│ - Summary: "Premium-Kunden haben niedrigste DTI..."      │
+│ Response an User (mit Session-Info):                      │
+│ - SQL: SELECT * FROM core_record WHERE fraudrisk > 0.7   │
+│ - Results: [47 rows]                                     │
+│ - Summary: "Die Abfrage zeigt 47 riskohafte Kunden..."   │
 │ - Paging: Seite 1 von 1                                  │
+│ - query_id: "a1b2c3d4..." ← Für Paging & Follow-ups!    │
 └──────────────────────────────────────────────────────────┘
+
+⏱️  Total Time: 8-12s (oder 2-3s bei Cache-Hit!)
+💾 Session gültig für: 1 Stunde
+🔄 Bei Paging: Nur Phase 5 (+ 1-3s statt +8s)
+```
+
+## Zweiter Request (Paging - VIEL schneller!)
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ User: "Zeige mir Seite 2" + query_id: "a1b2c3d4..."      │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│ SCHRITT 0: Session laden (5ms)                           │
+│ - query_id → Session abrufen                             │
+│ - database, sql, question aus Session                    │
+│ - Routing ÜBERSPRINGEN (spart 2-3s!)                     │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│ PHASE 5: EXECUTION (1-3s)                                │
+│ - Gleiche SQL, aber mit OFFSET 100 (statt 0)             │
+│ - SQLite führt Query aus                                 │
+│ - Results cachen                                         │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│ Response an User:                                        │
+│ - Results: [100-200] (Seite 2)                           │
+│ - page: 2                                                │
+│ - total_pages: 1 (gleich wie Seite 1)                    │
+│ - query_id: "a1b2c3d4..." (gleich, Session läuft)       │
+└──────────────────────────────────────────────────────────┘
+
+⏱️  Total Time: 2-5s (statt 8-12s!)
+✅70% schneller für Paging!
 ```
 
 ---

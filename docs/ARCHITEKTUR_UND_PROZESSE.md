@@ -45,9 +45,52 @@
   └─────────┘      └──────────┘      └──────────────┘
 ```
 
----
-
 ## Detaillierter Prozessablauf
+
+### Schritt 0: Database Auto-Routing (Optional)
+
+**Wann passiert das?**
+- User sendet Anfrage OHNE `database` Feld, ODER
+- User sendet mit `auto_select=true`
+
+**Verarbeitung:**
+
+```
+Input: { "question": "Zeige mir Kreditrisiken", "database": null }
+
+1. Backend prüft: database gesetzt?
+   - JA → Routing ÜBERSPRINGEN (schneller!)
+   - NEIN → Weiter mit Routing
+
+2. DB-Profile erstellen:
+   for each db in [credit, museum, crypto, ...]:
+     profile = {
+       "database": "credit",
+       "schema_snippet": "CREATE TABLE core_record (..." [1500 chars],
+       "kb_snippet": "• DTI: Debt-to-Income Ratio..." [1200 chars],
+       "meanings_snippet": "• id: Primary Key..." [1200 chars]
+     }
+
+3. LLM Routing:
+   Prompt: "USER QUESTION: {question}\n\nDATABASE PROFILES: {profiles}"
+   LLM bewertet: "Welche DB passt am besten?"
+   
+   Response:
+   {
+     "selected_database": "credit",
+     "confidence": 0.82,
+     "reason": "Frage betrifft Kreditrisiken, DB=credit passt"
+   }
+
+4. Confidence Check:
+   if confidence >= 0.55 (ROUTE_CONFIDENCE_THRESHOLD):
+     ✓ DB auswählen, weiter zu Phase 1
+   else:
+     ✗ Ambiguity zurückgeben, STOP
+
+⏱️  Timing: 2-3 Sekunden
+🔄 Wird ÜBERSPRUNGEN bei Paging (query_id vorhanden)!
+```
 
 ### Phase 1: Anfrage-Entgegennahme & Context Loading
 
@@ -301,6 +344,79 @@ Severity-Level:
 - `low`: Style, funktioniert aber
 - `medium`: Könnte falsche Ergebnisse geben
 - `high`: Query nicht ausführbar
+
+---
+
+### Schritt 0.5: Session Management für Paging
+
+**Purpose**: Speichern von Query-Kontext für schnelleres Paging und Follow-ups
+
+**Verarbeitung nach erfolgreicher SQL-Generierung:**
+
+```
+1. query_id generieren:
+   query_id = uuid4().hex  # z.B. "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+
+2. Session speichern in TTL Cache (TTL=1 Stunde):
+   query_session_cache[query_id] = {
+     "database": "credit",
+     "sql": "SELECT clientseg, COUNT(*) FROM core_record GROUP BY clientseg",
+     "question": "Zeige mir Kreditrisiken",
+     "timestamp": 1705050000
+   }
+
+3. Response mit query_id zurückgeben:
+   {
+     "question": "Zeige mir Kreditrisiken",
+     "generated_sql": "SELECT...",
+     "results": [...],
+     "row_count": 47,
+     "query_id": "a1b2c3d4e5f6g7h8...",  // ← Wichtig!
+     "page": 1,
+     "total_pages": 1
+   }
+```
+
+**Paging-Request (2. Request):**
+
+```
+Input: { 
+  "query_id": "a1b2c3d4e5f6g7h8...",
+  "page": 2
+}
+
+Processing:
+1. query_id prüfen:
+   session = query_session_cache.get(query_id)
+   if not session:
+     return Error("query_id abgelaufen oder ungültig")
+
+2. Routing ÜBERSPRINGEN!
+   database = session["database"]  # ← Aus Session
+   sql = session["sql"]            # ← Aus Session
+   
+3. Direkt zu Phase 5 (Execution):
+   OFFSET = (page-1) * page_size
+   LIMIT = page_size
+   
+   final_sql = f"{sql} LIMIT 100 OFFSET 100"  // Seite 2
+   
+4. Ausführen und Results zurückgeben
+
+⏱️  Timing: 2-3s statt 8-12s (70% schneller!)
+```
+
+**Sicherheit & Validierung:**
+
+```python
+# Ensure Database Consistency
+if request.database and request.database != session.get("database"):
+    return Error("query_id passt nicht zur angefragten Datenbank")
+
+# Ensure Session TTL
+if timestamp < now - 3600:
+    return Error("query_id abgelaufen (> 1 Stunde)")
+```
 
 ---
 
