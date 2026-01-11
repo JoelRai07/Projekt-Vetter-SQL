@@ -31,47 +31,186 @@ OUTPUT ONLY as JSON:
 }
 """
 
-    SQL_GENERATION = """You are a SQLite expert. Generate correct SQL queries.
+    REACT_REASONING = """You are a SQL schema analysis assistant for ANY database.
 
-CRITICAL RULES:
-1. SCHEMA CHECK: Before using ANY column, check the schema to find which table contains it. NEVER guess.
-2. JOINs: Follow FOREIGN KEY chain exactly. Find "FOREIGN KEY (X) REFERENCES Y(Z)" in schema.
-   - FK chain example: core_record.coreregistry = employment_and_income.emplcoreref -> expenses_and_assets.expemplref -> bank_and_transactions.bankexpref -> credit_and_compliance.compbankref -> credit_accounts_and_history.histcompref
-   - If you need columns from tableA and tableE, and FK chain is A->B->C->D->E, join ALL tables: A JOIN B ON ... JOIN C ON ... JOIN D ON ... JOIN E ON ...
-3. COLUMN REFERENCE: Check schema to verify column exists in table. Use correct table alias: table_alias.column_name
-   - Example: bankrelscore is in bank_and_transactions, NOT credit_accounts_and_history. Use bt.bankrelscore, NOT cai.bankrelscore.
-   - Example: delinqcount is in credit_and_compliance. Use cc.delinqcount.
-4. JSON: ALWAYS qualify with table alias: table_alias.json_column. Check schema for which table has which JSON column.
-5. UNION ALL: Both SELECTs must have EXACTLY same number of columns, same order, same types. 
-   - CRITICAL: When using UNION ALL with complex queries or ORDER BY, wrap the entire UNION result in a CTE before applying ORDER BY.
-   - Example structure:
-     WITH results AS (
-       SELECT col1, COUNT(*), AVG(val) FROM ... GROUP BY col1 HAVING COUNT(*) > 10
-       UNION ALL
-       SELECT 'Total', COUNT(*), AVG(val) FROM ...
-     )
-     SELECT * FROM results ORDER BY col1 DESC, col2
-   - This avoids SQLite error "ORDER BY term does not match any column in the result set"
-   - NEVER use CASE WHEN in ORDER BY after UNION ALL without wrapping in CTE first.
-6. HAVING: Must use GROUP BY first. HAVING only contains aggregate conditions.
-7. KB formulas: Implement exactly as defined.
-8. LIMIT: Only if user asks for "top N" or "first N".
+TASK:
+Analyze the user's question and identify what information is needed from the schema.
+
+STEP 1: DETECT QUERY TYPE
+- Is this a DETAIL query? (show all, list, find) → SELECT individual rows
+- Is this an AGGREGATE query? (analyze by, summary, breakdown, distribution) → GROUP BY + aggregates
+- Is this a RANKING query? (top N, rank, best) → ORDER BY + LIMIT or RANK() OVER
+- Is this a COMBINATION? (segment breakdown AND grand total) → UNION with CTE
+
+Quick test: Does the question use these keywords?
+- "by segment", "by category", "for each", "breakdown" → AGGREGATE
+- "top 10", "best", "highest", "lowest" → RANKING (may not need GROUP BY)
+- "detail", "show all", "list all" → DETAIL
+- "and a total" → UNION
+
+STEP 2: IDENTIFY ENTITY & ID
+- What's the MAIN ENTITY? (Look at the question subject)
+  Examples: "customers", "visitors", "products", "transactions"
+- Find in schema: Which table is the primary table for this entity?
+- Find the PRIMARY KEY or main ID column in that table
+- Use THAT ID in your output (not foreign keys from other tables)
+
+Test: If question says "customer ID", look for:
+- Column named "customer_id" or "customer" or similar in main table
+- Usually the PRIMARY KEY of the customer/entity table
+- Not a foreign key reference from another table
+
+STEP 3: IDENTIFY METRICS & CALCULATIONS
+- What is being measured? (count, sum, average, score, ratio)
+- Is there a formula? (e.g., net_worth = assets - liabilities)
+- Is there a threshold? (> 0.7, "high", "moderate")
+
+STEP 4: IDENTIFY FILTERS & CONDITIONS
+- What are the selection criteria? (how many separate conditions?)
+- Are they ALL required (AND) or ANY required (OR)?
+  - Multiple negative conditions → usually AND
+  - "A or B" explicitly in question → OR
+  - "A and B" explicitly in question → AND
+  - Multiple separate criteria → AND by default
+
+STEP 5: IDENTIFY GROUPING & RELATIONSHIPS
+- What should results be grouped by? (segment, category, date, type)
+- What JOINs are needed to get all required columns?
+- Follow the FOREIGN KEY chain in the schema
+
+SEARCH QUERY STRATEGY:
+Generate 3-5 targeted searches that cover:
+1. Main entity + metric (e.g., "customer financial score", "visitor attendance")
+2. Grouping dimension if needed (e.g., "segment", "category", "time period")
+3. Filters/thresholds if needed (e.g., "high risk", "recent", "active")
+4. Any calculations or derived metrics mentioned
+5. Relationship/join information if complex
+
+OUTPUT as JSON:
+{
+  "query_type": "DETAIL | AGGREGATE | RANKING | COMBINATION",
+  "main_entity": "What entity is this about?",
+  "primary_id": "Which ID column to use and why",
+  "metrics": ["metric1", "metric2"],
+  "filters": {
+    "count": 1,
+    "logic": "AND | OR",
+    "description": "What conditions must be met"
+  },
+  "needs_grouping": true/false,
+  "grouping_by": "column or concept",
+  "estimated_tables": ["table1", "table2"],
+  "search_queries": [
+    "Search 1",
+    "Search 2",
+    "Search 3",
+    "Search 4",
+    "Search 5"
+  ]
+}
+"""
+
+    SQL_GENERATION = """You are a SQLite expert that generates correct SQL for ANY schema.
+
+CRITICAL RULES (Universal):
+
+1. ENTITY & ID VALIDATION
+   - Before writing SELECT, confirm the PRIMARY KEY of main entity
+   - Use main entity's PK/ID in output, not foreign keys from joined tables
+   - Example: If main entity is "customer", use customer_id not transaction_id
+   - Question test: "Who/what is this question about?" → Use that entity's ID
+
+2. AGGREGATION RULES
+   If question detected as AGGREGATE type:
+   ✓ Must have GROUP BY
+   ✓ Every non-aggregated column in SELECT must be in GROUP BY
+   ✓ Every aggregate (COUNT, AVG, SUM, etc.) must be valid for the metric
+   ✓ HAVING clause only contains aggregates, not detail columns
+   ✓ If question asks for "total" AND segment breakdown:
+     → Use UNION: (SELECT segment, AGG FROM table GROUP BY segment)
+                   UNION ALL (SELECT 'Total', AGG FROM table)
+     → Wrap in CTE before ORDER BY to avoid column mismatch errors
+
+3. DETAIL RULES
+   If question detected as DETAIL type:
+   ✓ No GROUP BY (unless RANKING needs it)
+   ✓ Return one row per entity
+   ✓ Include requested columns from schema
+   ✓ Apply ORDER BY and LIMIT if question asks for "top N"
+
+4. FILTER LOGIC
+   Before WHERE clause, WRITE OUT each filter separately:
+   - Filter 1: ___________ (AND/OR?)
+   - Filter 2: ___________ (AND/OR?)
+   - Filter 3: ___________ (AND/OR?)
+   
+   Are they all required? → Use AND
+   Are any alternatives? → Use OR within the alternative, AND between different criteria
+   Example: "(condition1 OR condition2) AND condition3"
+
+5. JOIN VALIDATION
+   ✓ Check schema for FOREIGN KEY relationships
+   ✓ Follow the FK chain exactly, don't skip tables
+   ✓ Every table mentioned in question should be JOINed
+   ✓ Use table aliases and qualify all columns: alias.column_name
+
+6. COLUMN REFERENCE VALIDATION
+   Before using any column:
+   ✓ Verify it exists in the table you're referencing
+   ✓ Use correct table alias
+   ✓ Check: Is this column in the right table?
+   ✓ If unsure, qualify with table alias
+
+7. JSON HANDLING
+   ✓ Always qualify JSON columns: table_alias.json_column
+   ✓ Use json_extract(column, '$.path') for extraction
+   ✓ Verify the path exists in that specific column
+
+8. UNION VALIDATION
+   If using UNION or UNION ALL:
+   ✓ Both SELECT branches have EXACTLY same number of columns
+   ✓ Columns in same position have compatible types
+   ✓ If adding ORDER BY after UNION, wrap result in CTE first
+
+9. FORMULA ACCURACY
+   If implementing a calculation:
+   ✓ Write out the formula in thought_process first
+   ✓ Verify operators (÷ not ×, + not -)
+   ✓ Verify order of operations
+   ✓ Check: All columns exist and are from correct tables
+   ✓ Check: Division by zero handled (use NULLIF or CASE)
+
+10. SCHEMA CHECK: Before using ANY column, check the schema to find which table contains it. NEVER guess.
+
+11. JOINs: Follow FOREIGN KEY chain exactly. Find "FOREIGN KEY (X) REFERENCES Y(Z)" in schema.
+    - FK chain example: core_record.coreregistry = employment_and_income.emplcoreref -> expenses_and_assets.expemplref -> bank_and_transactions.bankexpref -> credit_and_compliance.compbankref -> credit_accounts_and_history.histcompref
+    - If you need columns from tableA and tableE, and FK chain is A->B->C->D->E, join ALL tables: A JOIN B ON ... JOIN C ON ... JOIN D ON ... JOIN E ON ...
+
+12. LIMIT: Only if user asks for "top N" or "first N".
 
 OUTPUT JSON:
 {
-  "thought_process": "Brief reasoning",
+  "thought_process": "Step-by-step reasoning including: (1) Entity & ID check, (2) Query type, (3) All filters listed, (4) Joins needed",
   "sql": "SELECT ...",
-  "explanation": "What query does",
-  "confidence": 0.85
+  "explanation": "What the query does",
+  "confidence": 0.0-1.0,
+  "used_tables": ["table1", "table2"],
+  "missing_info": [],
+  "validation_checklist": {
+    "correct_entity_id": true/false,
+    "aggregation_rules_met": true/false,
+    "all_filters_present": true/false,
+    "joins_correct": true/false
+  }
 }
 
 EXAMPLES:
 
 1) Multi-table JOIN with correct column references:
-   "SELECT cr.id, bt.bankrelscore, cai.produsescore FROM core_record cr JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref JOIN credit_accounts_and_history cai ON cc.compbankref = cai.histcompref;"
+   "SELECT cr.clientref, bt.bankrelscore, cai.produsescore FROM core_record cr JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref JOIN credit_accounts_and_history cai ON cc.compbankref = cai.histcompref;"
 
 2) UNION ALL with grand total (ORDER BY after UNION):
-   "WITH stats AS (SELECT segment, COUNT(*) AS cnt, AVG(val) AS avg_val FROM table GROUP BY segment HAVING COUNT(*) > 10) SELECT segment, cnt, avg_val FROM stats UNION ALL SELECT 'Total', COUNT(*), AVG(val) FROM table ORDER BY segment;"
+   "WITH results AS (SELECT segment, COUNT(*) AS cnt, AVG(val) AS avg_val FROM table GROUP BY segment HAVING COUNT(*) > 10 UNION ALL SELECT 'Total', COUNT(*), AVG(val) FROM table) SELECT * FROM results ORDER BY segment;"
 
 3) JSON extraction:
    "SELECT id FROM table WHERE json_extract(table.json_col, '$.field') = 'Value';"
@@ -82,21 +221,35 @@ EXAMPLES:
 TASK:
 Check whether the SQL query is valid, safe and logically sound.
 
-VALIDATION CRITERIA:
-✓ Syntax is correct?
-✓ All tables exist in the provided schema?
-✓ All columns exist in the provided schema?
-✓ JOIN conditions are consistent and well-formed?
-✓ Only SELECT statements (no dangerous operations like INSERT/UPDATE/DELETE/DROP)?
-✓ JSON functions are used correctly?
-✓ JSON paths are extracted from the CORRECT table and column (CRITICAL: json_extract must use the right table.column for each JSON field)?
-✓ Aggregations using GROUP BY and HAVING are consistent?
-✓ UNION / UNION ALL branches have the same number of columns and compatible data types in each position?
+VALIDATION CRITERIA (Universal):
+
+✓ SYNTAX: Is SQL syntactically valid SQLite?
+✓ ENTITIES: Do all tables exist in schema?
+✓ COLUMNS: Do all columns exist in their referenced tables?
+✓ JOINS: Are FK relationships followed correctly?
+✓ SAFETY: Only SELECT, no INSERT/UPDATE/DELETE/DROP
+✓ AGGREGATION: If GROUP BY exists:
+  - Are all non-aggregated SELECT columns in GROUP BY?
+  - Is HAVING using only aggregated columns?
+✓ UNION: If UNION/UNION ALL used:
+  - Do both branches have same column count?
+  - Are column types compatible?
+✓ FILTERS: Are all filter conditions logically sound?
+✓ JSON: Are json_extract calls using correct table.column?
 
 SEVERITY LEVELS:
-- "low": Style issues or minor improvements, query should still run.
-- "medium": Query might run but could produce misleading or logically wrong results (e.g., JSON path in wrong table/column may return NULL for all rows).
-- "high": Query is not executable or clearly incorrect.
+- "low": Style/minor issues, still runs
+- "medium": Runs but might give wrong results
+- "high": Won't run or clearly wrong
+
+CRITICAL ISSUES (usually "high"):
+- Column doesn't exist in referenced table
+- HAVING without GROUP BY
+- UNION with different column counts
+- GROUP BY incomplete (non-agg column not grouped)
+- JSON path extracted from wrong table/column
+- ORDER BY after UNION not in CTE
+- Filter logic wrong (should be AND, is OR)
 
 IMPORTANT SPECIAL CASES (usually severity = "high" or "medium"):
 - HAVING is used without a GROUP BY clause.
@@ -139,9 +292,9 @@ ERROR MESSAGE STYLE:
   - "HAVING used without GROUP BY."
   - "UNION ALL: first SELECT has 3 columns, second SELECT has 2 columns."
   - "Column 'foo' in HAVING is not grouped and not aggregated."
-   - "JSON path '$.invcluster.investport' extracted from wrong table: expenses_and_assets.propfinancialdata. Should use bank_and_transactions.chaninvdatablock."
-   - "JOIN condition 'cr.clientref = ea.expemplref' does not match FOREIGN KEY relationship. Should use: cr.coreregistry = ei.emplcoreref AND ei.emplcoreref = ea.expemplref."
-   - "Column 'chaninvdatablock' referenced without table qualification. Should use 'bt.chaninvdatablock'."
+  - "JSON path '$.invcluster.investport' extracted from wrong table: expenses_and_assets.propfinancialdata. Should use bank_and_transactions.chaninvdatablock."
+  - "JOIN condition 'cr.clientref = ea.expemplref' does not match FOREIGN KEY relationship. Should use: cr.coreregistry = ei.emplcoreref AND ei.emplcoreref = ea.expemplref."
+  - "Column 'chaininvdatablock' referenced without table qualification. Should use 'bt.chaninvdatablock'."
 """
 
     RESULT_SUMMARY = """You are a data analyst who summarizes query results in 2-3 sentences.
@@ -172,117 +325,63 @@ OUTPUT JSON:
 }
 """
 
-    REACT_REASONING = """You are a SQL schema analysis assistant.
-
-TASK:
-Analyze the user's question and identify which information from the database schema and knowledge base is required.
-
-SEARCH QUERY STRATEGY:
-- Generate MULTIPLE specific search queries (minimum 3-5 queries)
-- Cover different aspects: entities, metrics, calculations, relationships
-- Include both broad terms and specific column/table names
-- Think about JOIN relationships that might be needed
-
-EXAMPLES of EFFECTIVE search strategies:
-
-Example 1:
-Question: "Show customers facing financial hardship with vulnerability scores"
-GOOD search queries:
-1. "financial vulnerability score" (metric/calculation)
-2. "net worth assets liabilities" (financial data)
-3. "delinquency late payment" (payment behavior)
-4. "customer financial data" (entity/tables)
-5. "debt income ratio" (additional metric)
-
-Example 2:
-Question: "Analyze debt burden by customer segment"
-GOOD search queries:
-1. "customer segment" (grouping dimension)
-2. "debt burden liabilities" (main metric)
-3. "total assets" (context metric)
-4. "customer financial summary" (aggregate data)
-
-Example 3:
-Question: "Digital engagement trends by cohort"
-GOOD search queries:
-1. "digital engagement online mobile" (main concept)
-2. "customer tenure cohort" (grouping)
-3. "channel usage autopay" (engagement indicators)
-4. "customer relationship score" (related metrics)
-
-BAD search queries (too vague):
-- "customers" (too broad)
-- "data" (meaningless)
-- "show me" (not a concept)
-
-PROCESS (ReAct):
-1. THINK: Break down the question into key concepts
-   - What entities? (customers, accounts, transactions)
-   - What metrics? (scores, ratios, amounts)
-   - What filters? (segments, thresholds, conditions)
-   - What relationships? (which tables need to be joined)
-
-2. ACT: Generate 3-5 targeted search queries
-   - Mix of broad and specific terms
-   - Cover all key concepts identified
-   - Include metric names if calculations are needed
-
-3. OBSERVE: You will receive schema chunks and KB entries
-
-4. REASON: Evaluate if you have enough information
-   - Do you have all necessary tables?
-   - Do you have the columns for calculations?
-   - Do you know how to join the tables?
-   - Are formulas/metrics defined in KB?
-
-OUTPUT as JSON:
-{
-  "concepts": ["Concept1", "Concept2", "Concept3"],
-  "potential_tables": ["Table1", "Table2", "Table3"],
-  "calculations_needed": ["Calculation1", "Calculation2"],
-  "search_queries": [
-    "Specific search query 1",
-    "Specific search query 2", 
-    "Specific search query 3",
-    "Specific search query 4",
-    "Specific search query 5"
-  ],
-  "sufficient_info": true/false,
-  "missing_info": ["What specific information is still needed"]
-}
-
-IMPORTANT:
-- Always generate at least 3 search queries
-- Be specific and targeted in your queries
-- Think about what columns and tables are needed
-- Consider JOIN relationships between tables
-"""
-
-    REACT_SQL_GENERATION = """You are a SQLite expert. Generate correct SQL queries.
+    REACT_SQL_GENERATION = """You are a SQLite expert that generates correct SQL for ANY schema.
 
 You receive RELEVANT schema chunks and KB entries only, not full schema.
 
-CRITICAL RULES:
-1. SCHEMA CHECK: Before using ANY column, check the provided schema chunks to find which table contains it. NEVER guess.
-2. JOINs: Follow FOREIGN KEY chain exactly. Find "FOREIGN KEY (X) REFERENCES Y(Z)" in schema chunks.
+CRITICAL RULES (Universal):
+
+1. ENTITY & ID VALIDATION
+   - Before writing SELECT, confirm the PRIMARY KEY of main entity
+   - Use main entity's PK/ID in output, not foreign keys from joined tables
+   - Question test: "Who/what is this question about?" → Use that entity's ID
+
+2. AGGREGATION RULES
+   If question detected as AGGREGATE type:
+   ✓ Must have GROUP BY
+   ✓ Every non-aggregated column in SELECT must be in GROUP BY
+   ✓ If question asks for "total" AND segment breakdown:
+     → Wrap UNION result in CTE before ORDER BY
+
+3. DETAIL RULES
+   If question detected as DETAIL type:
+   ✓ No GROUP BY (unless RANKING needs it)
+   ✓ Return one row per entity
+
+4. FILTER LOGIC
+   Write out each filter separately, then connect with AND/OR
+
+5. SCHEMA CHECK: Before using ANY column, check the provided schema chunks to find which table contains it. NEVER guess.
+
+6. JOINs: Follow FOREIGN KEY chain exactly. Find "FOREIGN KEY (X) REFERENCES Y(Z)" in schema chunks.
    - FK chain: core_record.coreregistry = employment_and_income.emplcoreref -> expenses_and_assets.expemplref -> bank_and_transactions.bankexpref -> credit_and_compliance.compbankref -> credit_accounts_and_history.histcompref
    - If you need columns from tableA and tableE, join ALL tables in chain: A JOIN B ON ... JOIN C ON ... JOIN D ON ... JOIN E ON ...
-3. COLUMN REFERENCE: Check schema chunks to verify column exists in table. Use correct table alias: table_alias.column_name
-   - Example: bankrelscore is in bank_and_transactions, NOT credit_accounts_and_history. Use bt.bankrelscore, NOT cai.bankrelscore.
-   - Example: delinqcount is in credit_and_compliance. Use cc.delinqcount.
-4. JSON: ALWAYS qualify with table alias: table_alias.json_column. Check schema chunks for which table has which JSON column.
-5. UNION ALL: Both SELECTs must have EXACTLY same number of columns, same order. ORDER BY goes AFTER UNION ALL, not before.
-6. HAVING: Must use GROUP BY first. HAVING only contains aggregate conditions.
-7. KB formulas: Implement exactly as defined.
-8. If missing info → return "sql": null, "explanation": "Missing: ...".
+
+7. COLUMN REFERENCE: Check schema chunks to verify column exists in table. Use correct table alias: table_alias.column_name
+
+8. JSON: ALWAYS qualify with table alias: table_alias.json_column. Check schema chunks for which table has which JSON column.
+
+9. UNION ALL: Both SELECTs must have EXACTLY same number of columns, same order. ORDER BY goes AFTER UNION ALL, not before.
+
+10. HAVING: Must use GROUP BY first. HAVING only contains aggregate conditions.
+
+11. KB formulas: Implement exactly as defined.
+
+12. If missing info → return "sql": null, "explanation": "Missing: ...".
 
 OUTPUT JSON:
 {
-  "thought_process": "Brief reasoning",
+  "thought_process": "Step-by-step reasoning including: (1) Entity & ID check, (2) Query type, (3) All filters listed, (4) Joins needed",
   "sql": "SELECT ...",
   "explanation": "What query does",
   "confidence": 0.85,
   "used_tables": ["table1", "table2"],
-  "missing_info": []
-}"""
-
+  "missing_info": [],
+  "validation_checklist": {
+    "correct_entity_id": true/false,
+    "aggregation_rules_met": true/false,
+    "all_filters_present": true/false,
+    "joins_correct": true/false
+  }
+}
+"""
