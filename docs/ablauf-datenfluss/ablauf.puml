@@ -128,7 +128,7 @@ activate frontend
 frontend ->> user: ✅ Ergebnisse anzeigen\n(SQL, Table, Paging, Summary)
 deactivate frontend
 
-note bottom of user
+note right of user
   **Gesamtlatenz:**
   - Mit Cache (95%): 45ms
   - Ohne Cache (5%): 6.2s
