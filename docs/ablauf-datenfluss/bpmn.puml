@@ -10,7 +10,9 @@ skinparam noteBorderColor #7b1fa2
 skinparam arrowColor #1976d2
 
 title Text2SQL System - Prozessmodell (6 Phasen Activity Diagram)
-note top: GPT-5.2 | ReAct+RAG | 45ms (cached) | 88% Accuracy
+note right
+  GPT-5.2 | ReAct+RAG | 45ms (cached) | 88% Accuracy
+end note
 
 start
 :👤 User gibt Frage ein;
@@ -75,7 +77,7 @@ end if
 :L2: LLM Semantic Validation;
 if (Semantik OK?) then (ja)
   note right: SQL matches question, JOINs correct
-else (nein - Low)
+elseif (nein - Low) then
   :⚠️ Warning: Low confidence;
 else (nein - High)
   :❌ Semantik-Fehler;
