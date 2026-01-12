@@ -14,45 +14,60 @@ def get_cached_schema(db_path: str) -> str:
 # Cache for KB and meanings (TTL = 1 hour)
 kb_cache = TTLCache(maxsize=32, ttl=3600)
 meanings_cache = TTLCache(maxsize=32, ttl=3600)
-
-def get_cached_kb(db_name: str, data_dir: str) -> str:
-    cache_key = f"{db_name}_kb"
-    if cache_key in kb_cache:
-        return kb_cache[cache_key]
-    
-    kb_text, meanings_text = load_context_files(db_name, data_dir)
-    kb_cache[cache_key] = kb_text
-    meanings_cache[f"{db_name}_meanings"] = meanings_text
-    return kb_text
-
-def get_cached_meanings(db_name: str, data_dir: str) -> str:
-    cache_key = f"{db_name}_meanings"
-    if cache_key in meanings_cache:
-        return meanings_cache[cache_key]
-    
-    kb_text, meanings_text = load_context_files(db_name, data_dir)
-    kb_cache[f"{db_name}_kb"] = kb_text
-    meanings_cache[cache_key] = meanings_text
-    return meanings_text
+bsl_cache = TTLCache(maxsize=32, ttl=3600)
 
 # Query result caching (TTL = 5 minutes)
 query_cache = TTLCache(maxsize=100, ttl=300)
 query_session_cache = TTLCache(maxsize=200, ttl=3600)
 
-def get_cache_key(question: str, database: str) -> str:
-    """Generate cache key from question and database"""
-    key_string = f"{database}:{question.lower().strip()}"
-    return hashlib.md5(key_string.encode()).hexdigest()
+def get_cached_kb(db_name: str, data_dir: str = "mini-interact") -> str:
+    """Returns cached or fresh KB text"""
+    cache_key = f"{db_name}_kb"
+    if cache_key in kb_cache:
+        return kb_cache[cache_key]
+    
+    kb_text, meanings_text, bsl_text = load_context_files(db_name, data_dir)
+    kb_cache[cache_key] = kb_text
+    meanings_cache[f"{db_name}_meanings"] = meanings_text
+    bsl_cache[f"{db_name}_bsl"] = bsl_text
+    return kb_text
+
+def get_cached_meanings(db_name: str, data_dir: str = "mini-interact") -> str:
+    """Returns cached or fresh meanings text"""
+    cache_key = f"{db_name}_meanings"
+    if cache_key in meanings_cache:
+        return meanings_cache[cache_key]
+    
+    kb_text, meanings_text, bsl_text = load_context_files(db_name, data_dir)
+    kb_cache[f"{db_name}_kb"] = kb_text
+    meanings_cache[cache_key] = meanings_text
+    bsl_cache[f"{db_name}_bsl"] = bsl_text
+    return meanings_text
+
+def get_cached_bsl(db_name: str, data_dir: str = "mini-interact") -> str:
+    """Returns cached or fresh BSL text"""
+    cache_key = f"{db_name}_bsl"
+    if cache_key in bsl_cache:
+        return bsl_cache[cache_key]
+    
+    kb_text, meanings_text, bsl_text = load_context_files(db_name, data_dir)
+    kb_cache[f"{db_name}_kb"] = kb_text
+    meanings_cache[f"{db_name}_meanings"] = meanings_text
+    bsl_cache[cache_key] = bsl_text
+    return bsl_text
 
 def get_cached_query_result(question: str, database: str):
-    cache_key = get_cache_key(question, database)
-    return query_cache.get(cache_key)
+    """Get cached query result by question and database"""
+    query_hash = hashlib.md5(f"{question}_{database}".encode()).hexdigest()
+    return query_cache.get(query_hash)
 
-def cache_query_result(question: str, database: str, result: dict):
-    cache_key = get_cache_key(question, database)
-    query_cache[cache_key] = result
+def cache_query_result(question: str, database: str, result):
+    """Cache a query result"""
+    query_hash = hashlib.md5(f"{question}_{database}".encode()).hexdigest()
+    query_cache[query_hash] = result
 
 def create_query_session(database: str, sql: str, question: str | None = None) -> str:
+    """Create a new query session and return session ID"""
     query_id = uuid.uuid4().hex
     query_session_cache[query_id] = {
         "database": database,
@@ -62,5 +77,6 @@ def create_query_session(database: str, sql: str, question: str | None = None) -
     return query_id
 
 def get_query_session(query_id: str):
+    """Get query session by ID"""
     return query_session_cache.get(query_id)
 

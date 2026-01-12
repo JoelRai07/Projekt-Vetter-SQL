@@ -174,9 +174,13 @@ Analysiere die Frage auf Mehrdeutigkeit.
         schema: str,
         kb: str,
         meanings: str,
+        bsl: str = "",
     ) -> Dict[str, Any]:
         """Generiert SQL aus der Nutzer-Frage"""
         prompt = f"""
+### BUSINESS SEMANTICS LAYER (⚠️ CRITICAL - READ FIRST):
+{bsl if bsl else "[No BSL provided - using defaults]"}
+
 ### DATENBANK SCHEMA & BEISPIELDATEN:
 {schema}
 
@@ -190,6 +194,11 @@ Analysiere die Frage auf Mehrdeutigkeit.
 {question}
 
 Generiere die SQL-Query im JSON-Format.
+WICHTIG: Befolge die BSL-Regeln strikt:
+1. Identity System (CU vs CS)
+2. Aggregation Detection (GROUP BY when needed)
+3. Business Rules (exact filters)
+4. Formula Accuracy
 """
         try:
             response = self._call_openai(SystemPrompts.SQL_GENERATION, prompt)
@@ -322,7 +331,7 @@ Fasse die wichtigsten Erkenntnisse kurz zusammen.
         retriever = SchemaRetriever(db_path)
         
         # KB/Meanings einmalig laden und indexieren (falls nötig)
-        kb_text, meanings_text = load_context_files(database_name, Config.DATA_DIR)
+        kb_text, meanings_text, bsl_text = load_context_files(database_name, Config.DATA_DIR)
         retriever.index_kb(kb_text)
         retriever.index_meanings(meanings_text)
         
@@ -482,7 +491,12 @@ Antworte als JSON."""
             fallback_used = False
         
         # Generiere SQL
-        prompt = f"""### RELEVANTE DATENBANK SCHEMA-TEILE:
+        prompt = f"""
+
+### BUSINESS SEMANTICS LAYER (⚠️ READ FIRST):
+{bsl_text}
+
+### RELEVANTE DATENBANK SCHEMA-TEILE:
 {relevant_schema}
 
 ### RELEVANTE SPALTEN BEDEUTUNGEN:

@@ -1,0 +1,42 @@
+[
+  {
+    "question_num": 1,
+    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000027F567E4440>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión'))"
+  },
+  {
+    "question_num": 2,
+    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000027F567DD450>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión'))"
+  },
+  {
+    "question_num": 3,
+    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000027F567DDD10>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión'))"
+  },
+  {
+    "question_num": 4,
+    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000027F567828B0>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión'))"
+  },
+  {
+    "question_num": 5,
+    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000027F567823F0>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión'))"
+  },
+  {
+    "question_num": 6,
+    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000027F567B83B0>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión'))"
+  },
+  {
+    "question_num": 7,
+    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000027F5672B790>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión'))"
+  },
+  {
+    "question_num": 8,
+    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000027F5672B020>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión'))"
+  },
+  {
+    "question_num": 9,
+    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000027F56804050>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión'))"
+  },
+  {
+    "question_num": 10,
+    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000027F56804270>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión'))"
+  }
+]

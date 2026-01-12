@@ -1,0 +1,278 @@
+# BUSINESS SEMANTICS LAYER (BSL)
+# Credit Database - Text2SQL Knowledge Base
+
+This document contains explicit business rules and patterns for generating correct SQL.
+It was auto-generated from the knowledge base and schema.
+
+---
+
+# IDENTITY SYSTEM RULES
+
+## Dual Identifier System
+This database uses TWO identifiers per customer:
+- **CU format** (e.g., CU456680): Customer ID from `core_record.clientref`
+- **CS format** (e.g., CS239090): Core Registry ID from `core_record.coreregistry`
+
+## Critical Rule: Both refer to the SAME person, but appear in different contexts.
+
+## Table-to-Identifier Mapping:
+- `core_record.clientref` → Use when question asks for 'customer ID'
+- `core_record.coreregistry` → Use as PRIMARY KEY for joins
+
+## When to use which:
+1. If the question explicitly says 'customer ID' → Use `clientref` (CU format)
+2. If joining tables or using as primary key → Use `coreregistry` (CS format)
+3. If uncertain → Default to `clientref` for end-user queries
+
+# AGGREGATION DETECTION RULES
+
+## Keywords that REQUIRE GROUP BY:
+- 'by category', 'by segment', 'for each', 'breakdown', 'summary'
+- 'analyze ... by', 'group into', 'cohorts'
+
+## Keywords that require RANKING (ORDER BY + LIMIT):
+- 'top N', 'highest', 'lowest', 'best', 'worst'
+
+## Keywords that require ROW-LEVEL output:
+- 'show all', 'list each', 'find customers where', 'identify'
+
+## Special Case: Grand Total
+If question asks for 'total' AND segment breakdown:
+→ Use UNION ALL with aggregated segments + total row
+
+## Calculated Metrics (may require aggregation):
+- Debt-to-Income Ratio (DTI): DTI = \frac{\text{Total Monthly Debt Payments}}{\text{Monthly Income}} = debincratio...
+- Credit Utilization Ratio (CUR): CUR = \frac{\text{Total Credit Used}}{\text{Total Credit Limit}} = credutil...
+- Loan-to-Value Ratio (LTV): LTV = \frac{\text{Mortgage Balance}}{\text{Property Value}} = \frac{\text{propfinancialdata.mortgage...
+- Customer Lifetime Value (CLV): CLV = custlifeval, which factors in product usage, tenure, profitability, and expected future transa...
+- Net Worth: Net Worth = \text{Total Assets} - \text{Total Liabilities} = totassets - totliabs = networth...
+
+# BUSINESS LOGIC RULES
+
+## Customer Segmentation Rules:
+### Prime Customer
+A customer with credscore > 720, defhist of 'Excellent' or 'Good', and risklev of 'Low'.
+
+### Financially Vulnerable
+A customer with debincratio > 0.5, liqassets < mthincome × 3, and at least one of: delinqcount > 0, latepaycount > 1, or ovrfreq of 'Frequent'.
+
+### High-Value Customer
+A customer with custlifeval in the top quartile, tenureyrs > 5, and crossratio > 0.5.
+
+### Credit Builder
+A customer with credageyrs < 3, credinq > 2 in the past year, and recentbeh of 'Improving'.
+
+### Digital First Customer
+A customer with chaninvdatablock.onlineuse of 'High' or chaninvdatablock.mobileuse of 'High', and chaninvdatablock.autopay of 'Yes'.
+
+### Investment Focused
+A customer with chaninvdatablock.invcluster.investport of 'Moderate' or 'Aggressive', chaninvdatablock.invcluster.investexp of 'Extensive', and investamt > 0.3 × totassets.
+
+### Revolving Credit Dependent
+A customer with credutil > 0.7, cardcount > 2, and cardpayhist of 'Fair' or 'Poor'.
+
+### Property Risk Exposure
+A customer with propfinancialdata.propown of 'Own', LTV > 0.8, and propfinancialdata.mortgagebits.mortpayhist of 'Fair' or 'Poor'.
+
+### Frequent Credit Seeker
+A customer with hardinq > 3 in the past six months, seekbeh of 'High', and newaccage < 1.
+
+### Over-Extended
+A customer with DTI > 0.43, CUR > 0.8, and at least one of: ovrfreq of 'Frequent', bouncecount > 0 in the past three months.
+
+### Mortgage Risk Profile
+A customer with high LTV (Loan-to-Value Ratio > 0.9), negative equity risk (LTV > 1.0), or payment stress (propfinancialdata.mortgagebits.mortpayhist of 'Fair' or 'Poor').
+
+### Credit Utilization Alert
+A customer with CUR (Credit Utilization Ratio) > 0.8, an increasing trend in utilization, and limited available credit (totcredlimit < mthincome × 2).
+
+### Financial Stress Indicator
+A customer with FVS (Financial Vulnerability Score) > 0.7, recent payment issues (delinqcount > 0 or latepaycount > 0 in past six months), and negative Net Worth.
+
+### Premium Banking Candidate
+A customer with high CQI (Credit Quality Index > 0.8), strong FSI (Financial Stability Index > 0.7), and significant assets (totassets > $250,000).
+
+### Digital Channel Opportunity
+A customer with low digital engagement (chaninvdatablock.onlineuse not 'High' and chaninvdatablock.mobileuse not 'High') but high BRS (Banking Relationship Strength > 0.7) and multiple products (produsescore > 0.5).
+
+### Credit Building Opportunity
+A customer with limited credit history (credageyrs < 2), low CQI (Credit Quality Index < 0.6), but positive banking behavior (bouncecount = 0 and bankrelscore > 0.6).
+
+### Investment Services Target
+A customer with high ALR (Asset Liquidity Ratio > 0.3) and strong income (mthincome > $5,000).
+
+### Declining Credit Health
+A customer with negative CHM (Credit Health Momentum < 0), increasing CRI (Credit Risk Intensity growing by >10% in 6 months), and rising DTI (Debt-to-Income Ratio increasing by >5% in 6 months).
+
+### Relationship Attrition Risk
+A customer with high CRR (Customer Retention Risk > 0.7), declining product usage (decreasing produsescore), and competitive shopping behavior (hardinq > 2 in past 3 months).
+
+### Cross-Sell Priority
+A customer with strong CES (Customer Engagement Score > 0.7), positive CQI (Credit Quality Index > 0.7), and unrealized product potential (crossratio > 0.5 but produsescore < 0.5).
+
+### High Engagement Criteria
+A Customer Engagement Score (CES) greater than 0.7.
+
+### Cohort Quarter
+Quarter of the year when the customer started with the institution (scoring date minus tenure years)
+
+## Value Interpretation Guidelines:
+- Credit Score Categories: Credit scores (credscore) typically range from 300-850. 300-579: Poor, 580-669: Fair, 670-739: Good, 740-799: Very Good, 800-850: Excellent, Otherwise...
+- Income Stability Score: Income stability (incstabscore) ranges from 0-10. Scores below 3 indicate highly variable income, 3-6 indicates moderate stability, and above 6 indica...
+- Debt-to-Income Ratio Interpretation: Debt-to-Income ratio (debincratio) ranges from 0-1 (or above). Below 0.36 is typically considered excellent, 0.36-0.43 is good, 0.43-0.50 is concernin...
+- Credit Utilization Impact: Credit Utilization (credutil) ranges from 0-1 (or above). Utilization under 0.30 is optimal for credit scores, 0.30-0.50 has moderate negative impact,...
+- Loan-to-Value Ratio Significance: Loan-to-Value ratio (LTV) typically ranges from 0-1 (or above). Below 0.80 generally avoids private mortgage insurance requirements, 0.80-0.95 typical...
+
+# JSON FIELD EXTRACTION RULES
+
+## Important: JSON columns must be qualified with table name
+
+### expenses_and_assets.propfinancialdata (JSONB)
+JSONB column. Bundles all housing‑related facts (ownership, value, and pay history) so risk or marketing rules need only one JSONB lookup.
+
+**Fields:**
+- `propown`: An enum (PropertyOwnership_enum) describing property ownership (Rent, Living with Parents, Own).
+- `proptype`: An enum (PropertyType_enum) for property classification (Apartment, House, Condo).
+- `propvalue`: A DECIMAL(15,2) property value (e.g., '250000.00').
+- `mortgagebits` (nested):
+  - `mortbalance`: A DECIMAL(15,2) storing current mortgage balance (e.g., '150000.00').
+  - `mortpayhist`: An enum (PaymentHistory_enum) for mortgage payment history. Possible values: Poor, Fair, Good, Excellent, Current, Past.
+- `rentpayhist`: An enum (PaymentHistory_enum) for rent payment history. Possible values: Poor, Fair, Good, Excellent, Current, Past.
+
+**Example extraction:**
+```sql
+json_extract(expenses_and_assets.propfinancialdata, '$.propown')
+```
+
+### bank_and_transactions.chaninvdatablock (JSONB)
+JSONB column. Packs together digital‑channel habits and investment/trading style flags for engagement and cross‑sell scoring.
+
+**Fields:**
+- `onlineuse`: An enum (OnlineBankingUsage_enum) describing online banking use (High, Medium, Low).
+- `mobileuse`: An enum (MobileBankingUsage_enum) describing mobile banking usage (High, Medium, Low).
+- `autopay`: An enum (YesNo_enum) indicating if automatic payments are active (Yes, No).
+- `depostat`: An enum (YesNo_enum) indicating direct deposit usage (Yes, No).
+- `invcluster` (nested):
+  - `investport`: An enum (InvestmentPortfolio_enum) labeling investment portfolio style (Conservative, Moderate, Aggressive).
+  - `investexp`: An enum (InvestmentExperience_enum) capturing investing experience (Extensive, Moderate, Limited).
+  - `tradeact`: An enum (TradingActivity_enum) describing trading activity (High, Medium, Low).
+
+**Example extraction:**
+```sql
+json_extract(bank_and_transactions.chaninvdatablock, '$.onlineuse')
+```
+
+# JOIN CHAIN RULES
+
+## Foreign Key Chain:
+```
+core_record.coreregistry
+  ↓ (FK)
+employment_and_income.emplcoreref
+  ↓ (FK)
+expenses_and_assets.expemplref
+  ↓ (FK)
+bank_and_transactions.bankexpref
+  ↓ (FK)
+credit_and_compliance.compbankref
+  ↓ (FK)
+credit_accounts_and_history.histcompref
+```
+
+## Rule: NEVER skip tables in the chain
+If you need columns from `core_record` and `credit_accounts_and_history`,
+you MUST join ALL intermediate tables.
+
+## Correct Join Pattern:
+```sql
+FROM core_record cr
+JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref
+JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref
+JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref
+JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref
+JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref
+```
+
+# METRIC CALCULATION FORMULAS
+
+When a question asks for a calculated metric, use these exact formulas:
+
+## Debt-to-Income Ratio (DTI)
+**Definition:** Calculates the proportion of a customer's monthly income that goes toward debt payments.
+**Formula:** DTI = \frac{\text{Total Monthly Debt Payments}}{\text{Monthly Income}} = debincratio
+
+## Credit Utilization Ratio (CUR)
+**Definition:** Measures how much of available credit a customer is currently using.
+**Formula:** CUR = \frac{\text{Total Credit Used}}{\text{Total Credit Limit}} = credutil
+
+## Loan-to-Value Ratio (LTV)
+**Definition:** Calculates the ratio of loan amount to the value of the asset securing the loan.
+**Formula:** LTV = \frac{\text{Mortgage Balance}}{\text{Property Value}} = \frac{\text{propfinancialdata.mortgagebits.mortbalance}}{\text{propfinancialdata.propvalue}}
+
+## Customer Lifetime Value (CLV)
+**Definition:** Measures the total worth of a customer to the financial institution over the entire relationship.
+**Formula:** CLV = custlifeval, which factors in product usage, tenure, profitability, and expected future transactions.
+
+## Net Worth
+**Definition:** Calculates the financial value of a customer by subtracting liabilities from assets.
+**Formula:** Net Worth = \text{Total Assets} - \text{Total Liabilities} = totassets - totliabs = networth
+
+## Credit Health Score (CHS)
+**Definition:** Composite score measuring overall credit wellness based on multiple factors.
+**Formula:** CHS = 0.4 × \frac{credscore}{850} + 0.2 × (1 - credutil) + 0.2 × (1 - debincratio) + 0.1 × \frac{credageyrs}{20} + 0.1 × (1 - \frac{delinqcount + latepaycount + choffs + bankr}{10}), \text{where each component is capped at 1.0}
+
+## Financial Stability Index (FSI)
+**Definition:** Measures a customer's overall financial stability combining income, savings, and debt factors.
+**Formula:** FSI = 0.3 × (1 - debincratio) + 0.3 × \frac{liqassets}{mthincome × 6} + 0.2 × \frac{bankaccbal}{mthincome × 3} + 0.2 × \frac{savamount}{mthincome × 12}, \text{where each component is capped at 1.0}
+
+## Customer Engagement Score (CES)
+**Definition:** Quantifies how actively a customer uses bank products and services.
+**Formula:** CES = 0.4 × produsescore + 0.3 × chanusescore + 0.2 × bankrelscore + 0.1 × \frac{custservint}{10}, \text{where each component is capped at 1.0}
+
+## Risk-Adjusted Return (RAR)
+**Definition:** Measures the profitability of a customer relationship adjusted for credit risk.
+**Formula:** RAR = profitscore × (1 - \frac{risklev}{4}), \text{where risklev is converted to a numeric scale: Low=1, Medium=2, High=3, Very High=4}
+
+## Account Health Index (AHI)
+**Definition:** Composite measure of account quality considering age, mix, and payment history.
+**Formula:** AHI = 0.4 × \frac{avgaccage}{10} + 0.3 × accmixscore + 0.3 × payconsist, \text{where each component is capped at 1.0}
+
+## Total Debt Service Ratio (TDSR)
+**Definition:** Extended debt ratio that accounts for all financial obligations including housing costs.
+**Formula:** TDSR = DTI + \frac{\text{Housing Costs}}{\text{Monthly Income}}, \text{where Housing Costs are determined by propfinancialdata and DTI is the Debt-to-Income Ratio}
+
+## Credit Quality Index (CQI)
+**Definition:** Comprehensive measure of overall credit quality incorporating credit score and utilization.
+**Formula:** CQI = 0.6 × \frac{credscore}{850} + 0.4 × (1 - CUR), \text{where CUR is the Credit Utilization Ratio}
+
+## Housing Affordability Ratio (HAR)
+**Definition:** Measures the affordability of housing costs relative to income.
+**Formula:** HAR = \frac{\text{Monthly Housing Payment}}{\text{Monthly Income}} × 100\%, \text{where Monthly Housing Payment is derived from propfinancialdata and LTV calculations}
+
+## Financial Vulnerability Score (FVS)
+**Definition:** Quantifies financial fragility by combining debt burden and savings adequacy.
+**Formula:** FVS = 0.5 × DTI + 0.5 × (1 - \frac{liqassets}{mthincome × 6}), \text{where DTI is the Debt-to-Income Ratio and the second term measures emergency fund adequacy}
+
+## Customer Retention Risk (CRR)
+**Definition:** Calculates risk of customer attrition based on engagement and satisfaction metrics.
+**Formula:** CRR = 0.4 × churnrate + 0.3 × (1 - CES) + 0.3 × \frac{complainthist}{3}, \text{where CES is the Customer Engagement Score and complainthist is converted to numeric (Low=1, Medium=2, High=3)}
+
+## Asset Liquidity Ratio (ALR)
+**Definition:** Measures the proportion of customer assets that can be quickly converted to cash.
+**Formula:** ALR = \frac{liqassets}{totassets} = \frac{liqassets}{Net Worth + totliabs}, \text{where Net Worth is the difference between assets and liabilities}
+
+## Credit Risk Intensity (CRI)
+**Definition:** Advanced measure of credit risk that incorporates payment history and account diversity.
+**Formula:** CRI = 0.5 × (1 - \frac{credscore}{850}) + 0.3 × \frac{delinqcount + latepaycount + choffs}{10} + 0.2 × (1 - AHI), \text{where AHI is the Account Health Index}
+
+## Investment Portfolio Quality (IPQ)
+**Definition:** Evaluates the quality and performance of customer's investment allocations.
+**Formula:** IPQ = 0.4 × RAR + 0.4 × \frac{investamt}{totassets} + 0.2 × \frac{chaninvdatablock.invcluster.investexp}{3}, \text{where RAR is the Risk-Adjusted Return and investexp is converted to numeric (Limited=1, Moderate=2, Extensive=3)}
+
+## Banking Relationship Strength (BRS)
+**Definition:** Quantifies the depth and quality of a customer's banking relationship.
+**Formula:** BRS = 0.3 × bankrelscore + 0.3 × (1 - churnrate) + 0.4 × CES, \text{where CES is the Customer Engagement Score}
+
+## Credit Health Momentum (CHM)
+**Definition:** Measures the trajectory of a customer's credit health over time.
+**Formula:** CHM = CHS × (1 + \Delta_\text{recentbeh}), \text{where CHS is the Credit Health Score and } \Delta_\text{recentbeh} \text{ is +0.1 for 'Improving', 0 for 'Stable', and -0.1 for 'Deteriorating'}

@@ -1,14 +1,16 @@
+from typing import Tuple
 import os
 import json
-from typing import Tuple
 
-def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[str, str]:
-    """Lädt Knowledge Base und Column Meanings"""
+
+def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[str, str, str]:
+    """Lädt Knowledge Base, Column Meanings UND BSL"""
     
     kb_text = ""
     meanings_text = ""
+    bsl_text = ""
     
-    # 1. Knowledge Base (KB)
+    # 1. Original KB laden
     kb_path = f"{data_dir}/{db_name}/{db_name}_kb.jsonl"
     try:
         if not os.path.exists(kb_path):
@@ -18,14 +20,12 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
             entries = []
             for line in f:
                 item = json.loads(line)
-                entries.append(
-                    f"• {item['knowledge']}: {item['definition']}"
-                )
+                entries.append(f"• {item['knowledge']}: {item['definition']}")
             kb_text = "\n".join(entries)
     except Exception as e:
         kb_text = f"[FEHLER beim Laden der KB: {str(e)}]"
 
-    # 1b. Optional: Metric SQL Templates (deterministische SQL-Snippets)
+    # 1b. Optional: Metric SQL Templates
     metric_templates_path = f"{data_dir}/{db_name}/{db_name}_metric_sql_templates.json"
     try:
         if os.path.exists(metric_templates_path):
@@ -58,7 +58,7 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
     except Exception as e:
         kb_text += f"\n\n[FEHLER beim Laden der Metric SQL Templates: {str(e)}]"
     
-    # 2. Column Meanings
+    # 2. Original Meanings laden
     meanings_path = f"{data_dir}/{db_name}/{db_name}_column_meaning_base.json"
     try:
         if not os.path.exists(meanings_path):
@@ -68,31 +68,43 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
             data = json.load(f)
             meanings_list = []
             
-            # Format: {"db|table|column": "description" oder nested dict}
             for key, value in data.items():
                 if isinstance(value, dict):
-                    # Für JSONB Spalten (propfinancialdata, chaninvdatablock)
                     if "column_meaning" in value:
                         meanings_list.append(f"  {key}: {value['column_meaning']}")
                         if "fields_meaning" in value:
                             meanings_list.append(f"    └─ Felder:")
                             for field, field_desc in value["fields_meaning"].items():
                                 if isinstance(field_desc, dict):
-                                    # Nested fields (z.B. mortgagebits)
                                     meanings_list.append(f"       {field}:")
                                     for subfield, subdesc in field_desc.items():
                                         meanings_list.append(f"         • {subfield}: {subdesc}")
                                 else:
                                     meanings_list.append(f"       • {field}: {field_desc}")
                     else:
-                        # Falls es ein unerwartetes Dict-Format ist
                         meanings_list.append(f"  {key}: {json.dumps(value, ensure_ascii=False)}")
                 else:
-                    # Standard: String-Beschreibung
                     meanings_list.append(f"  {key}: {value}")
             
             meanings_text = "\n".join(meanings_list)
     except Exception as e:
         meanings_text = f"[FEHLER beim Laden der Meanings: {str(e)}]"
     
-    return kb_text, meanings_text
+    # 3. NEU: BSL laden
+    bsl_path = f"{data_dir}/{db_name}/{db_name}_bsl.txt"
+    try:
+        if os.path.exists(bsl_path):
+            with open(bsl_path, 'r', encoding='utf-8') as f:
+                bsl_text = f.read()
+            print(f"✅ BSL geladen ({len(bsl_text)} Zeichen)")
+        else:
+            bsl_text = """[WARNUNG: BSL nicht gefunden]
+Bitte generiere die BSL mit:
+python bsl_builder.py
+"""
+            print(f"⚠️  BSL nicht gefunden: {bsl_path}")
+    except Exception as e:
+        bsl_text = f"[FEHLER beim Laden der BSL: {str(e)}]"
+        print(f"❌ BSL Fehler: {str(e)}")
+    
+    return kb_text, meanings_text, bsl_text

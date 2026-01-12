@@ -29,6 +29,7 @@ from utils.cache import (
     get_query_session,
 )
 from utils.query_optimizer import QueryOptimizer
+from utils.context_loader import load_context_files
 from llm.generator import OpenAIGenerator
 
 # Thresholds / constants
@@ -81,8 +82,7 @@ def build_database_profiles(db_names: list[str]) -> list[dict[str, str]]:
     for db_name in db_names:
         db_path = os.path.join(Config.DATA_DIR, db_name, f"{db_name}.sqlite")
         schema = get_cached_schema(db_path)
-        kb_text = get_cached_kb(db_name, Config.DATA_DIR)
-        meanings_text = get_cached_meanings(db_name, Config.DATA_DIR)
+        kb_text, meanings_text, bsl_text = load_context_files(db_name, Config.DATA_DIR)
         profiles.append(
             {
                 "database": db_name,
@@ -170,15 +170,14 @@ async def route_database(request: RouteRequest):
 @app.post("/query", response_model=QueryResponse)
 async def query_database(request: QueryRequest):
     """
-    Hauptendpoint für Text-to-SQL mit:
-    1. Ambiguity Detection (optional)
-    2. SQL Generation
-    3. SQL Validation (optional)
-    4. Ausführung
-    """
+    Hauptendpoint für Text-to-SQL mit BSL
+   """ # 1. Ambiguity Detection (optional)
+    #2. SQL Generation
+    #3. SQL Validation (optional)
+    #4. Ausführung
+    
     try:
         print(f"\n{'='*60}")
-        print(f"📝 NEUE ANFRAGE: {request.question}")
         print(f"🗄️  Datenbank (Request): {request.database}")
 
         selected_database = request.database
@@ -351,13 +350,14 @@ async def query_database(request: QueryRequest):
         # Use cached schema/KB (Phase 1: Caching)
         schema = get_cached_schema(db_path)
         table_columns = db_manager.get_table_columns()
-        kb_text = get_cached_kb(request.database, Config.DATA_DIR)
+        kb_text, meanings_text, bsl_text = load_context_files(request.database, Config.DATA_DIR)
         meanings_text = get_cached_meanings(request.database, Config.DATA_DIR)
-        
+
         print(f"✅ Schema geladen ({len(schema)} Zeichen)")
         print(f"✅ KB geladen ({len(kb_text)} Zeichen)")
         print(f"✅ Meanings geladen ({len(meanings_text)} Zeichen)")
-        
+        print(f"✅ BSL geladen ({len(bsl_text)} Zeichen)")
+
         # Fehlerprüfung Kontextdateien
         if kb_text.startswith("[FEHLER") or meanings_text.startswith("[FEHLER"):
             error_msg = f"Kontext-Fehler: {kb_text} {meanings_text}"
@@ -386,19 +386,25 @@ async def query_database(request: QueryRequest):
         
         # SQL Generation Task (mit ReAct oder Standard)
         if use_react:
+            # ReAct nutzt BSL intern
             sql_task = loop.run_in_executor(
                 executor,
                 llm_generator.generate_sql_with_react_retrieval,
                 request.question,
                 db_path,
                 request.database,
-                3  # max_iterations
+                3
             )
         else:
+            # Standard Generation MIT BSL
             sql_task = loop.run_in_executor(
                 executor,
                 llm_generator.generate_sql,
-                request.question, schema, kb_text, meanings_text
+                request.question, 
+                schema, 
+                kb_text, 
+                meanings_text,
+                bsl_text  # NEU: BSL übergeben
             )
         
         # Wait for both to complete

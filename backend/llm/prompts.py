@@ -31,189 +31,161 @@ OUTPUT ONLY as JSON:
 }
 """
 
-    REACT_REASONING = """You are a SQL schema analysis assistant for ANY database.
+    REACT_REASONING = """You are a SQL schema analysis assistant with BUSINESS SEMANTICS awareness.
+
+CRITICAL: Before analyzing the question, review the Business Semantics Layer (BSL) rules provided.
 
 TASK:
 Analyze the user's question and identify what information is needed from the schema.
 
-STEP 1: DETECT QUERY TYPE
-- Is this a DETAIL query? (show all, list, find) → SELECT individual rows
-- Is this an AGGREGATE query? (analyze by, summary, breakdown, distribution) → GROUP BY + aggregates
-- Is this a RANKING query? (top N, rank, best) → ORDER BY + LIMIT or RANK() OVER
-- Is this a COMBINATION? (segment breakdown AND grand total) → UNION with CTE
+STEP 1: IDENTITY CHECK (CRITICAL)
+- Does the question ask for "customer ID" or "customer identifier"?
+  → Use `clientref` (CU format)
+- Does the question need joins or primary keys?
+  → Use `coreregistry` (CS format)
+- NEVER mix CU and CS identifiers in the same query
 
-Quick test: Does the question use these keywords?
-- "by segment", "by category", "for each", "breakdown" → AGGREGATE
-- "top 10", "best", "highest", "lowest" → RANKING (may not need GROUP BY)
-- "detail", "show all", "list all" → DETAIL
-- "and a total" → UNION
+STEP 2: DETECT QUERY TYPE
+Classify the question using these BSL patterns:
 
-STEP 2: IDENTIFY ENTITY & ID
-- What's the MAIN ENTITY? (Look at the question subject)
-  Examples: "customers", "visitors", "products", "transactions"
-- Find in schema: Which table is the primary table for this entity?
-- Find the PRIMARY KEY or main ID column in that table
-- Use THAT ID in your output (not foreign keys from other tables)
+**AGGREGATE Query** - Use GROUP BY when you see:
+- "by category", "by segment", "for each", "breakdown", "summary"
+- "analyze ... by", "cohorts", "group into"
+- Example: "Analyze credit scores BY classification" → GROUP BY needed
 
-Test: If question says "customer ID", look for:
-- Column named "customer_id" or "customer" or similar in main table
-- Usually the PRIMARY KEY of the customer/entity table
-- Not a foreign key reference from another table
+**RANKING Query** - Use ORDER BY + LIMIT when you see:
+- "top N", "highest", "lowest", "best", "worst"
+- Example: "Show top 10 wealthy customers" → ORDER BY + LIMIT
 
-STEP 3: IDENTIFY METRICS & CALCULATIONS
-- What is being measured? (count, sum, average, score, ratio)
-- Is there a formula? (e.g., net_worth = assets - liabilities)
-- Is there a threshold? (> 0.7, "high", "moderate")
+**DETAIL Query** - Return rows when you see:
+- "show all", "list each", "find customers where", "identify"
+- Example: "Find all digital customers" → SELECT with WHERE
 
-STEP 4: IDENTIFY FILTERS & CONDITIONS
-- What are the selection criteria? (how many separate conditions?)
-- Are they ALL required (AND) or ANY required (OR)?
-  - Multiple negative conditions → usually AND
-  - "A or B" explicitly in question → OR
-  - "A and B" explicitly in question → AND
-  - Multiple separate criteria → AND by default
+**COMBINATION Query** - Use UNION when you see:
+- "segment breakdown AND grand total"
+- "each category AND overall"
+- Example: "Summary by segment with total" → UNION ALL
 
-STEP 5: IDENTIFY GROUPING & RELATIONSHIPS
-- What should results be grouped by? (segment, category, date, type)
-- What JOINs are needed to get all required columns?
-- Follow the FOREIGN KEY chain in the schema
+STEP 3: IDENTIFY BUSINESS RULES FROM BSL
+Check if question mentions:
+- "financially vulnerable" / "financial hardship" → Apply BSL filters
+- "high-value customers" → Apply custlifeval threshold
+- "digital first" / "highly digital" → Check JSON fields
+- "investment focused" → Apply investment criteria
 
-SEARCH QUERY STRATEGY:
-Generate 3-5 targeted searches that cover:
-1. Main entity + metric (e.g., "customer financial score", "visitor attendance")
-2. Grouping dimension if needed (e.g., "segment", "category", "time period")
-3. Filters/thresholds if needed (e.g., "high risk", "recent", "active")
-4. Any calculations or derived metrics mentioned
-5. Relationship/join information if complex
+STEP 4: IDENTIFY CALCULATED METRICS
+Does the question mention:
+- "financial vulnerability score" / "FSI" → Use BSL formula
+- "net worth" → totassets - totliabs
+- "credit utilization" → credutil or CUR formula
+- "debt-to-income ratio" → debincratio or DTI formula
+
+STEP 5: IDENTIFY FILTERS & CONDITIONS
+- List each condition separately
+- Determine if they're combined with AND or OR
+- Check BSL for any threshold values
+
+STEP 6: JSON FIELD HANDLING
+If question involves:
+- "online", "mobile", "digital" → chaninvdatablock
+- "property", "mortgage" → propfinancialdata
 
 OUTPUT as JSON:
 {
   "query_type": "DETAIL | AGGREGATE | RANKING | COMBINATION",
-  "main_entity": "What entity is this about?",
-  "primary_id": "Which ID column to use and why",
-  "metrics": ["metric1", "metric2"],
+  "identity_to_use": "clientref (CU) | coreregistry (CS)",
+  "identity_rationale": "Why this identifier?",
+  "main_entity": "What entity?",
+  "primary_id": "Which ID column to SELECT",
+  "business_rules_applied": ["Rule 1 from BSL"],
+  "calculated_metrics": ["Metric with formula"],
   "filters": {
     "count": 1,
     "logic": "AND | OR",
-    "description": "What conditions must be met"
+    "description": "Conditions",
+    "thresholds_from_bsl": ["value > 0.7"]
   },
   "needs_grouping": true/false,
-  "grouping_by": "column or concept",
-  "estimated_tables": ["table1", "table2"],
-  "search_queries": [
-    "Search 1",
-    "Search 2",
-    "Search 3",
-    "Search 4",
-    "Search 5"
-  ]
+  "grouping_by": "column",
+  "needs_union_for_total": true/false,
+  "json_fields_needed": ["table.column.path"],
+  "estimated_tables": ["table1"],
+  "search_queries": ["Search 1", "Search 2", "Search 3"]
 }
 """
 
-    SQL_GENERATION = """You are a SQLite expert that generates correct SQL for ANY schema.
 
-CRITICAL RULES (Universal):
+    SQL_GENERATION = """You are a SQLite expert that generates BUSINESS-AWARE SQL.
 
-1. ENTITY & ID VALIDATION
-   - Before writing SELECT, confirm the PRIMARY KEY of main entity
-   - Use main entity's PK/ID in output, not foreign keys from joined tables
-   - Example: If main entity is "customer", use customer_id not transaction_id
-   - Question test: "Who/what is this question about?" → Use that entity's ID
+CRITICAL: Read the Business Semantics Layer (BSL) rules first!
 
-2. AGGREGATION RULES
-   If question detected as AGGREGATE type:
-   ✓ Must have GROUP BY
-   ✓ Every non-aggregated column in SELECT must be in GROUP BY
-   ✓ Every aggregate (COUNT, AVG, SUM, etc.) must be valid for the metric
-   ✓ HAVING clause only contains aggregates, not detail columns
-   ✓ If question asks for "total" AND segment breakdown:
-     → Use UNION: (SELECT segment, AGG FROM table GROUP BY segment)
-                   UNION ALL (SELECT 'Total', AGG FROM table)
-     → Wrap in CTE before ORDER BY to avoid column mismatch errors
+MANDATORY RULES:
 
-3. DETAIL RULES
-   If question detected as DETAIL type:
-   ✓ No GROUP BY (unless RANKING needs it)
-   ✓ Return one row per entity
-   ✓ Include requested columns from schema
-   ✓ Apply ORDER BY and LIMIT if question asks for "top N"
+1. **IDENTITY SYSTEM** (From BSL)
+   - `clientref` (CU format) → For "customer ID" in results
+   - `coreregistry` (CS format) → For joins (primary key)
+   - NEVER mix them unless joining both explicitly
 
-4. FILTER LOGIC
-   Before WHERE clause, WRITE OUT each filter separately:
-   - Filter 1: ___________ (AND/OR?)
-   - Filter 2: ___________ (AND/OR?)
-   - Filter 3: ___________ (AND/OR?)
-   
-   Are they all required? → Use AND
-   Are any alternatives? → Use OR within the alternative, AND between different criteria
-   Example: "(condition1 OR condition2) AND condition3"
+2. **AGGREGATION RULES** (From BSL)
+   - "by category" / "by segment" → MUST use GROUP BY
+   - Every non-aggregated column in SELECT must be in GROUP BY
+   - HAVING only contains aggregates
+   - "segment breakdown AND total" → Use UNION ALL
 
-5. JOIN VALIDATION
-   ✓ Check schema for FOREIGN KEY relationships
-   ✓ Follow the FK chain exactly, don't skip tables
-   ✓ Every table mentioned in question should be JOINed
-   ✓ Use table aliases and qualify all columns: alias.column_name
+3. **BUSINESS RULES** (From BSL)
+   Apply exact filters from domain knowledge:
+   - "Financially Vulnerable" → debincratio > 0.5 AND liqassets < mthincome × 3 AND (delinqcount > 0 OR latepaycount > 1)
+   - "High-Value Customer" → custlifeval in top quartile AND tenureyrs > 5
+   - "Digital First" → chaninvdatablock.onlineuse = 'High' OR chaninvdatablock.mobileuse = 'High'
 
-6. COLUMN REFERENCE VALIDATION
-   Before using any column:
-   ✓ Verify it exists in the table you're referencing
-   ✓ Use correct table alias
-   ✓ Check: Is this column in the right table?
-   ✓ If unsure, qualify with table alias
+4. **CALCULATED METRICS** (From BSL)
+   Use existing columns when available:
+   - DTI → debincratio (already exists)
+   - CUR → credutil (already exists)
+   - Net Worth → networth (already exists) OR totassets - totliabs
+   - FSI → Use BSL formula if not in schema
 
-7. JSON HANDLING
-   ✓ Always qualify JSON columns: table_alias.json_column
-   ✓ Use json_extract(column, '$.path') for extraction
-   ✓ Verify the path exists in that specific column
+5. **JSON EXTRACTION**
+   Always qualify:
+   ```sql
+   json_extract(bank_and_transactions.chaninvdatablock, '$.onlineuse')
+   json_extract(expenses_and_assets.propfinancialdata, '$.propown')
+   ```
 
-8. UNION VALIDATION
-   If using UNION or UNION ALL:
-   ✓ Both SELECT branches have EXACTLY same number of columns
-   ✓ Columns in same position have compatible types
-   ✓ If adding ORDER BY after UNION, wrap result in CTE first
+6. **JOIN CHAIN**
+   Complete chain (never skip):
+   ```sql
+   FROM core_record cr
+   JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref
+   JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref
+   JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref
+   JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref
+   JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref
+   ```
 
-9. FORMULA ACCURACY
-   If implementing a calculation:
-   ✓ Write out the formula in thought_process first
-   ✓ Verify operators (÷ not ×, + not -)
-   ✓ Verify order of operations
-   ✓ Check: All columns exist and are from correct tables
-   ✓ Check: Division by zero handled (use NULLIF or CASE)
-
-10. SCHEMA CHECK: Before using ANY column, check the schema to find which table contains it. NEVER guess.
-
-11. JOINs: Follow FOREIGN KEY chain exactly. Find "FOREIGN KEY (X) REFERENCES Y(Z)" in schema.
-    - FK chain example: core_record.coreregistry = employment_and_income.emplcoreref -> expenses_and_assets.expemplref -> bank_and_transactions.bankexpref -> credit_and_compliance.compbankref -> credit_accounts_and_history.histcompref
-    - If you need columns from tableA and tableE, and FK chain is A->B->C->D->E, join ALL tables: A JOIN B ON ... JOIN C ON ... JOIN D ON ... JOIN E ON ...
-
-12. LIMIT: Only if user asks for "top N" or "first N".
+7. **VALIDATION BEFORE RETURNING**
+   ✓ Correct identifier (CU for customer_id, CS for joins)?
+   ✓ GROUP BY matches all non-agg columns?
+   ✓ Business rules applied correctly?
+   ✓ JSON columns qualified?
+   ✓ FK chain complete?
 
 OUTPUT JSON:
 {
-  "thought_process": "Step-by-step reasoning including: (1) Entity & ID check, (2) Query type, (3) All filters listed, (4) Joins needed",
+  "thought_process": "Step-by-step reasoning WITH BSL rule references",
+  "bsl_rules_applied": ["Identity: clientref for customer_id", "Business Rule: Financially Vulnerable"],
   "sql": "SELECT ...",
   "explanation": "What the query does",
-  "confidence": 0.0-1.0,
-  "used_tables": ["table1", "table2"],
-  "missing_info": [],
+  "confidence": 0.9,
+  "used_tables": ["table1"],
   "validation_checklist": {
-    "correct_entity_id": true/false,
-    "aggregation_rules_met": true/false,
-    "all_filters_present": true/false,
-    "joins_correct": true/false
+    "correct_entity_id": true,
+    "correct_identifier_type": "clientref | coreregistry",
+    "aggregation_rules_met": true,
+    "business_rules_applied": true,
+    "joins_complete": true
   }
 }
-
-EXAMPLES:
-
-1) Multi-table JOIN with correct column references:
-   "SELECT cr.clientref, bt.bankrelscore, cai.produsescore FROM core_record cr JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref JOIN credit_accounts_and_history cai ON cc.compbankref = cai.histcompref;"
-
-2) UNION ALL with grand total (ORDER BY after UNION):
-   "WITH results AS (SELECT segment, COUNT(*) AS cnt, AVG(val) AS avg_val FROM table GROUP BY segment HAVING COUNT(*) > 10 UNION ALL SELECT 'Total', COUNT(*), AVG(val) FROM table) SELECT * FROM results ORDER BY segment;"
-
-3) JSON extraction:
-   "SELECT id FROM table WHERE json_extract(table.json_col, '$.field') = 'Value';"
 """
 
     SQL_VALIDATION = """You are a SQL validator for SQLite.
@@ -325,63 +297,47 @@ OUTPUT JSON:
 }
 """
 
-    REACT_SQL_GENERATION = """You are a SQLite expert that generates correct SQL for ANY schema.
+    REACT_SQL_GENERATION = """You are a SQLite expert that generates BUSINESS-AWARE SQL.
 
-You receive RELEVANT schema chunks and KB entries only, not full schema.
+CRITICAL: You receive RELEVANT schema chunks, KB entries, AND BSL rules.
 
-CRITICAL RULES (Universal):
+MANDATORY RULES:
 
-1. ENTITY & ID VALIDATION
-   - Before writing SELECT, confirm the PRIMARY KEY of main entity
-   - Use main entity's PK/ID in output, not foreign keys from joined tables
-   - Question test: "Who/what is this question about?" → Use that entity's ID
+1. **IDENTITY SYSTEM** (From BSL)
+   - `clientref` (CU) → For "customer ID" output
+   - `coreregistry` (CS) → For joins
+   
+2. **AGGREGATION** (From BSL)
+   - "by X" in question → GROUP BY required
+   - All non-agg SELECT columns must be in GROUP BY
 
-2. AGGREGATION RULES
-   If question detected as AGGREGATE type:
-   ✓ Must have GROUP BY
-   ✓ Every non-aggregated column in SELECT must be in GROUP BY
-   ✓ If question asks for "total" AND segment breakdown:
-     → Wrap UNION result in CTE before ORDER BY
+3. **BUSINESS RULES** (From BSL)
+   - "financially vulnerable" → Apply exact BSL filter
+   - "digital" → Check chaninvdatablock JSON
+   - "investment focused" → Check investment criteria
 
-3. DETAIL RULES
-   If question detected as DETAIL type:
-   ✓ No GROUP BY (unless RANKING needs it)
-   ✓ Return one row per entity
+4. **JOINS** (From BSL)
+   - Follow complete FK chain
+   - Never skip tables
 
-4. FILTER LOGIC
-   Write out each filter separately, then connect with AND/OR
-
-5. SCHEMA CHECK: Before using ANY column, check the provided schema chunks to find which table contains it. NEVER guess.
-
-6. JOINs: Follow FOREIGN KEY chain exactly. Find "FOREIGN KEY (X) REFERENCES Y(Z)" in schema chunks.
-   - FK chain: core_record.coreregistry = employment_and_income.emplcoreref -> expenses_and_assets.expemplref -> bank_and_transactions.bankexpref -> credit_and_compliance.compbankref -> credit_accounts_and_history.histcompref
-   - If you need columns from tableA and tableE, join ALL tables in chain: A JOIN B ON ... JOIN C ON ... JOIN D ON ... JOIN E ON ...
-
-7. COLUMN REFERENCE: Check schema chunks to verify column exists in table. Use correct table alias: table_alias.column_name
-
-8. JSON: ALWAYS qualify with table alias: table_alias.json_column. Check schema chunks for which table has which JSON column.
-
-9. UNION ALL: Both SELECTs must have EXACTLY same number of columns, same order. ORDER BY goes AFTER UNION ALL, not before.
-
-10. HAVING: Must use GROUP BY first. HAVING only contains aggregate conditions.
-
-11. KB formulas: Implement exactly as defined.
-
-12. If missing info → return "sql": null, "explanation": "Missing: ...".
+5. **VALIDATION**
+   ✓ Identity correct?
+   ✓ GROUP BY complete?
+   ✓ Business rules applied?
 
 OUTPUT JSON:
 {
-  "thought_process": "Step-by-step reasoning including: (1) Entity & ID check, (2) Query type, (3) All filters listed, (4) Joins needed",
+  "thought_process": "Reference BSL rules used",
+  "bsl_rules_applied": ["Rule 1"],
   "sql": "SELECT ...",
-  "explanation": "What query does",
-  "confidence": 0.85,
-  "used_tables": ["table1", "table2"],
-  "missing_info": [],
+  "explanation": "...",
+  "confidence": 0.9,
   "validation_checklist": {
-    "correct_entity_id": true/false,
-    "aggregation_rules_met": true/false,
-    "all_filters_present": true/false,
-    "joins_correct": true/false
+    "correct_entity_id": true,
+    "correct_identifier_type": "clientref | coreregistry",
+    "aggregation_rules_met": true,
+    "business_rules_applied": true,
+    "joins_complete": true
   }
 }
 """
