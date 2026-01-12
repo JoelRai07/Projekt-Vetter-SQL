@@ -8,18 +8,6 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
     """Lädt Knowledge Base und Column Meanings"""
     kb_text = ""
     meanings_text = ""
-
-    bsl_context_path = f"{data_dir}/{db_name}/{db_name}_bsl_context.txt"
-    if os.path.exists(bsl_context_path):
-        try:
-            with open(bsl_context_path, "r", encoding="utf-8") as f:
-                kb_text = f.read().strip()
-            meanings_text = "BSL CONTEXT INCLUDED IN DOMAIN WISSEN."
-            return kb_text, meanings_text
-        except Exception as e:
-            kb_text = f"[FEHLER beim Laden des BSL Contexts: {str(e)}]"
-            meanings_text = ""
-            return kb_text, meanings_text
     kb_entries: List[Dict[str, Any]] = []
     meanings_data: Dict[str, Any] = {}
     metric_lines: List[str] = []
