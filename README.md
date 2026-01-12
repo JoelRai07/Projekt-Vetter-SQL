@@ -72,7 +72,7 @@ OpenAI API Key (oder Claude)
 
 ```bash
 # 1. Repository klonen
-git clone https://github.com/YourTeam/ChatWithYourData.git
+git clone (this repo)
 cd ChatWithYourData
 
 # 2. Backend Setup
