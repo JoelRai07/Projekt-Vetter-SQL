@@ -48,3 +48,54 @@ def enforce_known_tables(sql: str, table_columns: Dict[str, List[str]]) -> Optio
         return f"Unbekannte Tabellen im SQL: {', '.join(sorted(unknown))}"
 
     return None
+
+
+def enforce_semantic_guardrails(question: str, sql: str) -> List[str]:
+    """Einfache Heuristiken, die typische semantische Fehler abfangen."""
+    if not question or not sql:
+        return []
+
+    q = question.lower()
+    s = sql.lower()
+    errors: List[str] = []
+
+    aggregate_triggers = [
+        " by ",
+        " per ",
+        " each ",
+        " breakdown",
+        " category",
+        " segment",
+        " cohort",
+        " distribution",
+        " grouped",
+    ]
+    if any(trigger in q for trigger in aggregate_triggers) and "group by" not in s:
+        errors.append(
+            "Aggregation erwartet (Frage verlangt Gruppierung/Kategorien), aber SQL enthält kein GROUP BY."
+        )
+
+    if "cohort" in q and "group by" not in s:
+        errors.append(
+            "Cohort-Frage erkannt, aber SQL enthält keine Aggregation/GROUP BY."
+        )
+
+    if "fsi" in q or "financial stress" in q or "financial stability" in q:
+        if "fsi" not in s:
+            errors.append(
+                "FSI in der Frage erwähnt, aber SQL enthält keine FSI-Spalte/Berechnung."
+            )
+
+    if re.search(r"\bcs\b", q) or "core registry" in q:
+        if "coreregistry" not in s:
+            errors.append(
+                "CS/Core-Registry-ID in der Frage erwähnt, aber SQL nutzt kein coreregistry."
+            )
+
+    if re.search(r"\bcu\b", q):
+        if "clientref" not in s:
+            errors.append(
+                "CU/Customer-ID in der Frage erwähnt, aber SQL nutzt kein clientref."
+            )
+
+    return errors

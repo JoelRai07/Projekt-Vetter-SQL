@@ -539,11 +539,13 @@ Generiere die SQL-Query im JSON-Format."""
         schema: str,
         kb: str,
         meanings: str,
+        guardrail_errors: list[str] | None = None,
         max_iterations: int = 2
     ) -> Dict[str, Any]:
         """Generate SQL with self-correction loop"""
         sql_result = None
         validation_result = None
+        extra_errors = guardrail_errors or []
         
         for iteration in range(max_iterations):
             # Generate or correct SQL
@@ -557,7 +559,7 @@ VORHERIGE SQL (FEHLERHAFT):
 {sql_result.get("sql")}
 
 VALIDIERUNGS-FEHLER:
-{chr(10).join(validation_result.get("errors", []))}
+{chr(10).join((validation_result.get("errors", []) or []) + extra_errors)}
 
 NUTZER-FRAGE:
 {question}

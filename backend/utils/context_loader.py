@@ -1,12 +1,28 @@
 import os
 import json
-from typing import Tuple
+from typing import Any, Dict, List, Tuple
+
+from utils.bsl_transformer import build_bsl_context
 
 def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[str, str]:
     """Lädt Knowledge Base und Column Meanings"""
-    
     kb_text = ""
     meanings_text = ""
+
+    bsl_context_path = f"{data_dir}/{db_name}/{db_name}_bsl_context.txt"
+    if os.path.exists(bsl_context_path):
+        try:
+            with open(bsl_context_path, "r", encoding="utf-8") as f:
+                kb_text = f.read().strip()
+            meanings_text = "BSL CONTEXT INCLUDED IN DOMAIN WISSEN."
+            return kb_text, meanings_text
+        except Exception as e:
+            kb_text = f"[FEHLER beim Laden des BSL Contexts: {str(e)}]"
+            meanings_text = ""
+            return kb_text, meanings_text
+    kb_entries: List[Dict[str, Any]] = []
+    meanings_data: Dict[str, Any] = {}
+    metric_lines: List[str] = []
     
     # 1. Knowledge Base (KB)
     kb_path = f"{data_dir}/{db_name}/{db_name}_kb.jsonl"
@@ -18,6 +34,7 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
             entries = []
             for line in f:
                 item = json.loads(line)
+                kb_entries.append(item)
                 entries.append(
                     f"• {item['knowledge']}: {item['definition']}"
                 )
@@ -39,7 +56,6 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
             else:
                 entries = []
 
-            metric_lines = []
             for item in entries:
                 if not isinstance(item, dict):
                     continue
@@ -66,6 +82,7 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
         
         with open(meanings_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
+            meanings_data = data
             meanings_list = []
             
             # Format: {"db|table|column": "description" oder nested dict}
@@ -94,5 +111,19 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
             meanings_text = "\n".join(meanings_list)
     except Exception as e:
         meanings_text = f"[FEHLER beim Laden der Meanings: {str(e)}]"
-    
+
+    if kb_entries and meanings_data:
+        try:
+            bsl_kb, bsl_meanings = build_bsl_context(
+                kb_entries=kb_entries,
+                meanings_data=meanings_data,
+                metric_lines=metric_lines,
+            )
+            if bsl_kb:
+                kb_text = bsl_kb
+            if bsl_meanings:
+                meanings_text = bsl_meanings
+        except Exception as e:
+            kb_text += f"\n\n[FEHLER bei BSL-Formatierung: {str(e)}]"
+
     return kb_text, meanings_text
