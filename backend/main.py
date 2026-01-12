@@ -18,7 +18,7 @@ from models import (
     RouteResponse,
 )
 from database.manager import DatabaseManager
-from utils.sql_guard import enforce_known_tables, enforce_safety
+from utils.sql_guard import enforce_known_tables, enforce_safety, enforce_semantic_guardrails
 from utils.cache import (
     get_cached_schema,
     get_cached_kb,
@@ -518,6 +518,13 @@ async def query_database(request: QueryRequest):
                 row_count=0,
                 error=error_msg
             )
+
+        # 3c. Semantische Guardrails (heuristische Checks)
+        guardrail_errors = enforce_semantic_guardrails(request.question, generated_sql)
+        if guardrail_errors:
+            print("⚠️  Semantische Guardrails Hinweise:")
+            for err in guardrail_errors:
+                print(f"   - {err}")
         
         print(f"\n📝 Generierte SQL:")
         print(f"   {generated_sql[:200]}{'...' if len(generated_sql) > 200 else ''}")
@@ -539,6 +546,11 @@ async def query_database(request: QueryRequest):
         try:
             # Erste Validierung
             validation_result = llm_generator.validate_sql(generated_sql, schema)
+            if guardrail_errors:
+                validation_result["is_valid"] = False
+                validation_result.setdefault("errors", [])
+                validation_result["errors"].extend(guardrail_errors)
+                validation_result["severity"] = "high"
             validation_obj = ValidationResult(**validation_result)
             
             if validation_obj.is_valid:
@@ -561,6 +573,7 @@ async def query_database(request: QueryRequest):
                             schema,
                             kb_text,
                             meanings_text,
+                            guardrail_errors=guardrail_errors,
                             max_iterations=2,
                         )
                         if corrected_result and corrected_result.get("sql"):
