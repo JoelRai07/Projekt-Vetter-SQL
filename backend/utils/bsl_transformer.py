@@ -39,17 +39,6 @@ def _format_meanings(data: Dict[str, Any]) -> List[str]:
     return lines
 
 
-def _split_primary_keys(meanings_lines: Iterable[str]) -> Tuple[List[str], List[str]]:
-    primary_keys: List[str] = []
-    other_lines: List[str] = []
-    for line in meanings_lines:
-        if "primary key" in line.lower():
-            primary_keys.append(line)
-        else:
-            other_lines.append(line)
-    return primary_keys, other_lines
-
-
 def build_bsl_context(
     kb_entries: Iterable[Dict[str, Any]],
     meanings_data: Dict[str, Any],
@@ -57,7 +46,6 @@ def build_bsl_context(
 ) -> Tuple[str, str]:
     kb_lines = _format_kb_entries(kb_entries)
     meanings_lines = _format_meanings(meanings_data)
-    primary_keys, other_meanings = _split_primary_keys(meanings_lines)
 
     kb_sections: List[str] = []
     if kb_lines:
@@ -70,13 +58,6 @@ def build_bsl_context(
         kb_sections.extend(metric_lines)
 
     kb_text = "\n".join(kb_sections).strip()
-    meanings_sections: List[str] = []
-    if primary_keys:
-        meanings_sections.append("BSL PRIMARY KEYS:")
-        meanings_sections.extend(primary_keys)
-        meanings_sections.append("")
-    meanings_sections.append("BSL COLUMN MEANINGS:")
-    meanings_sections.extend(other_meanings or [])
-    meanings_text = "\n".join(meanings_sections).strip()
+    meanings_text = "\n".join(["BSL COLUMN MEANINGS:"] + meanings_lines).strip()
 
     return kb_text, meanings_text
