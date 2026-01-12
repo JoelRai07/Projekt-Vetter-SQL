@@ -1,16 +1,23 @@
 from typing import Tuple
 import os
 import json
+from config import Config
 
 
-def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[str, str, str]:
-    """Lädt Knowledge Base, Column Meanings UND BSL"""
+def load_context_files(db_name: str = None, data_dir: str = None) -> Tuple[str, str, str]:
+    """Lädt Knowledge Base, Column Meanings UND BSL für eine Datenbank"""
+    
+    # Defaults
+    if db_name is None:
+        db_name = Config.DEFAULT_DATABASE
+    if data_dir is None:
+        data_dir = Config.DATA_DIR
     
     kb_text = ""
     meanings_text = ""
     bsl_text = ""
     
-    # 1. Original KB laden
+    # 1. Knowledge Base laden
     kb_path = f"{data_dir}/{db_name}/{db_name}_kb.jsonl"
     try:
         if not os.path.exists(kb_path):
@@ -58,7 +65,7 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
     except Exception as e:
         kb_text += f"\n\n[FEHLER beim Laden der Metric SQL Templates: {str(e)}]"
     
-    # 2. Original Meanings laden
+    # 2. Column Meanings laden
     meanings_path = f"{data_dir}/{db_name}/{db_name}_column_meaning_base.json"
     try:
         if not os.path.exists(meanings_path):
@@ -90,7 +97,7 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
     except Exception as e:
         meanings_text = f"[FEHLER beim Laden der Meanings: {str(e)}]"
     
-    # 3. NEU: BSL laden
+    # 3. Business Semantics Layer laden
     bsl_path = f"{data_dir}/{db_name}/{db_name}_bsl.txt"
     try:
         if os.path.exists(bsl_path):
@@ -98,10 +105,7 @@ def load_context_files(db_name: str, data_dir: str = "mini-interact") -> Tuple[s
                 bsl_text = f.read()
             print(f"✅ BSL geladen ({len(bsl_text)} Zeichen)")
         else:
-            bsl_text = """[WARNUNG: BSL nicht gefunden]
-Bitte generiere die BSL mit:
-python bsl_builder.py
-"""
+            bsl_text = "[WARNUNG: BSL nicht gefunden]"
             print(f"⚠️  BSL nicht gefunden: {bsl_path}")
     except Exception as e:
         bsl_text = f"[FEHLER beim Laden der BSL: {str(e)}]"

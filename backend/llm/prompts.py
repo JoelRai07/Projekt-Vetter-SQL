@@ -38,12 +38,19 @@ CRITICAL: Before analyzing the question, review the Business Semantics Layer (BS
 TASK:
 Analyze the user's question and identify what information is needed from the schema.
 
-STEP 1: IDENTITY CHECK (CRITICAL)
-- Does the question ask for "customer ID" or "customer identifier"?
-  → Use `clientref` (CU format)
-- Does the question need joins or primary keys?
-  → Use `coreregistry` (CS format)
-- NEVER mix CU and CS identifiers in the same query
+STEP 1: ⚠️ IDENTITY CHECK (CRITICAL - MOST COMMON ERROR)
+- This database has TWO different customer identifiers
+- CU format (e.g., CU456680) = Business customer ID from core_record.clientref
+- CS format (e.g., CS206405) = Technical registry ID from core_record.coreregistry
+- Both refer to SAME person but are INCOMPATIBLE
+
+Decision:
+- If question asks for 'customer ID', 'customer', 'who', 'list customers' → SELECT clientref (CU)
+- If making JOINs or using as primary key → Use coreregistry (CS)
+- If in doubt → Use clientref (CU) for output
+
+WRONG: "SELECT coreregistry FROM core_record" when answer should show CU format
+CORRECT: "SELECT clientref FROM core_record" to show CU format
 
 STEP 2: DETECT QUERY TYPE
 Classify the question using these BSL patterns:
@@ -56,6 +63,7 @@ Classify the question using these BSL patterns:
 **RANKING Query** - Use ORDER BY + LIMIT when you see:
 - "top N", "highest", "lowest", "best", "worst"
 - Example: "Show top 10 wealthy customers" → ORDER BY + LIMIT
+- ⚠️ NOT GROUP BY (each customer appears once)
 
 **DETAIL Query** - Return rows when you see:
 - "show all", "list each", "find customers where", "identify"
@@ -64,14 +72,18 @@ Classify the question using these BSL patterns:
 **COMBINATION Query** - Use UNION when you see:
 - "segment breakdown AND grand total"
 - "each category AND overall"
-- Example: "Summary by segment with total" → UNION ALL
+
+**COHORT Query** - Special case with GROUP BY:
+- "by cohort quarter", "by enrollment quarter"
+- Must create cohort variable AND group by it
+- Returns cohort + metrics (NOT individual customers in detail)
 
 STEP 3: IDENTIFY BUSINESS RULES FROM BSL
 Check if question mentions:
 - "financially vulnerable" / "financial hardship" → Apply BSL filters
 - "high-value customers" → Apply custlifeval threshold
+- "high-risk" → Apply risk level + delinquency filters
 - "digital first" / "highly digital" → Check JSON fields
-- "investment focused" → Apply investment criteria
 
 STEP 4: IDENTIFY CALCULATED METRICS
 Does the question mention:
@@ -92,7 +104,7 @@ If question involves:
 
 OUTPUT as JSON:
 {
-  "query_type": "DETAIL | AGGREGATE | RANKING | COMBINATION",
+  "query_type": "DETAIL | AGGREGATE | RANKING | COMBINATION | COHORT",
   "identity_to_use": "clientref (CU) | coreregistry (CS)",
   "identity_rationale": "Why this identifier?",
   "main_entity": "What entity?",
@@ -121,13 +133,30 @@ CRITICAL: Read the Business Semantics Layer (BSL) rules first!
 
 MANDATORY RULES:
 
-1. **IDENTITY SYSTEM** (From BSL)
-   - `clientref` (CU format) → For "customer ID" in results
-   - `coreregistry` (CS format) → For joins (primary key)
-   - NEVER mix them unless joining both explicitly
+1. **⚠️ IDENTITY SYSTEM** (From BSL - MOST CRITICAL)
+   CU vs CS - The Most Common Error:
+   
+   - `clientref` (CU format, e.g., CU456680) → For "customer ID" in output
+   - `coreregistry` (CS format, e.g., CS206405) → For joins (primary key)
+   - These are TWO DIFFERENT IDs for the SAME person - DO NOT confuse!
+   
+   Examples:
+   ```sql
+   -- WRONG: Selecting CS format when question asks for customer ID
+   SELECT coreregistry AS customer_id, totassets FROM ...
+   
+   -- CORRECT: Selecting CU format for customer ID output
+   SELECT cr.clientref AS customer_id, ea.totassets FROM ...
+   
+   -- JOIN: Always use coreregistry (CS format)
+   FROM core_record cr
+   JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref
+   ```
 
 2. **AGGREGATION RULES** (From BSL)
    - "by category" / "by segment" → MUST use GROUP BY
+   - "top N" / "highest" → Use ORDER BY + LIMIT (NOT GROUP BY)
+   - "by cohort quarter" → GROUP BY cohort + extract from scoredate
    - Every non-aggregated column in SELECT must be in GROUP BY
    - HAVING only contains aggregates
    - "segment breakdown AND total" → Use UNION ALL
@@ -136,6 +165,7 @@ MANDATORY RULES:
    Apply exact filters from domain knowledge:
    - "Financially Vulnerable" → debincratio > 0.5 AND liqassets < mthincome × 3 AND (delinqcount > 0 OR latepaycount > 1)
    - "High-Value Customer" → custlifeval in top quartile AND tenureyrs > 5
+   - "High-Risk" → risklev = 'High' OR risklev = 'Very High' AND (delinqcount > 0 OR latepaycount > 0)
    - "Digital First" → chaninvdatablock.onlineuse = 'High' OR chaninvdatablock.mobileuse = 'High'
 
 4. **CALCULATED METRICS** (From BSL)
@@ -152,7 +182,7 @@ MANDATORY RULES:
    json_extract(expenses_and_assets.propfinancialdata, '$.propown')
    ```
 
-6. **JOIN CHAIN**
+6. **JOIN CHAIN** (From BSL - STRICT ORDER)
    Complete chain (never skip):
    ```sql
    FROM core_record cr
@@ -164,11 +194,13 @@ MANDATORY RULES:
    ```
 
 7. **VALIDATION BEFORE RETURNING**
-   ✓ Correct identifier (CU for customer_id, CS for joins)?
+   ✓ Correct identifier (clientref for customer_id output)?
+   ✓ Are joins using coreregistry (CS)? NOT clientref (CU)?
    ✓ GROUP BY matches all non-agg columns?
    ✓ Business rules applied correctly?
    ✓ JSON columns qualified?
    ✓ FK chain complete?
+   ✓ Question asks for ranking? → Use ORDER + LIMIT, not GROUP BY
 
 OUTPUT JSON:
 {
@@ -180,7 +212,7 @@ OUTPUT JSON:
   "used_tables": ["table1"],
   "validation_checklist": {
     "correct_entity_id": true,
-    "correct_identifier_type": "clientref | coreregistry",
+    "correct_identifier_type": "clientref (CU for output) | coreregistry (CS for joins)",
     "aggregation_rules_met": true,
     "business_rules_applied": true,
     "joins_complete": true
@@ -303,26 +335,34 @@ CRITICAL: You receive RELEVANT schema chunks, KB entries, AND BSL rules.
 
 MANDATORY RULES:
 
-1. **IDENTITY SYSTEM** (From BSL)
-   - `clientref` (CU) → For "customer ID" output
-   - `coreregistry` (CS) → For joins
-   
+1. **⚠️ IDENTITY SYSTEM** (From BSL - MOST CRITICAL)
+   - `clientref` (CU) → For "customer ID" output (e.g., CU456680)
+   - `coreregistry` (CS) → For joins only (e.g., CS206405)
+   - Never confuse these two in SELECT vs JOIN context
+
+   SELECT: cr.clientref AS customer_id  (CU format output)
+   JOIN: ON cr.coreregistry = ei.emplcoreref  (CS format for joins)
+
 2. **AGGREGATION** (From BSL)
    - "by X" in question → GROUP BY required
+   - "top N" / "highest" → ORDER + LIMIT, NOT GROUP BY
+   - "cohort" questions → GROUP BY extracted cohort variable
    - All non-agg SELECT columns must be in GROUP BY
 
 3. **BUSINESS RULES** (From BSL)
    - "financially vulnerable" → Apply exact BSL filter
+   - "high-risk" → risklev + delinquency filters
    - "digital" → Check chaninvdatablock JSON
    - "investment focused" → Check investment criteria
 
 4. **JOINS** (From BSL)
    - Follow complete FK chain
    - Never skip tables
+   - Always use coreregistry (CS) in ON conditions
 
 5. **VALIDATION**
-   ✓ Identity correct?
-   ✓ GROUP BY complete?
+   ✓ Identity correct (clientref for output)?
+   ✓ GROUP BY logic correct (ranking vs aggregation)?
    ✓ Business rules applied?
 
 OUTPUT JSON:
@@ -334,7 +374,7 @@ OUTPUT JSON:
   "confidence": 0.9,
   "validation_checklist": {
     "correct_entity_id": true,
-    "correct_identifier_type": "clientref | coreregistry",
+    "correct_identifier_type": "clientref (CU for output) | coreregistry (CS for joins)",
     "aggregation_rules_met": true,
     "business_rules_applied": true,
     "joins_complete": true

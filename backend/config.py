@@ -11,6 +11,7 @@ class Config:
 
     # Pfade
     DATA_DIR = "mini-interact"
+    DEFAULT_DATABASE = "credit"
 
     # Ergebnisse
     MAX_RESULT_ROWS = 100

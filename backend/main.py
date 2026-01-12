@@ -63,6 +63,18 @@ llm_generator = OpenAIGenerator(
 # Thread Pool für Parallel Processing
 executor = ThreadPoolExecutor(max_workers=4)
 
+
+@app.on_event("startup")
+async def startup_event():
+    """Startup event für Debugging"""
+    print("\n" + "="*60)
+    print("🚀 API Startup")
+    print(f"   Datenbank: {Config.DEFAULT_DATABASE}")
+    print(f"   LLM Model: {Config.OPENAI_MODEL}")
+    print(f"   Data Dir: {Config.DATA_DIR}")
+    print("="*60 + "\n")
+
+
 def list_available_databases() -> list[str]:
     data_dir = Config.DATA_DIR
     if not os.path.isdir(data_dir):
@@ -77,36 +89,7 @@ def list_available_databases() -> list[str]:
             databases.append(entry)
     return sorted(databases)
 
-def build_database_profiles(db_names: list[str]) -> list[dict[str, str]]:
-    profiles = []
-    for db_name in db_names:
-        db_path = os.path.join(Config.DATA_DIR, db_name, f"{db_name}.sqlite")
-        schema = get_cached_schema(db_path)
-        kb_text, meanings_text, bsl_text = load_context_files(db_name, Config.DATA_DIR)
-        profiles.append(
-            {
-                "database": db_name,
-                "schema_snippet": schema[:MAX_PROFILE_SCHEMA_CHARS],
-                "kb_snippet": kb_text[:MAX_PROFILE_KB_CHARS],
-                "meanings_snippet": meanings_text[:MAX_PROFILE_MEANINGS_CHARS],
-            }
-        )
-    return profiles
-
-def build_routing_ambiguity(
-    reason: str,
-    available_dbs: list[str],
-    confidence: float,
-) -> AmbiguityResult:
-    questions = [
-        "Welche Datenbank soll verwendet werden?",
-        f"Verfügbare Datenbanken: {', '.join(available_dbs)}",
-    ]
-    return AmbiguityResult(
-        is_ambiguous=True,
-        reason=f"{reason} (confidence={confidence:.2f})",
-        questions=questions,
-    )
+# Routing entfernt - fokussiert auf Credit DB
 
 
 @app.get("/")
@@ -114,150 +97,33 @@ async def root():
     return {
         "message": "Text2SQL API läuft",
         "version": "2.1.0",
+        "database": Config.DEFAULT_DATABASE,
         "features": ["Ambiguity Detection", "SQL Validation", "Modular Structure"]
     }
 
-@app.post("/route", response_model=RouteResponse)
-async def route_database(request: RouteRequest):
-    try:
-        db_names = list_available_databases()
-        if not db_names:
-            return RouteResponse(
-                question=request.question,
-                error=f"Keine Datenbanken gefunden unter {Config.DATA_DIR}.",
-            )
 
-        profiles = build_database_profiles(db_names)
-        loop = asyncio.get_event_loop()
-        selection = await loop.run_in_executor(
-            executor,
-            llm_generator.route_database,
-            request.question,
-            profiles,
-        )
-        selected_db = selection.get("selected_database")
-        confidence = selection.get("confidence", 0.0)
-        if selected_db not in db_names:
-            confidence = 0.0
-            selected_db = None
-
-        ambiguity_obj = None
-        if confidence < ROUTE_CONFIDENCE_THRESHOLD or not selected_db:
-            ambiguity_obj = build_routing_ambiguity(
-                selection.get("reason", "Datenbank unklar."),
-                db_names,
-                confidence,
-            )
-            return RouteResponse(
-                question=request.question,
-                selected_database=None,
-                confidence=confidence,
-                ambiguity_check=ambiguity_obj,
-            )
-
-        return RouteResponse(
-            question=request.question,
-            selected_database=selected_db,
-            confidence=confidence,
-        )
-    except Exception as e:
-        return RouteResponse(
-            question=request.question,
-            error=f"Routing fehlgeschlagen: {str(e)}",
-        )
+@app.get("/health")
+async def health():
+    """Health check endpoint"""
+    return {
+        "status": "ok",
+        "database": Config.DEFAULT_DATABASE,
+        "api_url": "http://localhost:8000"
+    }
 
 
 @app.post("/query", response_model=QueryResponse)
 async def query_database(request: QueryRequest):
     """
-    Hauptendpoint für Text-to-SQL mit BSL
-   """ # 1. Ambiguity Detection (optional)
-    #2. SQL Generation
-    #3. SQL Validation (optional)
-    #4. Ausführung
-    
+    Hauptendpoint für Text-to-SQL mit Credit DB
+    """
     try:
         print(f"\n{'='*60}")
-        print(f"🗄️  Datenbank (Request): {request.database}")
-
-        selected_database = request.database
-        if request.query_id:
-            request.auto_select = False
-            session = get_query_session(request.query_id)
-            if not session:
-                error_msg = f"Unbekannte query_id: {request.query_id}"
-                print(f"❌ {error_msg}")
-                return QueryResponse(
-                    question=request.question,
-                    generated_sql="",
-                    results=[],
-                    row_count=0,
-                    explanation="query_id ist abgelaufen oder unbekannt.",
-                    error=error_msg,
-                )
-            session_db = session.get("database")
-            if not selected_database:
-                selected_database = session_db
-            elif selected_database != session_db:
-                error_msg = "query_id passt nicht zur angefragten Datenbank."
-                print(f"❌ {error_msg}")
-                return QueryResponse(
-                    question=request.question,
-                    generated_sql="",
-                    results=[],
-                    row_count=0,
-                    explanation="query_id ist ungueltig fuer diese Datenbank.",
-                    error=error_msg,
-                )
-
-        if not selected_database or request.auto_select:
-            db_names = list_available_databases()
-            if not db_names:
-                error_msg = f"Keine Datenbanken gefunden unter {Config.DATA_DIR}."
-                print(f"❌ {error_msg}")
-                return QueryResponse(
-                    question=request.question,
-                    generated_sql="",
-                    results=[],
-                    row_count=0,
-                    explanation="Keine Datenbanken verfügbar.",
-                    error=error_msg,
-                )
-            profiles = build_database_profiles(db_names)
-            loop = asyncio.get_event_loop()
-            selection = await loop.run_in_executor(
-                executor,
-                llm_generator.route_database,
-                request.question,
-                profiles,
-            )
-            selected_database = selection.get("selected_database")
-            confidence = selection.get("confidence", 0.0)
-            if selected_database not in db_names:
-                confidence = 0.0
-                selected_database = None
-
-            if confidence < ROUTE_CONFIDENCE_THRESHOLD or not selected_database:
-                ambiguity_obj = build_routing_ambiguity(
-                    selection.get("reason", "Datenbank unklar."),
-                    db_names,
-                    confidence,
-                )
-                return QueryResponse(
-                    question=request.question,
-                    ambiguity_check=ambiguity_obj,
-                    generated_sql="",
-                    results=[],
-                    row_count=0,
-                    explanation="Bitte Datenbank auswählen oder Frage präzisieren.",
-                    error="Datenbankauswahl unklar.",
-                )
-
-        request.database = selected_database
-        print(f"🗄️  Datenbank (Auswahl): {request.database}")
+        selected_database = Config.DEFAULT_DATABASE
+        print(f"🗄️  Datenbank: {selected_database}")
         
         # 1. Datenbank und Kontext laden
-        db_path = os.path.join(Config.DATA_DIR, request.database, f"{request.database}.sqlite")
+        db_path = os.path.join(Config.DATA_DIR, selected_database, f"{selected_database}.sqlite")
         
         if not os.path.exists(db_path):
             error_msg = f"Datenbank nicht gefunden: {db_path}"
@@ -281,8 +147,8 @@ async def query_database(request: QueryRequest):
         # Check cache first (Phase 1: Caching)
         cached_result = None
         if not request.query_id:
-            cached_result = get_cached_query_result(request.question, request.database)
-            if cached_result and request.page == 1:  # Nur bei Seite 1 cachen
+            cached_result = get_cached_query_result(request.question, selected_database)
+            if cached_result and request.page == 1:
                 print("✅ Cache Hit - verwende gecachtes Ergebnis")
                 if not cached_result.get("query_id"):
                     db_manager = DatabaseManager(db_path)
@@ -291,13 +157,24 @@ async def query_database(request: QueryRequest):
                     )
                     cached_result["generated_sql"] = base_sql
                     cached_result["query_id"] = create_query_session(
-                        request.database, base_sql, request.question
+                        selected_database, base_sql, request.question
                     )
                 return QueryResponse(**cached_result)
 
         db_manager = DatabaseManager(db_path)
         if request.query_id:
             session = get_query_session(request.query_id)
+            if not session:
+                error_msg = f"Unbekannte query_id: {request.query_id}"
+                print(f"❌ {error_msg}")
+                return QueryResponse(
+                    question=request.question,
+                    generated_sql="",
+                    results=[],
+                    row_count=0,
+                    explanation="query_id ist abgelaufen oder unbekannt.",
+                    error=error_msg,
+                )
             base_sql = session.get("sql") or ""
             table_columns = db_manager.get_table_columns()
 
@@ -350,8 +227,8 @@ async def query_database(request: QueryRequest):
         # Use cached schema/KB (Phase 1: Caching)
         schema = get_cached_schema(db_path)
         table_columns = db_manager.get_table_columns()
-        kb_text, meanings_text, bsl_text = load_context_files(request.database, Config.DATA_DIR)
-        meanings_text = get_cached_meanings(request.database, Config.DATA_DIR)
+        kb_text, meanings_text, bsl_text = load_context_files(selected_database, Config.DATA_DIR)
+        meanings_text = get_cached_meanings(selected_database, Config.DATA_DIR)
 
         print(f"✅ Schema geladen ({len(schema)} Zeichen)")
         print(f"✅ KB geladen ({len(kb_text)} Zeichen)")
@@ -392,7 +269,7 @@ async def query_database(request: QueryRequest):
                 llm_generator.generate_sql_with_react_retrieval,
                 request.question,
                 db_path,
-                request.database,
+                selected_database,
                 3
             )
         else:
@@ -465,7 +342,7 @@ async def query_database(request: QueryRequest):
         generated_sql = sql_result.get("sql")
         confidence = sql_result.get("confidence", 0.0)
 
-        # 2a. Self-Correction bei niedriger Confidence
+        # 2a.  Self-Correction bei niedriger Confidence
         if confidence < CONFIDENCE_THRESHOLD_LOW:
             print(
                 f"⚠️  Niedrige Confidence ({confidence:.2f}) – starte Self-Correction Loop..."
@@ -515,14 +392,77 @@ async def query_database(request: QueryRequest):
         if safety_error or table_error:
             error_msg = safety_error or table_error
             print(f"❌ Server-Side Validation: {error_msg}")
-            return QueryResponse(
-                question=request.question,
-                ambiguity_check=ambiguity_obj,
-                generated_sql=generated_sql,
-                explanation=user_explanation,
-                results=[],
-                row_count=0,
-                error=error_msg
+            
+            # Wenn es nur ein Tabellenproblem ist, versuche Autokorrektur
+            if table_error and not safety_error:
+                print(f"🔧 Versuche Autokorrektur für Tabellenproblem...")
+                try:
+                    # Extrahiere die unbekannten Tabellen aus der Fehlermeldung
+                    import re as regex_module
+                    unknown_tables_match = regex_module.search(r"Unbekannte Tabellen im SQL: (.*)", table_error)
+                    if unknown_tables_match:
+                        unknown_tables_str = unknown_tables_match.group(1)
+                        unknown_tables = [t.strip() for t in unknown_tables_str.split(",")]
+                        
+                        # Baue einen korrekturprompt
+                        valid_tables = list(table_columns.keys())
+                        correction_prompt = f"""Die generierte SQL enthält unbekannte Tabellen: {unknown_tables_str}
+                        
+Die gültigen Tabellen sind: {', '.join(valid_tables)}
+
+Originale Frage: {request.question}
+Generierte SQL (FALSCH): 
+{generated_sql}
+
+Bitte korrigiere die SQL, um nur gültige Tabellen zu verwenden. Antworte NUR mit der korrigierten SQL in einem Code-Block."""
+                        
+                        loop = asyncio.get_event_loop()
+                        corrected_sql = await loop.run_in_executor(
+                            executor,
+                            lambda: llm_generator._call_openai(
+                                "Du bist ein SQL-Korrektur-Assistent. Korrigiere nur die Tabellennamen.",
+                                correction_prompt
+                            )
+                        )
+                        
+                        if corrected_sql and corrected_sql.strip():
+                            # Extrahiere SQL aus der Antwort (könnte Markdown-Blöcke haben)
+                            sql_match = regex_module.search(r"```(?:sql)?\n?(.*?)\n?```", corrected_sql, regex_module.DOTALL)
+                            if sql_match:
+                                corrected_sql = sql_match.group(1).strip()
+                            else:
+                                corrected_sql = corrected_sql.strip()
+                            
+                            # Validiere die korrigierte SQL
+                            corrected_sql = db_manager.normalize_sql_for_paging(corrected_sql)
+                            safety_error_corrected = enforce_safety(corrected_sql)
+                            table_error_corrected = enforce_known_tables(corrected_sql, table_columns)
+                            
+                            if not safety_error_corrected and not table_error_corrected:
+                                print(f"✅ Autokorrektur erfolgreich!")
+                                generated_sql = corrected_sql
+                                user_explanation = f"{user_explanation} [Autokorrektur durchgeführt]"
+                            else:
+                                print(f"⚠️  Autokorrektur hat weitere Fehler erzeugt: {safety_error_corrected or table_error_corrected}")
+                        else:
+                            print(f"⚠️  Autokorrektur hat keine valide SQL zurückgegeben")
+                except Exception as e:
+                    print(f"⚠️  Autokorrektur fehlgeschlagen: {str(e)}")
+            
+            # Wenn Autokorrektur nicht geholfen hat, gib Fehler zurück
+            safety_error = enforce_safety(generated_sql)
+            table_error = enforce_known_tables(generated_sql, table_columns)
+            if safety_error or table_error:
+                error_msg = safety_error or table_error
+                print(f"❌ Weiterhin ungültig: {error_msg}")
+                return QueryResponse(
+                    question=request.question,
+                    ambiguity_check=ambiguity_obj,
+                    generated_sql=generated_sql,
+                    explanation=user_explanation,
+                    results=[],
+                    row_count=0,
+                    error=error_msg
             )
         
         print(f"\n📝 Generierte SQL:")
@@ -691,7 +631,7 @@ async def query_database(request: QueryRequest):
 
         print(f"{'='*60}\n")
 
-        query_id = create_query_session(request.database, generated_sql, request.question)
+        query_id = create_query_session(selected_database, generated_sql, request.question)
 
         # Cache result (nur bei Seite 1)
         result_dict = {
@@ -715,7 +655,7 @@ async def query_database(request: QueryRequest):
         
         # Cache nur bei Seite 1 (um Cache-Hits zu ermöglichen)
         if request.page == 1:
-            cache_query_result(request.question, request.database, result_dict)
+            cache_query_result(request.question, selected_database, result_dict)
         
         return QueryResponse(**result_dict)
     

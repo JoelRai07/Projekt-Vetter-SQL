@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 class QueryRequest(BaseModel):
     question: str
     database: Optional[str] = None
-    auto_select: bool = False
+    auto_select: bool = False  # Veraltet - ignoriert, Credit DB wird immer verwendet
     page: int = 1  # Paging: Seitenzahl
     page_size: int = 100  # Paging: Zeilen pro Seite
     use_react: bool = True  # ReAct + Retrieval Modus
