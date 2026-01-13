@@ -3,16 +3,12 @@ import re
 from typing import Dict, Any, Optional
 
 from .prompts import SystemPrompts
-from config import Config
 from openai import (
     APIStatusError,
     AuthenticationError,
     OpenAI,
     RateLimitError,
 )
-from rag.schema_retriever import SchemaRetriever
-from utils.context_loader import load_context_files
-from database.manager import DatabaseManager
 
 
 class OpenAIGenerator:
@@ -258,17 +254,6 @@ Regenerate the SQL to comply with the BSL. Output JSON as required.
 
         return ensured
 
-    def _ensure_routing_fields(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """Validiert, dass wichtige Felder in der DB-Routing-Antwort vorhanden sind."""
-        ensured = result.copy()
-        ensured.setdefault("selected_database", None)
-        ensured.setdefault("reason", "")
-        try:
-            ensured["confidence"] = float(ensured.get("confidence", 0.0))
-        except (TypeError, ValueError):
-            ensured["confidence"] = 0.0
-        return ensured
-    
     def check_ambiguity(self, question: str, schema: str, kb: str, meanings: str) -> Dict[str, Any]:
         """Prüft ob die Frage mehrdeutig ist"""
         prompt = f"""
@@ -300,7 +285,6 @@ Analysiere die Frage auf Mehrdeutigkeit.
         self,
         question: str,
         schema: str,
-        kb: str,
         meanings: str,
         bsl: str = "",
     ) -> Dict[str, Any]:
@@ -369,34 +353,6 @@ WICHTIG: Befolge die BSL-Regeln strikt:
                 "confidence": 0.0
             }
 
-    def route_database(
-        self,
-        question: str,
-        profiles: list[dict[str, str]],
-    ) -> Dict[str, Any]:
-        """Wählt die passende Datenbank anhand der Profile aus."""
-        profiles_text = "\n\n".join(
-            [
-                (
-                    f"DATABASE: {profile['database']}\n"
-                    f"SCHEMA SNIPPET:\n{profile['schema_snippet']}\n\n"
-                    f"KB SNIPPET:\n{profile['kb_snippet']}\n\n"
-                    f"MEANINGS SNIPPET:\n{profile['meanings_snippet']}"
-                )
-                for profile in profiles
-            ]
-        )
-
-        prompt = f"""
-USER QUESTION:
-{question}
-
-DATABASE PROFILES:
-{profiles_text}
-"""
-        response = self._call_openai(SystemPrompts.DATABASE_ROUTING, prompt)
-        return self._ensure_routing_fields(self._parse_json_response(response))
-
     def validate_sql(self, sql: str, schema: str) -> Dict[str, Any]:
         """Validiert die generierte SQL-Query"""
         prompt = f"""
@@ -452,261 +408,12 @@ Fasse die wichtigsten Erkenntnisse kurz zusammen.
             print(f"⚠️  Zusammenfassung fehlgeschlagen: {str(e)}")
             raise
     
-    def generate_sql_with_react_retrieval(
-        self,
-        question: str,
-        db_path: str,
-        database_name: str,
-        max_iterations: int = 3
-    ) -> Dict[str, Any]:
-        """
-        ReAct-basierte SQL-Generierung mit gezieltem Schema/KB-Retrieval
-        
-        ReAct-Prozess:
-        1. THINK: Analysiere Frage → identifiziere benötigte Tabellen/KB-Einträge
-        2. ACT: Führe Retrieval durch basierend auf Suchanfragen
-        3. OBSERVE: Erhalte relevante Schema-Teile/KB-Einträge
-        4. REASON: Genug Info? → Ja: SQL generieren, Nein: weitere Suchen
-        """
-        
-        retriever = SchemaRetriever(db_path)
-        
-        # KB/Meanings einmalig laden und indexieren (falls nötig)
-        kb_text, meanings_text, bsl_text = load_context_files(database_name, Config.DATA_DIR)
-        retriever.index_kb(kb_text)
-        retriever.index_meanings(meanings_text)
-        
-        # ReAct-Loop
-        collected_schema = []
-        collected_kb = []
-        collected_meanings = []
-        all_search_queries = []
-        
-        for iteration in range(max_iterations):
-            # THINK: Analysiere Frage und bestimme Suchanfragen
-            if iteration == 0:
-                reasoning_prompt = f"""NUTZER-FRAGE: {question}
-
-Analysiere die Frage und identifiziere:
-1. Welche Konzepte/Entitäten werden erwähnt? (z.B. "Kunden", "Kredite", "Einkommen")
-2. Welche Tabellen könnten diese enthalten?
-3. Welche Berechnungen/Formeln werden benötigt?
-4. Welche Suchanfragen würden relevante Schema-Teile/KB-Einträge finden?
-
-WICHTIG: Generiere 3-5 spezifische Suchanfragen die verschiedene Aspekte abdecken.
-
-Antworte als JSON."""
-            else:
-                reasoning_prompt = f"""NUTZER-FRAGE: {question}
-
-BEREITS GEFUNDEN:
-- Schema-Chunks: {len(collected_schema)}
-- KB-Einträge: {len(collected_kb)}
-- Meanings: {len(collected_meanings)}
-- Durchgeführte Suchen: {', '.join(all_search_queries)}
-
-GEFUNDENE TABELLEN:
-{', '.join(set([line.split()[0] for chunk in collected_schema for line in chunk.split('\n') if 'TABLE:' in line])) if collected_schema else 'Keine'}
-
-Was fehlt noch? Welche weiteren Suchanfragen sind nötig?
-Wenn genug Information vorhanden ist, setze "sufficient_info": true.
-
-Antworte als JSON."""
-            
-            try:
-                reasoning_result = self._call_openai(
-                    SystemPrompts.REACT_REASONING,
-                    reasoning_prompt
-                )
-                reasoning = self._parse_json_response(reasoning_result)
-            except Exception as e:
-                print(f"⚠️  Reasoning-Fehler: {str(e)}")
-                reasoning = {
-                    "search_queries": [question], 
-                    "sufficient_info": iteration >= max_iterations - 1
-                }
-            
-            # ACT: Führe Retrieval durch mit erhöhtem top_k
-            search_queries = reasoning.get("search_queries", [])
-            if not search_queries and iteration == 0:
-                # Fallback: Nutze Frage direkt als Suchanfrage
-                search_queries = [question]
-            
-            all_search_queries.extend(search_queries)
-            
-            # Erhöhte top_k Werte für besseres Retrieval
-            schema_top_k = 6 if iteration == 0 else 4
-            kb_top_k = 6 if iteration == 0 else 4
-            meanings_top_k = 10 if iteration == 0 else 6
-            
-            for query in search_queries:
-                # Schema Retrieval
-                schema_chunk = retriever.retrieve_relevant_schema(query, top_k=schema_top_k)
-                if schema_chunk and schema_chunk not in collected_schema:
-                    collected_schema.append(schema_chunk)
-                
-                # KB Retrieval
-                kb_chunk = retriever.retrieve_relevant_kb(query, top_k=kb_top_k)
-                if kb_chunk and kb_chunk not in collected_kb:
-                    collected_kb.append(kb_chunk)
-                
-                # Meanings Retrieval
-                meanings_chunk = retriever.retrieve_relevant_meanings(query, top_k=meanings_top_k)
-                if meanings_chunk and meanings_chunk not in collected_meanings:
-                    collected_meanings.append(meanings_chunk)
-            
-            # OBSERVE: Prüfe ob genug Info vorhanden
-            if reasoning.get("sufficient_info", False) or iteration >= max_iterations - 1:
-                break
-        
-        # SQL Generation mit nur relevanten Informationen
-        relevant_schema = "\n\n".join(collected_schema) if collected_schema else None
-        relevant_kb = "\n".join(collected_kb) if collected_kb else ""
-        relevant_meanings = "\n".join(collected_meanings) if collected_meanings else ""
-        
-        # NEUER ROBUSTNESS CHECK: Mindestanforderungen prüfen
-        min_schema_chunks = 3
-        min_kb_entries = 2
-        
-        print(f"📊 Retrieval Statistik: {len(collected_schema)} Schema-Chunks, "
-              f"{len(collected_kb)} KB-Einträge, {len(collected_meanings)} Meanings")
-        
-        if (len(collected_schema) < min_schema_chunks or 
-            len(collected_kb) < min_kb_entries):
-            print(f"⚠️  Unzureichendes Retrieval - erweitere Suche mit breiten Anfragen...")
-            
-            # Zusätzliche breite Suchen
-            broad_queries = [
-                question,  # Die originale Frage
-                " ".join(question.split()[:4]),  # Erste 4 Wörter
-                " ".join(question.split()[-4:])  # Letzte 4 Wörter
-            ]
-            
-            # Extrahiere Key-Begriffe aus der Frage
-            key_terms = []
-            financial_terms = ['financial', 'debt', 'income', 'asset', 'liability', 
-                              'credit', 'vulnerability', 'hardship', 'net worth', 
-                              'delinquency', 'payment', 'customer', 'segment',
-                              'engagement', 'digital', 'cohort', 'tenure', 'investment',
-                              'liquidity', 'score', 'ratio', 'balance']
-            for term in financial_terms:
-                if term.lower() in question.lower():
-                    key_terms.append(term)
-            
-            if key_terms:
-                broad_queries.extend(key_terms[:3])  # Top 3 gefundene Begriffe
-            
-            for query in broad_queries:
-                schema_chunk = retriever.retrieve_relevant_schema(query, top_k=8)
-                if schema_chunk and schema_chunk not in collected_schema:
-                    collected_schema.append(schema_chunk)
-                    print(f"  ✓ Zusätzlicher Schema-Chunk gefunden für: '{query}'")
-                
-                kb_chunk = retriever.retrieve_relevant_kb(query, top_k=8)
-                if kb_chunk and kb_chunk not in collected_kb:
-                    collected_kb.append(kb_chunk)
-                    print(f"  ✓ Zusätzlicher KB-Eintrag gefunden für: '{query}'")
-                
-                meanings_chunk = retriever.retrieve_relevant_meanings(query, top_k=10)
-                if meanings_chunk and meanings_chunk not in collected_meanings:
-                    collected_meanings.append(meanings_chunk)
-            
-            relevant_schema = "\n\n".join(collected_schema) if collected_schema else None
-            relevant_kb = "\n".join(collected_kb) if collected_kb else ""
-            relevant_meanings = "\n".join(collected_meanings) if collected_meanings else ""
-            
-            print(f"📊 Nach Erweiterung: {len(collected_schema)} Schema-Chunks, "
-                  f"{len(collected_kb)} KB-Einträge")
-        
-        # FALLBACK: Wenn IMMER NOCH nichts oder sehr wenig gefunden
-        if not relevant_schema or len(collected_schema) < 2:
-            print("⚠️  Kritisch wenig Information gefunden - verwende komplettes Schema als Fallback")
-            db_manager = DatabaseManager(db_path)
-            relevant_schema = db_manager.get_schema_and_sample()
-            relevant_kb = kb_text
-            relevant_meanings = meanings_text
-            
-            # Markiere als Fallback in Metadaten
-            fallback_used = True
-        else:
-            fallback_used = False
-        
-        # Generiere SQL
-        overrides_text = self._extract_bsl_overrides(bsl_text)
-        prompt = f"""
-
-### BSL OVERRIDES (HIGHEST PRIORITY - MUST FOLLOW):
-{overrides_text or "[No overrides]"}
-
-### BUSINESS SEMANTICS LAYER (⚠️ READ FIRST):
-{bsl_text}
-
-### RELEVANTE DATENBANK SCHEMA-TEILE:
-{relevant_schema}
-
-### RELEVANTE SPALTEN BEDEUTUNGEN:
-{relevant_meanings}
-
-### NUTZER-FRAGE:
-{question}
-
-Generiere die SQL-Query im JSON-Format."""
-        
-        try:
-            response = self._call_openai(SystemPrompts.REACT_SQL_GENERATION, prompt)
-            result = self._ensure_generation_fields(self._parse_json_response(response))
-            
-            # Metadaten für Debugging und Monitoring
-            result["retrieval_info"] = {
-                "schema_chunks_used": len(collected_schema),
-                "kb_entries_used": len(collected_kb),
-                "meanings_entries_used": len(collected_meanings),
-                "search_queries": all_search_queries,
-                "iterations": iteration + 1,
-                "fallback_to_full_schema": fallback_used
-            }
-            
-            # SQL säubern
-            if result.get("sql"):
-                result["sql"] = result["sql"].replace("```sql", "").replace("```", "").strip()
-
-            if result.get("sql"):
-                instruction = self._bsl_compliance_instruction(question, result["sql"])
-                if instruction:
-                    result = self._regenerate_with_bsl_compliance(
-                        question=question,
-                        schema=relevant_schema or "",
-                        meanings=relevant_meanings,
-                        bsl=bsl_text,
-                        instruction=instruction,
-                        previous_sql=result["sql"],
-                    )
-            
-            # Warnung wenn Fallback verwendet wurde
-            if fallback_used and result.get("sql"):
-                result["explanation"] += " [Hinweis: Vollständiges Schema als Fallback verwendet]"
-            
-            return result
-            
-        except Exception as e:
-            return {
-                "sql": None,
-                "explanation": f"Fehler bei ReAct SQL-Generierung: {str(e)}",
-                "confidence": 0.0,
-                "retrieval_info": {
-                    "schema_chunks_used": len(collected_schema),
-                    "kb_entries_used": len(collected_kb),
-                    "search_queries": all_search_queries,
-                    "error": str(e)
-                }
-            }
-    
     def generate_sql_with_correction(
         self,
         question: str,
         schema: str,
-        kb: str,
         meanings: str,
+        bsl: str = "",
         max_iterations: int = 2
     ) -> Dict[str, Any]:
         """Generate SQL with self-correction loop"""
@@ -717,10 +424,17 @@ Generiere die SQL-Query im JSON-Format."""
             # Generate or correct SQL
             if iteration == 0:
                 # Initial generation
-                sql_result = self.generate_sql(question, schema, kb, meanings)
+                sql_result = self.generate_sql(question, schema, meanings, bsl)
             else:
                 # Correction based on validation errors
+                overrides_text = self._extract_bsl_overrides(bsl)
                 correction_prompt = f"""
+### BSL OVERRIDES (HIGHEST PRIORITY - MUST FOLLOW):
+{overrides_text or "[No overrides]"}
+
+### BUSINESS SEMANTICS LAYER (CRITICAL - READ FIRST):
+{bsl if bsl else "[No BSL provided - using defaults]"}
+
 VORHERIGE SQL (FEHLERHAFT):
 {sql_result.get("sql")}
 
@@ -732,6 +446,9 @@ NUTZER-FRAGE:
 
 DATENBANK SCHEMA:
 {schema}
+
+SPALTEN BEDEUTUNGEN:
+{meanings}
 
 Korrigiere die SQL-Query basierend auf den Fehlern.
 """

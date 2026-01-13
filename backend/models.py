@@ -7,7 +7,6 @@ class QueryRequest(BaseModel):
     auto_select: bool = False  # Veraltet - ignoriert, Credit DB wird immer verwendet
     page: int = 1  # Paging: Seitenzahl
     page_size: int = 100  # Paging: Zeilen pro Seite
-    use_react: bool = True  # ReAct + Retrieval Modus
     query_id: Optional[str] = None  # Session-ID fuer deterministisches Paging
 
 class AmbiguityResult(BaseModel):
@@ -41,12 +40,3 @@ class QueryResponse(BaseModel):
     explanation: Optional[str] = None
     error: Optional[str] = None
 
-class RouteRequest(BaseModel):
-    question: str
-
-class RouteResponse(BaseModel):
-    question: str
-    selected_database: Optional[str] = None
-    confidence: float = 0.0
-    ambiguity_check: Optional[AmbiguityResult] = None
-    error: Optional[str] = None

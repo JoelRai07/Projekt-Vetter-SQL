@@ -11,26 +11,12 @@ def get_cached_schema(db_path: str) -> str:
     db_manager = DatabaseManager(db_path)
     return db_manager.get_schema_and_sample()
 
-# Cache for KB and meanings (TTL = 1 hour)
-kb_cache = TTLCache(maxsize=32, ttl=3600)
+# Cache for meanings (TTL = 1 hour)
 meanings_cache = TTLCache(maxsize=32, ttl=3600)
-bsl_cache = TTLCache(maxsize=32, ttl=3600)
 
 # Query result caching (TTL = 5 minutes)
 query_cache = TTLCache(maxsize=100, ttl=300)
 query_session_cache = TTLCache(maxsize=200, ttl=3600)
-
-def get_cached_kb(db_name: str, data_dir: str = "mini-interact") -> str:
-    """Returns cached or fresh KB text"""
-    cache_key = f"{db_name}_kb"
-    if cache_key in kb_cache:
-        return kb_cache[cache_key]
-    
-    kb_text, meanings_text, bsl_text = load_context_files(db_name, data_dir)
-    kb_cache[cache_key] = kb_text
-    meanings_cache[f"{db_name}_meanings"] = meanings_text
-    bsl_cache[f"{db_name}_bsl"] = bsl_text
-    return kb_text
 
 def get_cached_meanings(db_name: str, data_dir: str = "mini-interact") -> str:
     """Returns cached or fresh meanings text"""
@@ -38,23 +24,13 @@ def get_cached_meanings(db_name: str, data_dir: str = "mini-interact") -> str:
     if cache_key in meanings_cache:
         return meanings_cache[cache_key]
     
-    kb_text, meanings_text, bsl_text = load_context_files(db_name, data_dir)
-    kb_cache[f"{db_name}_kb"] = kb_text
+    _kb_text, meanings_text, _bsl_text = load_context_files(
+        db_name,
+        data_dir,
+        include_kb=False,
+    )
     meanings_cache[cache_key] = meanings_text
-    bsl_cache[f"{db_name}_bsl"] = bsl_text
     return meanings_text
-
-def get_cached_bsl(db_name: str, data_dir: str = "mini-interact") -> str:
-    """Returns cached or fresh BSL text"""
-    cache_key = f"{db_name}_bsl"
-    if cache_key in bsl_cache:
-        return bsl_cache[cache_key]
-    
-    kb_text, meanings_text, bsl_text = load_context_files(db_name, data_dir)
-    kb_cache[f"{db_name}_kb"] = kb_text
-    meanings_cache[f"{db_name}_meanings"] = meanings_text
-    bsl_cache[cache_key] = bsl_text
-    return bsl_text
 
 def get_cached_query_result(question: str, database: str):
     """Get cached query result by question and database"""

@@ -1,5 +1,4 @@
 import os
-import re
 import asyncio
 import traceback
 import uvicorn
@@ -14,14 +13,11 @@ from models import (
     QueryResponse,
     AmbiguityResult,
     ValidationResult,
-    RouteRequest,
-    RouteResponse,
 )
 from database.manager import DatabaseManager
 from utils.sql_guard import enforce_known_tables, enforce_safety
 from utils.cache import (
     get_cached_schema,
-    get_cached_kb,
     get_cached_meanings,
     get_cached_query_result,
     cache_query_result,
@@ -34,10 +30,6 @@ from llm.generator import OpenAIGenerator
 
 # Thresholds / constants
 CONFIDENCE_THRESHOLD_LOW = 0.4
-ROUTE_CONFIDENCE_THRESHOLD = 0.55
-MAX_PROFILE_SCHEMA_CHARS = 1500
-MAX_PROFILE_KB_CHARS = 1200
-MAX_PROFILE_MEANINGS_CHARS = 1200
 
 # FastAPI App
 app = FastAPI(
@@ -74,20 +66,6 @@ async def startup_event():
     print(f"   Data Dir: {Config.DATA_DIR}")
     print("="*60 + "\n")
 
-
-def list_available_databases() -> list[str]:
-    data_dir = Config.DATA_DIR
-    if not os.path.isdir(data_dir):
-        return []
-    databases = []
-    for entry in os.listdir(data_dir):
-        db_dir = os.path.join(data_dir, entry)
-        if not os.path.isdir(db_dir):
-            continue
-        db_path = os.path.join(db_dir, f"{entry}.sqlite")
-        if os.path.exists(db_path):
-            databases.append(entry)
-    return sorted(databases)
 
 # Routing entfernt - fokussiert auf Credit DB
 
@@ -250,7 +228,6 @@ async def query_database(request: QueryRequest):
         
         # 2. Parallel: Ambiguity Detection + SQL Generation (Phase 1: Parallelization)
         print(f"\n🔍 Starte Ambiguity Detection und SQL Generierung (parallel)...")
-        use_react = getattr(request, 'use_react', True)
         
         loop = asyncio.get_event_loop()
         
@@ -261,28 +238,15 @@ async def query_database(request: QueryRequest):
             request.question, schema, kb_text, meanings_text
         )
         
-        # SQL Generation Task (mit ReAct oder Standard)
-        if use_react:
-            # ReAct nutzt BSL intern
-            sql_task = loop.run_in_executor(
-                executor,
-                llm_generator.generate_sql_with_react_retrieval,
-                request.question,
-                db_path,
-                selected_database,
-                3
-            )
-        else:
-            # Standard Generation MIT BSL
-            sql_task = loop.run_in_executor(
-                executor,
-                llm_generator.generate_sql,
-                request.question, 
-                schema, 
-                kb_text, 
-                meanings_text,
-                bsl_text  # NEU: BSL übergeben
-            )
+        # SQL Generation Task (Standard mit BSL)
+        sql_task = loop.run_in_executor(
+            executor,
+            llm_generator.generate_sql,
+            request.question,
+            schema,
+            meanings_text,
+            bsl_text  # BSL übergeben
+        )
         
         # Wait for both to complete
         ambiguity_result, sql_result = await asyncio.gather(
@@ -330,17 +294,20 @@ async def query_database(request: QueryRequest):
         print(f"   Confidence: {sql_result.get('confidence', 0)}")
         print(f"   Explanation: {sql_result.get('explanation', 'N/A')[:100]}...")
         
-        # ReAct Metadaten anzeigen
-        if use_react and "retrieval_info" in sql_result:
-            retrieval_info = sql_result.get("retrieval_info", {})
-            print(
-                f"   ReAct: {retrieval_info.get('schema_chunks_used', 0)} Schema-Chunks, "
-                f"{retrieval_info.get('kb_entries_used', 0)} KB-Einträge verwendet"
-            )
-        
         user_explanation = sql_result.get("explanation", "")
         generated_sql = sql_result.get("sql")
         confidence = sql_result.get("confidence", 0.0)
+
+        def apply_correction_result(corrected_result):
+            """Apply correction output to current SQL state if present."""
+            nonlocal sql_result, user_explanation, generated_sql, confidence
+            if corrected_result and corrected_result.get("sql"):
+                sql_result = corrected_result
+                user_explanation = sql_result.get("explanation", user_explanation)
+                generated_sql = sql_result.get("sql")
+                confidence = sql_result.get("confidence", confidence)
+                return True
+            return False
 
         # 2a.  Self-Correction bei niedriger Confidence
         if confidence < CONFIDENCE_THRESHOLD_LOW:
@@ -351,15 +318,11 @@ async def query_database(request: QueryRequest):
                 corrected_result = llm_generator.generate_sql_with_correction(
                     request.question,
                     schema,
-                    kb_text,
                     meanings_text,
+                    bsl_text,
                     max_iterations=2,
                 )
-                if corrected_result and corrected_result.get("sql"):
-                    sql_result = corrected_result
-                    user_explanation = sql_result.get("explanation", user_explanation)
-                    generated_sql = sql_result.get("sql")
-                    confidence = sql_result.get("confidence", confidence)
+                if apply_correction_result(corrected_result):
                     print(
                         f"✅ Self-Correction abgeschlossen nach "
                         f"{sql_result.get('correction_iterations', 1)} Iteration(en). "
@@ -505,17 +468,11 @@ Bitte korrigiere die SQL, um nur gültige Tabellen zu verwenden. Antworte NUR mi
                         corrected_result = llm_generator.generate_sql_with_correction(
                             request.question,
                             schema,
-                            kb_text,
                             meanings_text,
+                            bsl_text,
                             max_iterations=2,
                         )
-                        if corrected_result and corrected_result.get("sql"):
-                            sql_result = corrected_result
-                            generated_sql = sql_result.get("sql")
-                            user_explanation = sql_result.get(
-                                "explanation", user_explanation
-                            )
-                            confidence = sql_result.get("confidence", confidence)
+                        if apply_correction_result(corrected_result):
                             
                             # Erneute Validierung nach Korrektur
                             print("🔁 Validiere korrigierte SQL erneut...")
