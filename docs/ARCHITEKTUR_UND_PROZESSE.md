@@ -47,50 +47,10 @@
 
 ## Detaillierter Prozessablauf
 
-### Schritt 0: Database Auto-Routing (Optional)
-
-**Wann passiert das?**
-- User sendet Anfrage OHNE `database` Feld, ODER
-- User sendet mit `auto_select=true`
-
-**Verarbeitung:**
-
-```
-Input: { "question": "Zeige mir Kreditrisiken", "database": null }
-
-1. Backend prüft: database gesetzt?
-   - JA → Routing ÜBERSPRINGEN (schneller!)
-   - NEIN → Weiter mit Routing
-
-2. DB-Profile erstellen:
-   for each db in [credit, museum, crypto, ...]:
-     profile = {
-       "database": "credit",
-       "schema_snippet": "CREATE TABLE core_record (..." [1500 chars],
-       "kb_snippet": "• DTI: Debt-to-Income Ratio..." [1200 chars],
-       "meanings_snippet": "• id: Primary Key..." [1200 chars]
-     }
-
-3. LLM Routing:
-   Prompt: "USER QUESTION: {question}\n\nDATABASE PROFILES: {profiles}"
-   LLM bewertet: "Welche DB passt am besten?"
-   
-   Response:
-   {
-     "selected_database": "credit",
-     "confidence": 0.82,
-     "reason": "Frage betrifft Kreditrisiken, DB=credit passt"
-   }
-
-4. Confidence Check:
-   if confidence >= 0.55 (ROUTE_CONFIDENCE_THRESHOLD):
-     ✓ DB auswählen, weiter zu Phase 1
-   else:
-     ✗ Ambiguity zurückgeben, STOP
-
-⏱️  Timing: 2-3 Sekunden
-🔄 Wird ÜBERSPRUNGEN bei Paging (query_id vorhanden)!
-```
+### ⚠️ WICHTIG: Kein Database Routing mehr!
+Das System verwendet jetzt **immer** die Credit-Datenbank (`credit.sqlite`).
+Database Routing wurde entfernt, da das Projekt nur die Credit-DB nutzt.
+Dies vereinfacht die Architektur und macht sie stabiler (deterministisch).
 
 ### Phase 1: Anfrage-Entgegennahme & Context Loading
 
@@ -103,14 +63,13 @@ Frontend POST /query
   "question": "Zeige mir Kunden mit hoher Schuldenlast nach Segment",
   "database": "credit",
   "page": 1,
-  "page_size": 100,
-  "use_react": true
+  "page_size": 100
 }
 ```
 
 **Schritt 1.2: Backend lädt Kontext (mit Caching)**
 
-Der Backend lädt drei Kontextdokumente parallel:
+Der Backend lädt vier Kontextdokumente parallel:
 
 1. **Schema** (7,5 KB)
    - CREATE TABLE Statements für alle Tabellen
@@ -123,6 +82,7 @@ Der Backend lädt drei Kontextdokumente parallel:
    - Formeln: DTI = debincratio, CUR = credutil, FSI = 0.3×(1-debincratio) + ...
    - Klassifizierungen: "Prime Customer", "Financially Vulnerable", etc.
    - **Caching**: TTL-Cache (1 Stunde, da Metriken stabil sind)
+   - **WICHTIG**: KB wird nicht mehr in SQL-Prompts verwendet (nur für Ambiguity Detection)
 
 3. **Column Meanings** (15 KB) - Spalten-Definitionen
    - Beschreibung jeder Spalte
@@ -130,9 +90,21 @@ Der Backend lädt drei Kontextdokumente parallel:
    - Datentypen und Beispielwerte
    - **Caching**: TTL-Cache (1 Stunde)
 
+4. **BSL (Business Semantics Layer)** (~10 KB) - **NEU!**
+   - Explizite Business Rules (generiert aus KB + Meanings)
+   - Identity System: CU (clientref) vs CS (coreregistry)
+   - Aggregation Patterns: Wann GROUP BY, wann ORDER BY + LIMIT
+   - Business Rules: Financially Vulnerable, High-Risk, etc.
+   - JSON Field Rules: Korrekte Tabellen-Qualifizierung
+   - Join Chain Rules: Strikte Foreign-Key-Chain
+   - **Caching**: TTL-Cache (1 Stunde)
+   - **Format**: Plain-Text (`credit_bsl.txt`)
+
 **Warum dieser Ansatz?**
 - Nutzer wartet schneller (Caching)
 - LLM erhält vollständigen Kontext für bessere Qualität
+- **BSL-first**: Business Rules sind explizit dokumentiert (nicht implizit in Embeddings)
+- **Deterministisch**: Gleiche Frage + BSL = gleiche SQL (reproduzierbar)
 - Schema-Änderungen sind selten (daher aggressives Caching)
 
 ---
@@ -179,103 +151,82 @@ LLM antwortet:
 
 ---
 
-### Phase 3: SQL-Generierung mit ReAct + Retrieval
+### Phase 3: SQL-Generierung (BSL-first)
 
-**Warum ReAct + Retrieval statt direkter Generierung?**
+**Warum BSL-first statt ReAct + Retrieval?**
 
-Direkter Ansatz ❌:
+Alte Architektur (ReAct + RAG) ❌:
 ```
-Input: Ganze Schema (7.5 KB) + KB (10 KB) + Frage
-       → Token-Overkill (zu viel irrelevante Infos)
-       → Teurere API-Calls
-       → Mehr Fehler wegen Information Overload
+- ReAct-Loop: THINK → ACT → OBSERVE → REASON (mehrere Iterationen)
+- Vector Store (ChromaDB): Semantische Suche nach relevanten Chunks
+- Nicht-deterministisch: Gleiche Frage kann unterschiedliche SQL generieren
+- Komplex: Vector Store, Embeddings, Retrieval-Logik
 ```
 
-ReAct + Retrieval ✅:
+BSL-first Architektur ✅:
 ```
-Iteration 1:
-  - LLM denkt: "Ich brauche: core_record.clientseg, employment_and_income.debincratio, ..."
-  - Vector Retrieval sucht: "debt-to-income ratio", "customer segments"
-  - Relevant Schema: 16 Chunks (statt ganzes Schema)
-  - Relevant KB: 18 Einträge (statt alle 51)
-  
-Iteration 2:
-  - LLM denkt: "Brauch ich noch für Aggregationen..."
-  - Weitere Retrieval-Runde
-  
-Iteration 3:
-  - Genug Info gesammelt
-  - SQL wird generiert
+- Direkte SQL-Generierung: Keine ReAct-Schleife
+- Vollständiges Schema + Meanings + BSL im Prompt
+- Deterministisch: Gleiche Frage + BSL = gleiche SQL
+- Einfach: Plain-Text BSL statt Vector Store
 ```
 
 **Detaillierter Ablauf:**
 
 ```
-Schritt 3.1: LLM Thinking Phase
-  "THINK: Die Frage fragt nach Schuldenlast pro Segment.
-   Ich benötige:
-   - Kundensegmente (core_record.clientseg)
-   - Schuldenlast-Metriken (debincratio, totliabs, ...)
-   - Mögliche JOINs: core_record → employment_and_income → expenses_and_assets
-   
-   Search Queries:
-   - 'debt-to-income ratio debincratio segment analysis'
-   - 'customer segments clientseg premium standard'
-   - 'total liabilities expenses assets'
-   - 'foreign key relationships joins'"
+Schritt 3.1: Prompt-Aufbau (BSL-first)
 
-Schritt 3.2: Vector Retrieval (ChromaDB + OpenAI Embeddings)
-  Für jeden Search Query:
-  - Semantische Suche in Schema-Chunks
-  - Semantische Suche in KB-Einträgen
-  - Semantische Suche in Column Meanings
-  → Top-5 Ergebnisse pro Query
+Prompt-Struktur (in dieser Reihenfolge):
+  1. BSL Overrides (höchste Priorität)
+  2. Business Semantics Layer (kritische Regeln)
+  3. Vollständiges Schema + Beispieldaten
+  4. Spalten-Bedeutungen (Meanings)
+  5. Nutzer-Frage
 
-Schritt 3.3: LLM Observation & Reasoning
-  "OBSERVE: Ich habe:
-   - Schema für: core_record, employment_and_income, expenses_and_assets
-   - KB Einträge für DTI, Financial Vulnerability
-   - Meanings für alle relevanten Spalten
-   
-   REASON: Habe ich genug Info?
-   - ✓ Kann debincratio extrahieren
-   - ✓ Kann GROUP BY clientseg machen
-   - ✓ Kann Aggregation durchführen
-   → Ja, genug Info. SQL generieren."
+BSL-Inhalt:
+  - Identity System Rules: clientref (CU) vs coreregistry (CS)
+  - Aggregation Patterns: Wann GROUP BY, wann ORDER BY + LIMIT
+  - Business Rules: Financially Vulnerable, High-Risk, etc.
+  - JSON Field Rules: Korrekte Tabellen-Qualifizierung
+  - Join Chain Rules: Strikte Foreign-Key-Chain
 
-Schritt 3.4: SQL Generation
-  Mit NUR relevanten Infos:
-  
-  WITH customer_debt AS (
-    SELECT
-      cr.clientseg,
-      ei.debincratio,
-      ea.totliabs,
-      ...
-    FROM core_record cr
-    JOIN employment_and_income ei ON ei.emplcoreref = cr.coreregistry
-    JOIN expenses_and_assets ea ON ea.expemplref = ei.emplcoreref
-  ),
-  segment_stats AS (
-    SELECT
-      clientseg,
-      COUNT(*) AS customer_count,
-      AVG(debincratio) AS avg_dti,
-      ...
-    FROM customer_debt
-    GROUP BY clientseg
-    HAVING COUNT(*) >= 10
-  )
-  SELECT * FROM segment_stats
-  UNION ALL
-  SELECT 'GRAND TOTAL', ...
-  ORDER BY ...
+Schritt 3.2: SQL-Generierung
+
+LLM erhält vollständigen Kontext:
+  - Schema (7.5 KB): Alle Tabellen, Foreign Keys, Beispieldaten
+  - Meanings (15 KB): Spalten-Definitionen, JSON-Felder
+  - BSL (~10 KB): Explizite Business Rules
+  - Nutzer-Frage
+
+LLM muss BSL-Regeln befolgen:
+  - Identity System: clientref (CU) für Output, coreregistry (CS) für JOINs
+  - Aggregation: "by segment" → GROUP BY, "top N" → ORDER BY + LIMIT
+  - Business Rules: "Financially Vulnerable" → debincratio > 0.5 AND ...
+  - Join Chain: Strikte Foreign-Key-Chain (nie Tabellen überspringen)
+
+SQL Generation:
+  LLM generiert SQL direkt (keine ReAct-Schleife)
+  LLM gibt zurück: {sql, explanation, confidence, bsl_rules_applied}
+
+Result:
+  {
+    "sql": "SELECT cr.clientref, clientseg, AVG(debincratio) FROM ... GROUP BY ...",
+    "explanation": "Diese Query aggregiert Schuldenlast pro Kundengruppe",
+    "confidence": 0.87,
+    "bsl_rules_applied": [
+      "Identity: clientref for customer_id",
+      "Aggregation: GROUP BY clientseg",
+      "Business Rule: Financially Vulnerable"
+    ]
+  }
 ```
 
-**Vorteile ReAct + Retrieval:**
-- 40-60% Token-Ersparnis (nur relevante Infos)
-- 10-15% bessere Accuracy (weniger Noise)
-- Schneller (weniger zu verarbeiten)
+**Vorteile BSL-first:**
+- ✅ Deterministisch: Gleiche Frage = gleiche SQL (reproduzierbar)
+- ✅ Nachvollziehbar: BSL-Regeln sind explizit dokumentiert (Plain-Text)
+- ✅ Einfach: Keine Vector Store-Dependencies, keine ReAct-Schleife
+- ✅ Auditierbar: Business Rules können von Domain-Experten geprüft werden
+- ⚠️ Höhere Token-Kosten: ~32 KB statt ~2 KB, aber für Credit-DB akzeptabel
 
 ---
 
@@ -601,11 +552,10 @@ LLM generiert:
               │
               ▼
 ╔═══════════════════════════════════════════════════════════╗
-║  PHASE 3: SQL GENERATION (ReAct + Retrieval)              ║
-║  └─ Iteration 1: Thinking + Search Queries                ║
-║  └─ ChromaDB Retrieval: Top-K relevante Chunks            ║
-║  └─ Iteration 2: Observation + Reasoning                  ║
-║  └─ Weiter bis genug Info vorhanden                       ║
+║  PHASE 3: SQL GENERATION (BSL-first)                      ║
+║  └─ Prompt-Aufbau: BSL + Schema + Meanings + Frage        ║
+║  └─ Direkte SQL-Generierung (keine ReAct-Schleife)        ║
+║  └─ LLM muss BSL-Regeln befolgen                          ║
 ║  └─ SQL wird generiert mit Confidence Score               ║
 ╚═════════════┬═════════════════════════════════════════════╝
               │

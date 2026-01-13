@@ -83,9 +83,9 @@ Additional explicit guidance was added:
 ## Generator changes (SQL creation)
 
 1) BSL-first prompting
-- BSL is injected at the top of the SQL prompt.
+- BSL is injected at the top of the SQL prompt (highest priority).
 - KB is not passed into SQL prompts anymore (to reduce conflicts).
-- ReAct SQL prompts use relevant schema + meanings, not KB.
+- SQL generation uses full schema + meanings + BSL (no ReAct/RAG anymore).
 
 2) BSL compliance regeneration
 - After initial SQL generation, the generator checks for BSL violations.

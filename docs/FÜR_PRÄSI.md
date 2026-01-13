@@ -116,57 +116,14 @@
 
 **Datei**: `backend/main.py` - Funktion `query_database()`
 
-Der Backend orchestriert **8 Schritte** (inkl. Auto-Routing und Sessions):
+Der Backend orchestriert **6 Phasen** (Single-DB, BSL-first Architektur):
 
-### Schritt 0️⃣: Database Routing (Optional)
-```
-Purpose: Falls keine Datenbank angegeben → automatisch auswählen
+### ⚠️ WICHTIG: Kein Database Routing mehr!
+Das System verwendet jetzt **immer** die Credit-Datenbank (`credit.sqlite`).
+Database Routing wurde entfernt, da das Projekt nur die Credit-DB nutzt.
+Dies vereinfacht die Architektur und macht sie stabiler (deterministisch).
 
-Input: 
-{
-  "question": "Zeige mir Kreditrisiken",
-  "database": null,      // ← Nicht gesetzt!
-  "auto_select": true
-}
-
-Was passiert:
-1. Backend prüft: Ist database gesetzt UND auto_select=false?
-   - JA → Routing ÜBERSPRINGEN (schneller!)
-   - NEIN → Weiter mit Routing
-
-2. Routing durchführen:
-   a) DB-Profile erstellen (schema_snippet, kb_snippet, meanings_snippet)
-   b) LLM bewertet: "Welche DB passt am besten?"
-   c) Rückgabe: selected_database + confidence
-
-3. Confidence >= 0.55?
-   - JA → DB auswählen, weiter zu Phase 1
-   - NEIN → AmbiguityResult zurückgeben, STOP
-
-Result (if successful):
-{
-  "question": "Zeige mir Kreditrisiken",
-  "selected_database": "credit",  // ← Auto-ausgewählt!
-  "confidence": 0.82,
-  ...weiter mit Phasen...
-}
-
-Result (if ambiguous):
-{
-  "question": "Zeige mir Kreditrisiken",
-  "selected_database": null,
-  "ambiguity_check": {
-    "is_ambiguous": true,
-    "reason": "Datenbank unklar",
-    "questions": ["Verfügbare DBs: credit, museum, ..."]
-  }
-}
-
-⏱️  Timing: +2-3 Sekunden für Routing (bei erstem Request)
-💡 Optimization: Wird übersprungen wenn query_id vorhanden (Paging)!
-```
-
-### Schritt 0.5️⃣: Session Management
+### Session Management (für Paging)
 ```
 Purpose: Speichern von Query-Kontext für Paging und Follow-ups
 
@@ -220,28 +177,32 @@ Benefits:
   ✅ User kann Konversation fortsetzen
 ```
 
-Der Backend orchestriert **7 Phasen** nacheinander:
+Der Backend orchestriert **6 Phasen** nacheinander:
 
 ### Phase 1️⃣: Context Loading
 ```
-Purpose: Schema, KB, Meanings für LLM laden
+Purpose: Schema, Meanings, BSL für LLM laden
 
-cache.get_schema(db_name)
+cache.get_schema(db_path)
   ↓
 Falls Cache-Hit (95% Chance):
   → 10ms (super schnell!)
 Falls Cache-Miss:
-  → Lade schema.txt aus Datei → 500ms
-  → Indexiere in Vector Store (Chroma) → 200ms
+  → Lade credit_schema.txt aus Datei → 500ms
 
 Parallel:
-cache.get_kb(db_name)
-  → KB aus credit_kb.jsonl laden
-cache.get_meanings(db_name)
-  → Spalten-Bedeutungen laden
+load_context_files("credit")
+  → KB aus credit_kb.jsonl laden (nur für Ambiguity Detection!)
+  → Meanings aus credit_column_meaning_base.json laden
+  → BSL aus credit_bsl.txt laden (kritisch für SQL-Generierung!)
 ```
 
-**Resultat**: 3 Text-Blöcke (schema, kb, meanings) für nächste Phase
+**Resultat**: 4 Text-Blöcke (schema, kb, meanings, bsl) für nächste Phasen
+
+**WICHTIG**: 
+- **BSL (Business Semantics Layer)** ist neu und hat höchste Priorität!
+- **KB** wird nicht mehr in SQL-Prompts verwendet (nur für Ambiguity Detection)
+- **Kein Vector Store** mehr (keine ChromaDB-Indexierung)
 
 ### Phase 2️⃣: Ambiguity Detection 
 
@@ -274,46 +235,48 @@ Falls nicht mehrdeutig:
 
 **Wichtig**: Diese Phase läuft **parallel** zu Phase 3! Während der LLM denkt, laden wir bereits den Context.
 
-### Phase 3️⃣: SQL Generation mit ReAct
+### Phase 3️⃣: SQL Generation (BSL-first)
 
 ```
 Purpose: Generiere SQL-Query basierend auf Frage
 
-Methode: ReAct-Loop (Thought → Action → Observation → Reason)
+Methode: Direkte SQL-Generierung mit BSL (Business Semantics Layer)
 
-ITERATION 1:
-  [THINK] LLM denkt: "Ich brauche debincratio, clientseg, ...Welche Tabellen?"
-  [ACT] Ich suche nach diesen Begriffen in Vector Store
-  [OBSERVE] Chroma findet: 5 relevante Schema-Chunks, 5 KB-Einträge
-  [REASON] LLM prüft: Genug Info? NEIN → nächste Iteration
+WICHTIG: BSL-first Architektur!
+  - BSL hat höchste Priorität im Prompt
+  - BSL enthält explizite Business Rules (Identity System, Aggregation Patterns, etc.)
+  - Keine ReAct-Schleife mehr (direkt SQL generieren)
 
-ITERATION 2:
-  [THINK] LLM: "Brauch noch Foreign Key Info für JOINs"
-  [ACT] Suche "foreign key relationships"
-  [OBSERVE] Finde: core_record → employment_and_income → ...
-  [REASON] Genug Info? JA → SQL generieren!
+Prompt-Struktur (in dieser Reihenfolge):
+  1. BSL Overrides (höchste Priorität)
+  2. Business Semantics Layer (kritische Regeln)
+  3. Vollständiges Schema + Beispieldaten
+  4. Spalten-Bedeutungen (Meanings)
+  5. Nutzer-Frage
 
-GENERATE SQL:
-  LLM erhält NUR relevante Chunks (nicht ganzes 7.5 KB Schema!)
+SQL GENERATION:
+  LLM erhält vollständiges Schema + Meanings + BSL
+  LLM muss BSL-Regeln befolgen:
+    - Identity System: clientref (CU) vs coreregistry (CS)
+    - Aggregation: Wann GROUP BY, wann ORDER BY + LIMIT
+    - Business Rules: Financially Vulnerable, High-Risk, etc.
   LLM gibt zurück: {sql, explanation, confidence}
 
 Result:
 {
-  "sql": "SELECT clientseg, AVG(debincratio) FROM ... WHERE ... GROUP BY ...",
+  "sql": "SELECT cr.clientref, clientseg, AVG(debincratio) FROM ... WHERE ... GROUP BY ...",
   "explanation": "Diese Query aggregiert Schuldenlast pro Kundengruppe",
   "confidence": 0.87,  // ← Qualitäts-Score!
-  "retrieval_info": {
-    "iterations": 2,
-    "schema_chunks": 16,
-    "kb_entries": 8
-  }
+  "bsl_rules_applied": ["Identity: clientref for customer_id", "Business Rule: Financially Vulnerable"]
 }
 ```
 
-**Warum ReAct?**
-- ✅ Spart 60% Tokens (nur relevante Infos)
-- ✅ Bessere Qualität (16 Chunks vs. 7.5KB Schema)
-- ✅ Schneller (weniger zu verarbeiten)
+**Warum BSL-first statt ReAct?**
+- ✅ Explizite Business Rules (nicht implizit in Embeddings)
+- ✅ Deterministisch: Gleiche Frage + BSL = gleiche SQL
+- ✅ Nachvollziehbar: BSL-Regeln sind Plain-Text, auditierbar
+- ✅ Einfacher: Keine Vector Store-Dependencies, keine ReAct-Schleife
+- ⚠️ Mehr Tokens: Vollständiges Schema (~32 KB statt ~2 KB), aber für Credit-DB akzeptabel
 
 ### Phase 4️⃣: SQL Validation
 
@@ -411,38 +374,26 @@ Result:
 Falls LLM fehlschlägt: Fallback-Text verwenden (nicht blocking)
 ```
 
-## Die 8 Schritte der Anfrageverarbeitung (mit Routing & Sessions)
+## Die 6 Phasen der Anfrageverarbeitung (BSL-first, Single-DB)
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ User: "Zeige mir Kreditrisiken" (ohne DB-Auswahl!)       │
+│ User: "Zeige mir Kreditrisiken"                          │
 └────────────────────┬─────────────────────────────────────┘
                      ↓
 ┌──────────────────────────────────────────────────────────┐
-│ SCHRITT 0: DATABASE ROUTING (2-3s) [OPTIONAL]            │
-│ - Keine DB angegeben? → Auto-Select!                     │
-│ - LLM wählt beste DB basierend auf Profilen             │
-│ - Confidence < 0.55? → AmbiguityResult, STOP              │
-└────────────────────┬─────────────────────────────────────┘
-                     ↓
-┌──────────────────────────────────────────────────────────┐
-│ SCHRITT 0.5: SESSION MANAGEMENT                          │
-│ - Generiere query_id für diese Session                   │
-│ - Speichere database, sql, question (TTL: 1h)            │
-│ - Wird für Paging verwendet                              │
-└────────────────────┬─────────────────────────────────────┘
-                     ↓
-┌──────────────────────────────────────────────────────────┐
-│ PHASE 1: CONTEXT LOADING (500ms)                         │
+│ PHASE 1: CONTEXT LOADING (500ms | 10ms cached)           │
 │ - Schema aus Datei/Cache (LRU: 95% Hit!)                 │
-│ - KB aus jsonl (TTL: 1h)                                 │
-│ - Column Meanings aus json (TTL: 1h)                     │
+│ - KB aus jsonl (nur für Ambiguity Detection)             │
+│ - Column Meanings aus json                               │
+│ - BSL aus credit_bsl.txt (kritisch für SQL-Generierung!) │
 └────────────────────┬─────────────────────────────────────┘
                      ↓
 ┌──────────────────────────────────────────────────────────┐
-│ PHASE 2 & 3 (PARALLEL): AMBIGUITY + SQL GEN (4s)         │
+│ PHASE 2 & 3 (PARALLEL): AMBIGUITY + SQL GEN (3-4s)       │
 │ - Ambiguity: Ist Frage klar?                             │
-│ - SQL Gen: ReAct-Loop → Generiere SQL                    │
+│ - SQL Gen: BSL-first → Direkte SQL-Generierung           │
+│   (Kein ReAct mehr, kein Vector Store)                   │
 └────────────────────┬─────────────────────────────────────┘
                      ↓
 ┌──────────────────────────────────────────────────────────┐
@@ -473,9 +424,9 @@ Falls LLM fehlschlägt: Fallback-Text verwenden (nicht blocking)
 │ - query_id: "a1b2c3d4..." ← Für Paging & Follow-ups!    │
 └──────────────────────────────────────────────────────────┘
 
-⏱️  Total Time: 8-12s (oder 2-3s bei Cache-Hit!)
+⏱️  Total Time: 7-10s (oder 2-3s bei Cache-Hit!)
 💾 Session gültig für: 1 Stunde
-🔄 Bei Paging: Nur Phase 5 (+ 1-3s statt +8s)
+🔄 Bei Paging: Nur Phase 5 (+ 1-3s statt +7s)
 ```
 
 ## Zweiter Request (Paging - VIEL schneller!)
@@ -486,10 +437,9 @@ Falls LLM fehlschlägt: Fallback-Text verwenden (nicht blocking)
 └────────────────────┬─────────────────────────────────────┘
                      ↓
 ┌──────────────────────────────────────────────────────────┐
-│ SCHRITT 0: Session laden (5ms)                           │
+│ Session laden (5ms)                                      │
 │ - query_id → Session abrufen                             │
 │ - database, sql, question aus Session                    │
-│ - Routing ÜBERSPRINGEN (spart 2-3s!)                     │
 └────────────────────┬─────────────────────────────────────┘
                      ↓
 ┌──────────────────────────────────────────────────────────┐
@@ -507,7 +457,7 @@ Falls LLM fehlschlägt: Fallback-Text verwenden (nicht blocking)
 │ - query_id: "a1b2c3d4..." (gleich, Session läuft)       │
 └──────────────────────────────────────────────────────────┘
 
-⏱️  Total Time: 2-5s (statt 8-12s!)
+⏱️  Total Time: 1-3s (statt 7-10s!)
 ✅70% schneller für Paging!
 ```
 
@@ -515,27 +465,38 @@ Falls LLM fehlschlägt: Fallback-Text verwenden (nicht blocking)
 
 ## Wichtige Komponenten erklärt
 
-### 1. **RAG (Retrieval Augmented Generation)**
+### 1. **BSL (Business Semantics Layer)**
 
-**Problem ohne RAG:**
+**Problem ohne BSL:**
 ```
 LLM erhält: Ganzes Schema (7.5 KB) + alle KB (10 KB) + Meanings (15 KB)
             = 32.5 KB an Info
             
-LLM Problem: "Ertrinkt" in Kontekt → weniger Genauigkeit
-Kosten: Mehr Tokens = teurer
+LLM Problem: Regeln sind implizit versteckt → Fehleranfällig
+Beispiel: LLM wählt falschen Identifier (CU vs CS), falsche Aggregation
 ```
 
-**Mit RAG (unser System):**
+**Mit BSL (unser System):**
 ```
-1. User fragt: "Premium-Kunden mit hoher Schuldenlast"
-2. RAG sucht: "Was ist relevant?"
-3. Vector-Suche findet: Nur core_record, employment_and_income Chunks
-4. LLM erhält: 2-3 KB (statt 32.5 KB!)
-5. Resultat: Bessere Qualität, weniger Kosten!
+1. BSL enthält explizite Business Rules:
+   - Identity System: clientref (CU) vs coreregistry (CS)
+   - Aggregation Patterns: Wann GROUP BY, wann ORDER BY + LIMIT
+   - Business Rules: Financially Vulnerable, High-Risk, etc.
 
-Technologie: ChromaDB (Vector Store) + OpenAI Embeddings
+2. BSL wird zuerst im Prompt platziert (höchste Priorität)
+
+3. LLM muss BSL-Regeln befolgen
+
+4. Resultat: Deterministische, nachvollziehbare SQL-Generierung!
+
+Format: Plain-Text (credit_bsl.txt), generiert aus KB + Meanings
 ```
+
+**Warum BSL statt RAG?**
+- ✅ Explizite Regeln statt implizite (Embeddings)
+- ✅ Deterministisch: Gleiche Frage = gleiche SQL
+- ✅ Nachvollziehbar: Regeln sind auditierbar (Plain-Text)
+- ✅ Einfacher: Keine Vector Store-Dependencies
 
 ### 2. **Caching**
 
@@ -693,11 +654,12 @@ Einsparung: 73%! 🎯
 
 **Schnelle-Version:**
 > "Die App hat einen React-Frontend wo Nutzer tippen. Das geht an einen FastAPI-Backend der:
-> 1. Context lädt (Schema, KB)
-> 2. Parallel prüft ob Frage klar ist und SQL generiert (mit KI/OpenAI)
+> 1. Context lädt (Schema, Meanings, BSL)
+> 2. Parallel prüft ob Frage klar ist und SQL generiert (BSL-first mit OpenAI)
 > 3. Die SQL mehrfach validiert (Sicherheit + Semantik)
 > 4. Die SQL in der Datenbank ausführt mit Paging
 > 5. Die Ergebnisse zusammenfasst
+> BSL (Business Semantics Layer) macht die SQL-Generierung deterministisch und nachvollziehbar.
 > Caching macht es rund 42x schneller bei wiederholten Fragen!"
 
 ### Wichtigste Dateien zum Verstehen:
@@ -720,13 +682,15 @@ Fehlerquelle ← Check in dieser Reihenfolge:
   1. Check: SQL Guard (security)
   2. Check: SQL Validation (semantics)
   3. Check: GeneratorLLM (was wurde generiert?)
-  4. Check: Prompts.py (ist Few-Shot korrekt?)
-  5. Check: Schema (ist Schema vollständig/korrekt?)
+  4. Check: BSL-Regeln (wurden BSL-Regeln befolgt?)
+  5. Check: Prompts.py (ist BSL-first korrekt?)
+  6. Check: Schema (ist Schema vollständig/korrekt?)
 
 "Ergebnisse sind falsch"
   1. Check: Die SQL selbst in DB
   2. Check: Gibt es Paging-Probleme?
   3. Check: Ist Cache stale?
+  4. Check: BSL-Regeln (Identity System, Aggregation Patterns)
 
 "System ist langsam"
   1. Check: Cache-Hit-Rate (util/cache.py logs)
@@ -735,10 +699,9 @@ Fehlerquelle ← Check in dieser Reihenfolge:
   4. Check: Network Latency
 
 "OpenAI API zu teuer"
-  1. Check: Token-Verbrauch pro Query
-  2. Check: ReAct Iterations (wie oft wird gesucht?)
-  3. Check: Few-Shot Prompt Size
-  4. Check: ValidationCalls (wie oft wird validiert?)
+  1. Check: Token-Verbrauch pro Query (~32 KB für Schema+Meanings+BSL)
+  2. Check: Prompt Size (BSL ist groß, aber explizit)
+  3. Check: Validation Calls (wie oft wird validiert?)
 ```
 
 ---
@@ -822,12 +785,16 @@ A: Sehr sicher! 3 Ebenen:
 - Level 3: Nur SELECT erlaubt in der DB-Permission
 - Resultat: <0.1% Fehlerquote
 
-### Q: "Warum braucht ihr das Vector Store (Chroma)?"
+### Q: "Warum verwendet ihr BSL statt RAG/Vector Store?"
 
-A: Ohne Vector Store müssten wir dem LLM die ganzen 32.5 KB Context geben. Mit ChromaDB suchen wir nur nach relevanten Teilen (2 KB). Das spart:
-- 60% Kosten (weniger Tokens)
-- 30% Latency (weniger zu verarbeiten)
-- 15% bessere Accuracy (weniger Noise)
+A: Wir haben von RAG/Vector Store (ChromaDB) zu BSL-first migriert, weil:
+- **Determinismus**: BSL macht SQL-Generierung reproduzierbar (gleiche Frage = gleiche SQL)
+- **Nachvollziehbarkeit**: BSL-Regeln sind explizit dokumentiert (Plain-Text), nicht in Embeddings versteckt
+- **Wartbarkeit**: BSL-Regeln können direkt editiert werden, keine Vector Store-Indexierung
+- **Professor-Feedback**: "Es geht nur um Credit-DB, BSL ist ein guter Ansatz"
+- **Scope-Fit**: Multi-DB-Routing war Over-Engineering für unser Projekt
+
+Trade-off: Höherer Token-Verbrauch (~32 KB statt ~2 KB), aber für Credit-DB akzeptabel.
 
 ### Q: "Was wenn der User eine mehrdeutige Frage stellt?"
 
@@ -835,7 +802,7 @@ A: System erkennt das und fragt zurück (Ambiguity Detection). Statt falsch zu r
 
 ### Q: "Kann das System auch komplexe Joins machen?"
 
-A: Ja! ReAct-Loop kennt alle Foreign Keys und kann Multi-Table Joins generieren. Few-Shot Beispiele zeigen auch komplexe CTEs und UNION ALL.
+A: Ja! BSL enthält explizite Join Chain Rules (strikte Foreign-Key-Chain). Das System kann Multi-Table Joins generieren. BSL-Regeln zeigen auch komplexe CTEs und UNION ALL Patterns.
 
 ### Q: "Wie lange läuft das Projekt schon und was ist status?"
 

@@ -25,7 +25,7 @@ Mit diesem Projekt helfen wir Unternehmen dabei, **data-driven** zu werden, inde
 - ✅ Moderne LLM-Integration (OpenAI/Claude)
 - ✅ Robuste SQL-Generierung mit Ambiguity Detection
 - ✅ Sichere Datenbankabfragen mit Defense-in-Depth
-- ✅ Skalierbare Architektur mit RAG-Retrieval
+- ✅ BSL-first Architektur (Business Semantics Layer)
 - ✅ Benutzerfreundliche Fehlerbehandlung
 
 ## 🛠️ Technologie-Stack
@@ -34,7 +34,7 @@ Mit diesem Projekt helfen wir Unternehmen dabei, **data-driven** zu werden, inde
 - **Python 3.11+** mit FastAPI
 - **OpenAI API** GPT-5.2
 - **SQLite** für Datenbankabfragen
-- **ChromaDB + LangChain** für RAG-Retrieval
+- **BSL (Business Semantics Layer)** für explizite Business Rules
 - **Pydantic** für Request/Response Validierung
 
 ### Frontend
@@ -57,6 +57,7 @@ Mit diesem Projekt helfen wir Unternehmen dabei, **data-driven** zu werden, inde
 - **Kontextdateien**:
   - `credit_kb.jsonl` - Domain Knowledge Base
   - `credit_column_meaning_base.json` - Spalten-Definitionen
+  - `credit_bsl.txt` - Business Semantics Layer (generiert aus KB + Meanings)
   - `credit_metric_sql_templates.json` - SQL-Templates für Metriken
 
 ## 🚀 Schnelstart
@@ -125,16 +126,16 @@ npm start
 │                          │                             │
 │                          ↓                             │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │ 2. SQL Generation (ReAct + RAG)                 │   │
-│  │    → Retrieval-Augmented: Nur relevante Schema  │   │
-│  │    → Few-Shot Prompting für Konsistenz          │   │
-│  │    → Smart Defaults für vage Begriffe           │   │
+│  │ 2. SQL Generation (BSL-first)                    │   │
+│  │    → Business Semantics Layer (BSL)              │   │
+│  │    → Vollständiges Schema + Meanings + BSL       │   │
+│  │    → Explizite Business Rules                    │   │
 │  │    → Temperature=0.2 für Determinismus          │   │
 │  └─────────────────────────────────────────────────┘   │
-│         │                    │                         │
-│         ↓                    ↓                         │
-│    ChromaDB            LLM (OpenAI)                    │
-│    (Vector Store)      (GPT-5.2)                       │
+│                          │                             │
+│                          ↓                             │
+│                    LLM (OpenAI)                        │
+│                    (GPT-5.2)                           │
 │                                                        │
 │  ┌─────────────────────────────────────────────────┐   │
 │  │ 3. SQL Validation (LLM + Rule-Based)            │   │
@@ -265,9 +266,9 @@ core_record → employment_and_income → expenses_and_assets
 **Fehler**: Falsch interpretierte SQL
 **Lösung**: Ambiguity Detection aktiviert - System fragt nach
 
-### Problem 5: Token-Kosten zu hoch
-**Issue**: 8150 Tokens pro Request
-**Lösung**: ReAct + RAG Retrieval (-75% Tokens)
+### Problem 5: Token-Kosten
+**Issue**: Vollständiges Schema (~32 KB pro Request)
+**Lösung**: BSL-first Architektur (explizite Regeln, deterministisch)
 
 ## 🔒 Sicherheit
 
@@ -303,8 +304,8 @@ core_record → employment_and_income → expenses_and_assets
 - ✅ Pagination für große Ergebnismengen
 
 ### Advanced Features
-- ✅ ReAct-basiertes Retrieval (RAG)
-- ✅ Few-Shot Prompting
+- ✅ BSL-first Architektur (Business Semantics Layer)
+- ✅ Explizite Business Rules (Identity System, Aggregation Patterns)
 - ✅ Self-Correction Loop
 - ✅ Query Sessions für Determinismus
 - ✅ Smart Defaults für vage Begriffe
@@ -321,12 +322,14 @@ core_record → employment_and_income → expenses_and_assets
 - Built-in OpenAPI Dokumentation
 - Einfacheres Dependency Injection
 
-### ADR-2: ChromaDB für RAG
-**Entscheidung**: Vector-Store für Schema/KB Retrieval
+### ADR-2: BSL-first statt RAG
+**Entscheidung**: Business Semantics Layer (BSL) für explizite Business Rules
 **Gründe**:
-- Token-Reduktion
-- Bessere Relevanz
-- Kostenersparnis
+- Deterministische SQL-Generierung (reproduzierbar)
+- Nachvollziehbare Business Rules (auditierbar)
+- Einfacher zu warten (Plain-Text statt Vector Store)
+- Scope-Fit: Single-DB (Credit-DB) statt Multi-DB
+- Professor-Feedback: "BSL ist ein guter Ansatz"
 
 ### ADR-3: Query Sessions statt Caching
 **Entscheidung**: UUID-basierte Sessions für Paging
@@ -378,9 +381,9 @@ Backend: http://localhost:8000
 - ⚠️ LLM-Halluzinationen waren schwer zu debuggen
 - ⚠️ Foreign Key Chains erforderten explizite Dokumentation
 - ⚠️ JSON-Pfade verursachten Silent Failures
-- ⚠️ Token-Kosten stiegen schnell (vor ReAct-Optimierung)
-- ⚠️ Beschädigte Dateien aus dem ChromaDB-Vektor-Store
-- ⚠️ Kontinuirlicher Self-Correction-Loop
+- ⚠️ Migration von RAG/ReAct zu BSL-first (Architektur-Entscheidung)
+- ⚠️ BSL-Regeln müssen explizit dokumentiert werden
+- ⚠️ Kontinuierlicher Self-Correction-Loop
 
 
 ### Nächste Schritte
