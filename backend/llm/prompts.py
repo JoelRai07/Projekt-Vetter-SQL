@@ -80,15 +80,18 @@ Classify the question using these BSL patterns:
 
 STEP 3: IDENTIFY BUSINESS RULES FROM BSL
 Check if question mentions:
-- "financially vulnerable" / "financial hardship" → Apply BSL filters
+- "financially vulnerable" → Apply Financially Vulnerable rule
+- "financial hardship" / "financial stress" / "financial difficulty" → Apply Financial Stress Indicator (FVS > 0.7 AND delinq/latepay AND net worth < 0)
 - "high-value customers" → Apply custlifeval threshold
 - "high-risk" → Apply risk level + delinquency filters
 - "digital first" / "highly digital" → Check JSON fields
+- "digital native" → Treat as Digital First Customer unless user defines another rule
+- If a BSL rule defines an output format for the concept, follow that format
 
 STEP 4: IDENTIFY CALCULATED METRICS
 Does the question mention:
 - "financial vulnerability score" / "FSI" → Use BSL formula
-- "net worth" → totassets - totliabs
+- "net worth" → totassets - totliabs (avoid expenses_and_assets.networth unless explicitly requested)
 - "credit utilization" → credutil or CUR formula
 - "debt-to-income ratio" → debincratio or DTI formula
 
@@ -164,15 +167,18 @@ MANDATORY RULES:
 3. **BUSINESS RULES** (From BSL)
    Apply exact filters from domain knowledge:
    - "Financially Vulnerable" → debincratio > 0.5 AND liqassets < mthincome × 3 AND (delinqcount > 0 OR latepaycount > 1)
+   - "Financial Hardship/Stress" → FVS > 0.7 AND (delinqcount > 0 OR latepaycount > 0) AND net worth < 0
    - "High-Value Customer" → custlifeval in top quartile AND tenureyrs > 5
    - "High-Risk" → risklev = 'High' OR risklev = 'Very High' AND (delinqcount > 0 OR latepaycount > 0)
    - "Digital First" → chaninvdatablock.onlineuse = 'High' OR chaninvdatablock.mobileuse = 'High'
+   - "Digital Native" → Treat as Digital First Customer unless user defines another rule
+   - If a BSL rule defines a reporting format, follow that format
 
 4. **CALCULATED METRICS** (From BSL)
    Use existing columns when available:
    - DTI → debincratio (already exists)
    - CUR → credutil (already exists)
-   - Net Worth → networth (already exists) OR totassets - totliabs
+   - Net Worth → totassets - totliabs (prefer computed; avoid expenses_and_assets.networth unless explicitly requested)
    - FSI → Use BSL formula if not in schema
 
 5. **JSON EXTRACTION**
@@ -351,9 +357,13 @@ MANDATORY RULES:
 
 3. **BUSINESS RULES** (From BSL)
    - "financially vulnerable" → Apply exact BSL filter
+   - "financial hardship"/"financial stress" → Financial Stress Indicator (FVS > 0.7 AND delinq/latepay AND net worth < 0)
    - "high-risk" → risklev + delinquency filters
    - "digital" → Check chaninvdatablock JSON
    - "investment focused" → Check investment criteria
+   - "digital native" → Treat as Digital First Customer unless user defines another rule
+   - When net worth is required, compute totassets - totliabs (avoid expenses_and_assets.networth unless explicitly requested)
+   - If a BSL rule defines a reporting format, follow it
 
 4. **JOINS** (From BSL)
    - Follow complete FK chain

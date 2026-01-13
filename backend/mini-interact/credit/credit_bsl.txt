@@ -123,6 +123,76 @@ When question asks 'by cohort quarter':
 - MUST include GROUP BY cohort_quarter
 - Each row shows: customer (or cohort indicator), metrics
 
+## ⚠️ CRITICAL: Multi-Level Grouping (Advanced)
+When question asks 'group by X AND ALSO Y':
+Example: 'Show engagement by cohort AND by digital native status'
+- GROUP BY cohort_quarter, is_digital_native
+- Each row is a unique (cohort, digital_native) combination
+- Use aggregate functions: COUNT(*), AVG(), SUM()
+
+### Percentage Calculations in Grouped Data
+When question asks 'percentage of the cohort with high engagement':
+
+**WRONG (mixing aggregation levels):**
+```sql
+SELECT cohort_quarter,
+  SUM(CASE WHEN engagement > 0.7 THEN 1 ELSE 0 END) AS high_count,
+  COUNT(*) AS total
+FROM base_data
+GROUP BY cohort_quarter;
+-- Then calculate 100 * high_count / total in application
+```
+
+**CORRECT (in SQL):**
+```sql
+SELECT cohort_quarter,
+  COUNT(*) AS cohort_size,
+  CAST(SUM(CASE WHEN engagement > 0.7 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) AS pct_high_engagement
+FROM base_data
+GROUP BY cohort_quarter;
+```
+
+### Multiple Grouping with Percentages
+When question asks for percentages at MULTIPLE aggregation levels:
+Example: 'percentage of the cohort WITH high engagement' + 'high-engagement percentage BROKEN DOWN by digital native'
+
+**This requires:**
+1. First GROUP BY: cohort_quarter → compute overall cohort %
+2. Second GROUP BY: cohort_quarter + digital_native → compute per-group %
+3. Relate them: use JOIN or window functions
+
+**Template:**
+```sql
+WITH base AS (
+  SELECT cohort_quarter, is_digital_native, engagement_score
+  FROM ... WHERE ...
+),
+cohort_totals AS (
+  SELECT cohort_quarter, COUNT(*) AS total_cohort_size
+  FROM base
+  GROUP BY cohort_quarter
+),
+grouped AS (
+  SELECT
+    cohort_quarter,
+    is_digital_native,
+    COUNT(*) AS segment_size,
+    AVG(engagement_score) AS avg_engagement,
+    CAST(SUM(CASE WHEN engagement_score > 0.7 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) AS pct_high_in_segment
+  FROM base
+  GROUP BY cohort_quarter, is_digital_native
+)
+SELECT
+  g.cohort_quarter,
+  g.is_digital_native,
+  g.segment_size,
+  g.avg_engagement,
+  ct.pct_high_overall,  -- Percentage in entire cohort
+  g.pct_high_in_segment  -- Percentage within this segment
+FROM grouped g
+JOIN cohort_totals ct ON g.cohort_quarter = ct.cohort_quarter;
+```
+
 ## Special Case: Grand Total
 If question asks for 'total' AND segment breakdown:
 → Use UNION ALL with aggregated segments + total row
@@ -381,3 +451,115 @@ When a question asks for a calculated metric, use these exact formulas:
 ## Credit Health Momentum (CHM)
 **Definition:** Measures the trajectory of a customer's credit health over time.
 **Formula:** CHM = CHS × (1 + \Delta_\text{recentbeh}), \text{where CHS is the Credit Health Score and } \Delta_\text{recentbeh} \text{ is +0.1 for 'Improving', 0 for 'Stable', and -0.1 for 'Deteriorating'}
+
+# MULTI-LEVEL AGGREGATION PATTERNS
+
+## Pattern: Questions with Nested Grouping & Multiple Percentages
+
+### Recognition: When Question Asks for TWO Different % Metrics
+Question patterns:
+- 'percentage of the cohort' (overall) + 'broken down by [dimension]' (segment-specific)
+- 'overall %' + 'per-group %'
+- 'total rate' + '[subgroup] rate'
+
+**This ALWAYS requires:**
+1. GROUP BY dimension1 (e.g., cohort_quarter)
+2. GROUP BY dimension1, dimension2 (e.g., cohort_quarter + is_digital_native)
+3. Relate both aggregations to show overall + segment metrics
+
+### Key Decision: CTE or JOIN Approach?
+
+**Use CTEs when:**
+- You need multiple different GROUP BY clauses
+- Calculations are complex and reused
+- You want to compute 'total' metrics separately
+
+**Structure:**
+```
+CTE 1: Base calculations (row-level)
+CTE 2: Level-1 grouping (dimension1 only)
+CTE 3+: Level-2 grouping (dimension1 + dimension2)
+Final SELECT: JOIN CTEs to combine metrics
+```
+
+### Percentage Calculation Rule
+When dividing for percentages:
+```sql
+-- ALWAYS cast numerator to REAL to avoid integer division
+CAST(SUM(CASE WHEN condition THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+
+-- Or equivalently:
+SUM(CASE WHEN condition THEN 1.0 ELSE 0.0 END) / COUNT(*)
+```
+
+### NULL Handling for Segment Percentages
+When segment may be empty (e.g., no digital natives):
+```sql
+-- DON'T return division by zero; return NULL instead
+CAST(...sum... AS REAL)
+/ CASE WHEN denominator = 0 THEN NULL ELSE denominator END
+```
+
+### Example Pattern Recognition
+**Question:** 'Show cohort quarter, digital native status, and BOTH the overall cohort % high-engagement AND the segment-specific % high-engagement'
+
+**Decompose into:**
+1. What's the base row unit? → Customer (one row per customer)
+2. What are the dimensions? → cohort_quarter + is_digital_native
+3. What metric? → has high engagement? (binary) + score (continuous)
+4. What % requested?
+   - Overall: (high_engagement_count in cohort) / (total customers in cohort)
+   - Segment: (high_engagement_count in segment) / (total customers in segment)
+
+**Architecture:**
+- CTE 1: Select all customers with calculated metrics
+- CTE 2: GROUP BY cohort_quarter ONLY → pct_overall
+- CTE 3: GROUP BY cohort_quarter + is_digital_native → pct_segment
+- Final: JOIN CTE2 + CTE3 to show both %s together
+
+## Pattern: Calculated Metrics with Multiple Dependencies
+When metric requires columns from different tables:
+
+**Example:** CES = 0.4*produsescore + 0.3*chanusescore + 0.2*bankrelscore + 0.1*(custservint/10)
+- produsescore, chanusescore, custservint → from credit_accounts_and_history
+- bankrelscore → from bank_and_transactions
+- Requires: JOIN both tables
+
+**Rule:** Calculate once in base CTE, reference in aggregations
+```sql
+WITH base AS (
+  SELECT
+    ..., 
+    0.4*t1.metric1 + 0.3*t1.metric2 + 0.2*t2.metric3 + ... AS calculated_metric
+  FROM table1 t1
+  JOIN table2 t2 ON ...
+),
+aggregated AS (
+  SELECT
+    group_col,
+    COUNT(*) AS count,
+    AVG(calculated_metric) AS avg_metric
+  FROM base
+  GROUP BY group_col
+)
+SELECT ... FROM aggregated;
+```
+
+
+---
+
+# BSL OVERRIDES (MANUAL)
+
+Terminology:
+- Treat "digital native" as "Digital First Customer" unless the user defines another rule.
+
+Net worth:
+- When net worth is required, compute it as totassets - totliabs.
+- Do not use expenses_and_assets.networth unless explicitly requested.
+
+Digital engagement cohort summary:
+- If a question asks for digital engagement by cohort and digital-native status without a concrete time window
+  (explicit years or quarters), return a two-row summary grouped only by is_digital_native with:
+  cohort_size, avg_engagement (CES), pct_high_engagement (CES > 0.7).
+- Only use cohort_quarter or time-series when a concrete time range is explicitly requested.
+- If this conflicts with generic cohort rules, prefer this section.
