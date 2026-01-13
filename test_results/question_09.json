@@ -1,0 +1,487 @@
+{
+  "question": "For each customer, show their ID, liquid and total assets, liquidity measure, monthly income, investment amount and label of their investment potential.",
+  "ambiguity_check": {
+    "is_ambiguous": true,
+    "reason": "Mehrere zentrale Begriffe sind nicht eindeutig definiert: (1) „customer ID“ kann clientref oder der durchgängige Schlüssel coreregistry/…ref sein. (2) „liquidity measure“ ist nicht spezifiziert (es gibt mehrere naheliegende Kennzahlen im Domain-Wissen, z.B. ALR=liqassets/totassets oder FSI-Komponenten). (3) „label of their investment potential“ ist nicht definiert (keine Regel/Schwellenwerte für Labels wie High/Medium/Low; auch unklar, ob Investment Potential über investamt-Anteil an totassets, IPQ, ALR+mthincome etc. bestimmt werden soll). Ohne diese Festlegungen ist keine sichere, korrekte SQL-Abfrage möglich.",
+    "questions": [
+      "Welche ID soll ausgegeben werden: core_record.clientref (Kunden-ID) oder der Record-Schlüssel core_record.coreregistry (der über die Tabellenkette joinbar ist)?",
+      "Was genau meinst du mit „liquidity measure“: Asset Liquidity Ratio (liqassets/totassets), Financial Stability Index (FSI) oder eine andere Kennzahl?",
+      "Wie soll „investment potential“ gelabelt werden (welche Logik/Schwellenwerte oder welche definierte Kennzahl wie IPQ/Investment Services Target/Investment Focused)?"
+    ]
+  },
+  "generated_sql": "SELECT\n  cr.clientref AS customer_id,\n  ea.liqassets,\n  ea.totassets,\n  CASE\n    WHEN ea.totassets IS NULL OR ea.totassets = 0 THEN NULL\n    ELSE ea.liqassets * 1.0 / ea.totassets\n  END AS liquidity_measure,\n  ei.mthincome,\n  ea.investamt,\n  CASE\n    WHEN ea.investamt IS NULL THEN 'Unknown'\n    WHEN ea.totassets IS NULL OR ea.totassets = 0 THEN 'Unknown'\n    WHEN (ea.investamt * 1.0 / ea.totassets) >= 0.30 THEN 'High'\n    WHEN (ea.investamt * 1.0 / ea.totassets) >= 0.10 THEN 'Moderate'\n    ELSE 'Low'\n  END AS investment_potential_label\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref",
+  "validation": {
+    "is_valid": true,
+    "errors": [],
+    "severity": "low",
+    "suggestions": [
+      "Optional: Use LEFT JOIN instead of JOIN if you want to keep core_record rows even when employment_and_income or expenses_and_assets is missing.",
+      "Optional: If you want to avoid NULL liquidity_measure when liqassets is NULL, wrap liqassets with COALESCE(ea.liqassets, 0) (only if that matches your business logic).",
+      "Optional: Consider rounding liquidity_measure (e.g., ROUND(..., 4)) for presentation consistency."
+    ]
+  },
+  "results": [
+    {
+      "customer_id": "CU338528",
+      "liqassets": 94190.0,
+      "totassets": 1495371.0,
+      "liquidity_measure": 0.062987713416938,
+      "mthincome": 6564.25,
+      "investamt": 163007.0,
+      "investment_potential_label": "Moderate"
+    },
+    {
+      "customer_id": "CU209954",
+      "liqassets": 186120.0,
+      "totassets": 1923802.0,
+      "liquidity_measure": 0.0967459229172233,
+      "mthincome": 33835.58,
+      "investamt": 643448.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU314145",
+      "liqassets": 429061.0,
+      "totassets": 1259260.0,
+      "liquidity_measure": 0.3407247113384051,
+      "mthincome": 18687.75,
+      "investamt": 523492.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU727930",
+      "liqassets": 326737.0,
+      "totassets": 555132.0,
+      "liquidity_measure": 0.5885753298314635,
+      "mthincome": 21272.83,
+      "investamt": 363903.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU794268",
+      "liqassets": 226494.0,
+      "totassets": 846173.0,
+      "liquidity_measure": 0.2676686682274192,
+      "mthincome": 29862.83,
+      "investamt": 312806.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU488662",
+      "liqassets": 172739.0,
+      "totassets": 277451.0,
+      "liquidity_measure": 0.6225928181913203,
+      "mthincome": 5401.75,
+      "investamt": 285627.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU390121",
+      "liqassets": 284607.0,
+      "totassets": 1190666.0,
+      "liquidity_measure": 0.23903176877478655,
+      "mthincome": 29779.67,
+      "investamt": 377119.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU259187",
+      "liqassets": 50319.0,
+      "totassets": 1079715.0,
+      "liquidity_measure": 0.04660396493519123,
+      "mthincome": 7582.5,
+      "investamt": 698147.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU596654",
+      "liqassets": 262653.0,
+      "totassets": 1838678.0,
+      "liquidity_measure": 0.14284882943071053,
+      "mthincome": 20711.92,
+      "investamt": 108554.0,
+      "investment_potential_label": "Low"
+    },
+    {
+      "customer_id": "CU572395",
+      "liqassets": 114233.0,
+      "totassets": 663194.0,
+      "liquidity_measure": 0.17224673323341286,
+      "mthincome": 3105.67,
+      "investamt": 706349.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU646174",
+      "liqassets": 200195.0,
+      "totassets": 631745.0,
+      "liquidity_measure": 0.31689210045192284,
+      "mthincome": 28742.08,
+      "investamt": 675468.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU466756",
+      "liqassets": 374806.0,
+      "totassets": 634974.0,
+      "liquidity_measure": 0.5902698378201312,
+      "mthincome": 10998.33,
+      "investamt": 383086.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU478628",
+      "liqassets": 4920.0,
+      "totassets": 449712.0,
+      "liquidity_measure": 0.010940335147827943,
+      "mthincome": 30262.75,
+      "investamt": 933147.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU133084",
+      "liqassets": 275510.0,
+      "totassets": 829580.0,
+      "liquidity_measure": 0.33210781359242025,
+      "mthincome": 12955.58,
+      "investamt": 303766.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU993201",
+      "liqassets": 225367.0,
+      "totassets": 382490.0,
+      "liquidity_measure": 0.589210175429423,
+      "mthincome": 26878.67,
+      "investamt": 845844.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU572551",
+      "liqassets": 250760.0,
+      "totassets": 1700935.0,
+      "liquidity_measure": 0.14742479871364866,
+      "mthincome": 1925.33,
+      "investamt": 510567.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU450680",
+      "liqassets": 277342.0,
+      "totassets": 1666761.0,
+      "liquidity_measure": 0.16639578199873886,
+      "mthincome": 25511.67,
+      "investamt": 531761.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU496685",
+      "liqassets": 329932.0,
+      "totassets": 1846280.0,
+      "liquidity_measure": 0.17870095543471196,
+      "mthincome": 10928.33,
+      "investamt": 995124.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU990238",
+      "liqassets": 478309.0,
+      "totassets": 801215.0,
+      "liquidity_measure": 0.5969795872518613,
+      "mthincome": 5215.83,
+      "investamt": 475692.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU465765",
+      "liqassets": 36203.0,
+      "totassets": 456257.0,
+      "liquidity_measure": 0.07934782370462261,
+      "mthincome": 39672.75,
+      "investamt": 883237.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU950980",
+      "liqassets": 390300.0,
+      "totassets": 264158.0,
+      "liquidity_measure": 1.4775248146942361,
+      "mthincome": 8876.08,
+      "investamt": 318945.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU510437",
+      "liqassets": 327959.0,
+      "totassets": 194996.0,
+      "liquidity_measure": 1.6818755256518083,
+      "mthincome": 4478.17,
+      "investamt": 795900.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU226752",
+      "liqassets": 68913.0,
+      "totassets": 909790.0,
+      "liquidity_measure": 0.07574605128656063,
+      "mthincome": 34752.25,
+      "investamt": 862559.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU790495",
+      "liqassets": 425133.0,
+      "totassets": 1099502.0,
+      "liquidity_measure": 0.3866595967992782,
+      "mthincome": 36844.25,
+      "investamt": 969288.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU334526",
+      "liqassets": 168868.0,
+      "totassets": 1888947.0,
+      "liquidity_measure": 0.08939795558054302,
+      "mthincome": 15466.08,
+      "investamt": 455900.0,
+      "investment_potential_label": "Moderate"
+    },
+    {
+      "customer_id": "CU872801",
+      "liqassets": 445414.0,
+      "totassets": 163762.0,
+      "liquidity_measure": 2.7198861762802116,
+      "mthincome": 13932.58,
+      "investamt": 921365.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU706313",
+      "liqassets": 63886.0,
+      "totassets": 1725531.0,
+      "liquidity_measure": 0.03702396537645513,
+      "mthincome": 32269.42,
+      "investamt": 22619.0,
+      "investment_potential_label": "Low"
+    },
+    {
+      "customer_id": "CU257943",
+      "liqassets": 283634.0,
+      "totassets": 311818.0,
+      "liquidity_measure": 0.9096139414658551,
+      "mthincome": 28957.83,
+      "investamt": 483546.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU590052",
+      "liqassets": 475716.0,
+      "totassets": 934678.0,
+      "liquidity_measure": 0.5089624448205692,
+      "mthincome": 9145.25,
+      "investamt": 708061.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU250617",
+      "liqassets": 55503.0,
+      "totassets": 1033596.0,
+      "liquidity_measure": 0.05369893072341611,
+      "mthincome": 38216.25,
+      "investamt": 446462.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU543548",
+      "liqassets": 210790.0,
+      "totassets": 1415997.0,
+      "liquidity_measure": 0.14886330973865058,
+      "mthincome": 2055.83,
+      "investamt": 717735.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU776107",
+      "liqassets": 293278.0,
+      "totassets": 199067.0,
+      "liquidity_measure": 1.4732627708259027,
+      "mthincome": 37966.92,
+      "investamt": 153689.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU628920",
+      "liqassets": 411686.0,
+      "totassets": 76333.0,
+      "liquidity_measure": 5.393289927030249,
+      "mthincome": 21405.25,
+      "investamt": 808502.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU459105",
+      "liqassets": 211931.0,
+      "totassets": 1793740.0,
+      "liquidity_measure": 0.11815034508903186,
+      "mthincome": 20519.33,
+      "investamt": 981686.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU245038",
+      "liqassets": 92141.0,
+      "totassets": 46156.0,
+      "liquidity_measure": 1.9962951728919318,
+      "mthincome": 7123.33,
+      "investamt": 641089.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU146539",
+      "liqassets": 86658.0,
+      "totassets": 780656.0,
+      "liquidity_measure": 0.11100664056895738,
+      "mthincome": 7871.0,
+      "investamt": 842207.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU396524",
+      "liqassets": 296136.0,
+      "totassets": 1267240.0,
+      "liquidity_measure": 0.23368580537230516,
+      "mthincome": 28803.83,
+      "investamt": 248950.0,
+      "investment_potential_label": "Moderate"
+    },
+    {
+      "customer_id": "CU406149",
+      "liqassets": 217607.0,
+      "totassets": 1881207.0,
+      "liquidity_measure": 0.11567413899693123,
+      "mthincome": 36181.75,
+      "investamt": 398727.0,
+      "investment_potential_label": "Moderate"
+    },
+    {
+      "customer_id": "CU287208",
+      "liqassets": 77885.0,
+      "totassets": 377314.0,
+      "liquidity_measure": 0.20641958686929188,
+      "mthincome": 7059.33,
+      "investamt": 31706.0,
+      "investment_potential_label": "Low"
+    },
+    {
+      "customer_id": "CU695152",
+      "liqassets": 406792.0,
+      "totassets": 360716.0,
+      "liquidity_measure": 1.1277348384878962,
+      "mthincome": 41372.58,
+      "investamt": 807574.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU636798",
+      "liqassets": 351033.0,
+      "totassets": 186906.0,
+      "liquidity_measure": 1.8781259028602613,
+      "mthincome": 7808.92,
+      "investamt": 172474.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU472683",
+      "liqassets": 11679.0,
+      "totassets": 1933746.0,
+      "liquidity_measure": 0.006039572932536124,
+      "mthincome": 33384.83,
+      "investamt": 832606.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU689896",
+      "liqassets": 72377.0,
+      "totassets": 1712168.0,
+      "liquidity_measure": 0.042272136846384235,
+      "mthincome": 34519.42,
+      "investamt": 43136.0,
+      "investment_potential_label": "Low"
+    },
+    {
+      "customer_id": "CU716365",
+      "liqassets": 154259.0,
+      "totassets": 988926.0,
+      "liquidity_measure": 0.1559863933196215,
+      "mthincome": 16168.67,
+      "investamt": 610139.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU239744",
+      "liqassets": 57044.0,
+      "totassets": 131279.0,
+      "liquidity_measure": 0.4345249430602,
+      "mthincome": 22163.67,
+      "investamt": 879112.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU899231",
+      "liqassets": 171893.0,
+      "totassets": 1501606.0,
+      "liquidity_measure": 0.11447277115301883,
+      "mthincome": 10665.33,
+      "investamt": 416820.0,
+      "investment_potential_label": "Moderate"
+    },
+    {
+      "customer_id": "CU911050",
+      "liqassets": 491033.0,
+      "totassets": 48476.0,
+      "liquidity_measure": 10.129404241274033,
+      "mthincome": 9055.75,
+      "investamt": 462258.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU257244",
+      "liqassets": 97540.0,
+      "totassets": 1720214.0,
+      "liquidity_measure": 0.056702247511065486,
+      "mthincome": 3771.08,
+      "investamt": 947561.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU139206",
+      "liqassets": 195905.0,
+      "totassets": 1743869.0,
+      "liquidity_measure": 0.11233928695332046,
+      "mthincome": 33668.0,
+      "investamt": 853860.0,
+      "investment_potential_label": "High"
+    },
+    {
+      "customer_id": "CU121543",
+      "liqassets": 130170.0,
+      "totassets": 1187727.0,
+      "liquidity_measure": 0.10959589198527944,
+      "mthincome": 2624.5,
+      "investamt": 823995.0,
+      "investment_potential_label": "High"
+    }
+  ],
+  "row_count": 50,
+  "query_id": "61323e64c1d540c097934833a4699f54",
+  "page": 1,
+  "page_size": 50,
+  "total_pages": 20,
+  "total_rows": 1000,
+  "has_next_page": true,
+  "has_previous_page": false,
+  "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Mehrere zentrale Begriffe sind nicht eindeutig definiert: (1) „customer ID“ kann clientref oder der durchgängige Schlüssel coreregistry/…ref sein. (2) „liquidity measure“ ist nicht spezifiziert (es gibt mehrere naheliegende Kennzahlen im Domain-Wissen, z.B. ALR=liqassets/totassets oder FSI-Komponenten). (3) „label of their investment potential“ ist nicht definiert (keine Regel/Schwellenwerte für Labels wie High/Medium/Low; auch unklar, ob Investment Potential über investamt-Anteil an totassets, IPQ, ALR+mthincome etc. bestimmt werden soll). Ohne diese Festlegungen ist keine sichere, korrekte SQL-Abfrage möglich.. Klärungsfragen: Welche ID soll ausgegeben werden: core_record.clientref (Kunden-ID) oder der Record-Schlüssel core_record.coreregistry (der über die Tabellenkette joinbar ist)?, Was genau meinst du mit „liquidity measure“: Asset Liquidity Ratio (liqassets/totassets), Financial Stability Index (FSI) oder eine andere Kennzahl?, Wie soll „investment potential“ gelabelt werden (welche Logik/Schwellenwerte oder welche definierte Kennzahl wie IPQ/Investment Services Target/Investment Focused)?",
+  "summary": "Die Abfrage liefert pro Kunde (insgesamt 1000 Zeilen, hier die ersten 50) Liquid- und Gesamtvermögen, daraus die Liquiditätsquote, das monatliche Einkommen sowie den Investitionsbetrag inkl. Einstufung des Investmentpotenzials (Low/Moderate/High basierend auf Investamt/Gesamtvermögen). In den Beispielzeilen fällt CU209954 mit sehr hohem Monatseinkommen (33.835,58) und „High“-Potenzial (643.448 Investamt bei 1.923.802 Gesamtvermögen) sowie CU314145 mit hoher Liquiditätsquote (~0,341) und ebenfalls „High“ (523.492 bei 1.259.260) auf. CU338528 liegt bei niedrigerer Liquiditätsquote (~0,063) und „Moderate“ (163.007 bei 1.495.371), was zeigt, dass die Einstufung stark vom Investitionsanteil am Gesamtvermögen abhängt.",
+  "explanation": "Returns one row per customer with CU-format customer_id, liquid and total assets, a liquidity measure (liqassets/totassets), monthly income, investment amount, and a derived investment potential label based on investment share of total assets.",
+  "error": null
+}

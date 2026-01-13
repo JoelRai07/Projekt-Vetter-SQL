@@ -1,0 +1,108 @@
+{
+  "question": "Can you show me the top wealthy customers with their financial value? Including their IDs, total assets, total liabilities, the computed net worth value, and their ranking.",
+  "ambiguity_check": {
+    "is_ambiguous": true,
+    "reason": "Wesentliche Parameter für eine korrekte SQL-Abfrage fehlen: „top wealthy“ ist nicht definiert (nach welchem Kriterium: networth, totassets, liqassets, custlifeval etc.), es ist keine Anzahl (Top N) oder ein Schwellenwert angegeben, und es ist unklar, ob „financial value“ den CLV (custlifeval) oder den Vermögenswert (Net Worth) meint. Außerdem ist nicht spezifiziert, ob alle Kunden oder nur ein Zeitraum/aktueller Snapshot (z.B. neuester scoredate pro clientref) betrachtet werden soll, da core_record mehrere Einträge pro Kunde haben kann.",
+    "questions": [
+      "Was bedeutet „top wealthy“ genau: Ranking nach networth (totassets - totliabs), nach totassets, oder nach einem anderen Feld?",
+      "Wie viele Ergebnisse sollen zurückgegeben werden (Top 10/50/100) oder gibt es einen Mindestwert/Schwellenwert?",
+      "Was meinst du mit „financial value“: Customer Lifetime Value (custlifeval) oder den berechneten Net Worth, oder beides?",
+      "Sollen pro Kunde (clientref) nur die aktuellste/neueste Bewertung (z.B. max(scoredate) oder max(timemark)) verwendet werden, oder alle Datensätze?"
+    ]
+  },
+  "generated_sql": "WITH base AS (\n  SELECT\n    cr.clientref AS customer_id,\n    ea.totassets AS total_assets,\n    ea.totliabs AS total_liabilities,\n    (ea.totassets - ea.totliabs) AS net_worth\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\n  JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\n  JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\n)\nSELECT\n  customer_id,\n  total_assets,\n  total_liabilities,\n  net_worth,\n  RANK() OVER (ORDER BY net_worth DESC) AS wealth_rank\nFROM base\nORDER BY net_worth DESC\nLIMIT 10",
+  "validation": {
+    "is_valid": true,
+    "errors": [],
+    "severity": "low",
+    "suggestions": [
+      "Optional: If you want deterministic ordering when net_worth ties occur, extend ORDER BY with a tiebreaker (e.g., ORDER BY net_worth DESC, customer_id).",
+      "Optional: The joins to credit_and_compliance and credit_accounts_and_history are not used in SELECT/filters; if not needed, remove them to avoid accidental row multiplication and improve performance.",
+      "Optional: If multiple core_record rows can share the same clientref, consider whether you want ranking per clientref or per coreregistry; currently it ranks rows returned by the join chain."
+    ]
+  },
+  "results": [
+    {
+      "customer_id": "CU154870",
+      "total_assets": 1966126.0,
+      "total_liabilities": 50822.0,
+      "net_worth": 1915304.0,
+      "wealth_rank": 1
+    },
+    {
+      "customer_id": "CU203973",
+      "total_assets": 1951681.0,
+      "total_liabilities": 51075.0,
+      "net_worth": 1900606.0,
+      "wealth_rank": 2
+    },
+    {
+      "customer_id": "CU452686",
+      "total_assets": 1938937.0,
+      "total_liabilities": 42258.0,
+      "net_worth": 1896679.0,
+      "wealth_rank": 3
+    },
+    {
+      "customer_id": "CU100984",
+      "total_assets": 1983531.0,
+      "total_liabilities": 130828.0,
+      "net_worth": 1852703.0,
+      "wealth_rank": 4
+    },
+    {
+      "customer_id": "CU503920",
+      "total_assets": 1979348.0,
+      "total_liabilities": 138403.0,
+      "net_worth": 1840945.0,
+      "wealth_rank": 5
+    },
+    {
+      "customer_id": "CU181502",
+      "total_assets": 1967645.0,
+      "total_liabilities": 151486.0,
+      "net_worth": 1816159.0,
+      "wealth_rank": 6
+    },
+    {
+      "customer_id": "CU209954",
+      "total_assets": 1923802.0,
+      "total_liabilities": 111285.0,
+      "net_worth": 1812517.0,
+      "wealth_rank": 7
+    },
+    {
+      "customer_id": "CU836390",
+      "total_assets": 1924341.0,
+      "total_liabilities": 128747.0,
+      "net_worth": 1795594.0,
+      "wealth_rank": 8
+    },
+    {
+      "customer_id": "CU369516",
+      "total_assets": 1835689.0,
+      "total_liabilities": 40900.0,
+      "net_worth": 1794789.0,
+      "wealth_rank": 9
+    },
+    {
+      "customer_id": "CU764644",
+      "total_assets": 1816630.0,
+      "total_liabilities": 32284.0,
+      "net_worth": 1784346.0,
+      "wealth_rank": 10
+    }
+  ],
+  "row_count": 10,
+  "query_id": "961c563ae49144dd97480fdc5cb39c10",
+  "page": 1,
+  "page_size": 50,
+  "total_pages": 1,
+  "total_rows": 10,
+  "has_next_page": false,
+  "has_previous_page": false,
+  "notice": " Hinweis: Ambiguity: Wesentliche Parameter für eine korrekte SQL-Abfrage fehlen: „top wealthy“ ist nicht definiert (nach welchem Kriterium: networth, totassets, liqassets, custlifeval etc.), es ist keine Anzahl (Top N) oder ein Schwellenwert angegeben, und es ist unklar, ob „financial value“ den CLV (custlifeval) oder den Vermögenswert (Net Worth) meint. Außerdem ist nicht spezifiziert, ob alle Kunden oder nur ein Zeitraum/aktueller Snapshot (z.B. neuester scoredate pro clientref) betrachtet werden soll, da core_record mehrere Einträge pro Kunde haben kann.. Klärungsfragen: Was bedeutet „top wealthy“ genau: Ranking nach networth (totassets - totliabs), nach totassets, oder nach einem anderen Feld?, Wie viele Ergebnisse sollen zurückgegeben werden (Top 10/50/100) oder gibt es einen Mindestwert/Schwellenwert?, Was meinst du mit „financial value“: Customer Lifetime Value (custlifeval) oder den berechneten Net Worth, oder beides?, Sollen pro Kunde (clientref) nur die aktuellste/neueste Bewertung (z.B. max(scoredate) oder max(timemark)) verwendet werden, oder alle Datensätze?",
+  "summary": "Die Abfrage liefert die Top 10 vermögendsten Kunden inklusive Assets, Liabilities, berechnetem Net Worth und Rang. An der Spitze steht CU154870 mit Total Assets von 1,966,126 und Total Liabilities von 50,822 (Net Worth 1,915,304; Rang 1), gefolgt von CU203973 (Net Worth 1,900,606; Rang 2) und CU452686 (Net Worth 1,896,679; Rang 3). Insgesamt liegen die führenden Net-Worth-Werte sehr nah beieinander (alle knapp unter bzw. um 1.9 Mio.), was auf ein enges Ranking an der Spitze hindeutet.",
+  "explanation": "Returns the top 10 customers by computed net worth (totassets - totliabs), showing CU-format customer_id, total assets, total liabilities, net worth, and a wealth ranking. Uses the required FK join chain and ranking via window function.",
+  "error": null
+}

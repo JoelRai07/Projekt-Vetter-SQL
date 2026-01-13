@@ -1,0 +1,19 @@
+{
+  "question": "I need to analyze debt burden across different customer segments. Can you provide a summary for each segment with relevant debt metrics? Also add a grant total row. Exclude any customer segment with few customers and order the results.",
+  "ambiguity_check": null,
+  "generated_sql": "",
+  "validation": null,
+  "results": [],
+  "row_count": 0,
+  "query_id": null,
+  "page": 1,
+  "page_size": 100,
+  "total_pages": null,
+  "total_rows": null,
+  "has_next_page": false,
+  "has_previous_page": false,
+  "notice": null,
+  "summary": null,
+  "explanation": "Interner Fehler – bitte erneut versuchen.",
+  "error": "Interner Fehler: Incorrect number of bindings supplied. The current statement uses 1, and there are 0 supplied."
+}

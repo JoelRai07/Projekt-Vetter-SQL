@@ -1,0 +1,48 @@
+{
+  "question": "To analyze digital engagement trends, please group customers into quarterly cohorts based on their tenure and identify digital natives. For each combination of cohort with whether they are digital natives, show the cohort quarter, bool value, the cohort size, engagement score, the percentage of the cohort with high engagement, and high-engagement percentage broken down by digital native status.",
+  "ambiguity_check": {
+    "is_ambiguous": true,
+    "reason": "Mehrere für eine korrekte SQL-Abfrage essentielle Definitionen sind unklar: (1) „quarterly cohorts based on their tenure“ und „Cohort Quarter“ sind nicht eindeutig operationalisiert, da tenureyrs nur Jahre (Integer) ist und keine Start-/Onboarding-Datumsspalte existiert; die im Domain-Wissen genannte Definition („scoring date minus tenure years“) ist ohne genaue Quartalsableitung (Kalenderquartal? aus scoredate? aus timemark?) und ohne Monats/Tag-Genauigkeit mehrdeutig. (2) „digital natives“ ist nicht als Regel definiert; es gibt nur „Digital First Customer“ (onlineuse/mobileuse High und autopay Yes), was nicht zwingend dasselbe ist. (3) „engagement score“ kann CES (definiert) sein, aber es ist nicht explizit bestätigt, und die benötigten Inputs liegen in mehreren Tabellen; zudem ist unklar, ob CES pro Kunde oder als Aggregat (avg/median) pro Gruppe ausgegeben werden soll. (4) „percentage of the cohort with high engagement“ benötigt eine klare Definition von „high engagement“ (z.B. CES > 0.7 laut Domain-Wissen) und ob der Nenner die gesamte Kohorte oder die jeweilige Digital-Native-Untergruppe ist. (5) „high-engagement percentage broken down by digital native status“ ist redundant/unklar, weil bereits nach digital native gruppiert werden soll; es ist unklar, ob zusätzlich eine Gesamtzeile pro Kohorte (ohne Breakdown) erwartet wird.",
+    "questions": [
+      "Wie genau soll der „Cohort Quarter“ berechnet werden: aus core_record.scoredate oder timemark, und ist die Kohorte das Kalenderquartal des (scoredate - tenureyrs in Jahren) oder etwas anderes?",
+      "Wie definieren Sie „digital natives“ konkret: soll dafür die vorhandene Regel „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes') verwendet werden, oder eine andere Definition?"
+    ]
+  },
+  "generated_sql": "WITH base AS (\n  SELECT\n    CASE\n      WHEN (\n        (json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n         OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High')\n        AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'\n      ) THEN 1 ELSE 0\n    END AS is_digital_native,\n    (0.4 * cah.produsescore\n     + 0.3 * cah.chanusescore\n     + 0.2 * bt.bankrelscore\n     + 0.1 * (cah.custservint / 10.0)\n    ) AS ces\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\n  JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\n  JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\n)\nSELECT\n  is_digital_native,\n  COUNT(*) AS cohort_size,\n  AVG(ces) AS avg_engagement,\n  CAST(SUM(CASE WHEN ces > 0.7 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) AS pct_high_engagement\nFROM base\nGROUP BY is_digital_native\nORDER BY is_digital_native",
+  "validation": {
+    "is_valid": true,
+    "errors": [],
+    "severity": "low",
+    "suggestions": [
+      "Optional: Guard against NULL JSON values by wrapping json_extract(...) with COALESCE(...,'') if you want NULLs treated as non-High/No.",
+      "Optional: If ces can be NULL (e.g., any input score is NULL), AVG(ces) will ignore those rows; use COALESCE on components if you want NULL treated as 0.",
+      "Optional: Add a secondary ORDER BY (e.g., ORDER BY is_digital_native, cohort_size DESC) if deterministic ordering beyond the flag is desired."
+    ]
+  },
+  "results": [
+    {
+      "is_digital_native": 0,
+      "cohort_size": 715,
+      "avg_engagement": 0.5465812587412587,
+      "pct_high_engagement": 0.2111888111888112
+    },
+    {
+      "is_digital_native": 1,
+      "cohort_size": 285,
+      "avg_engagement": 0.5426698245614034,
+      "pct_high_engagement": 0.16842105263157894
+    }
+  ],
+  "row_count": 2,
+  "query_id": "1ea27e6ae4474550b555fc49c9edc5b3",
+  "page": 1,
+  "page_size": 50,
+  "total_pages": 1,
+  "total_rows": 2,
+  "has_next_page": false,
+  "has_previous_page": false,
+  "notice": " Hinweis: Ambiguity: Mehrere für eine korrekte SQL-Abfrage essentielle Definitionen sind unklar: (1) „quarterly cohorts based on their tenure“ und „Cohort Quarter“ sind nicht eindeutig operationalisiert, da tenureyrs nur Jahre (Integer) ist und keine Start-/Onboarding-Datumsspalte existiert; die im Domain-Wissen genannte Definition („scoring date minus tenure years“) ist ohne genaue Quartalsableitung (Kalenderquartal? aus scoredate? aus timemark?) und ohne Monats/Tag-Genauigkeit mehrdeutig. (2) „digital natives“ ist nicht als Regel definiert; es gibt nur „Digital First Customer“ (onlineuse/mobileuse High und autopay Yes), was nicht zwingend dasselbe ist. (3) „engagement score“ kann CES (definiert) sein, aber es ist nicht explizit bestätigt, und die benötigten Inputs liegen in mehreren Tabellen; zudem ist unklar, ob CES pro Kunde oder als Aggregat (avg/median) pro Gruppe ausgegeben werden soll. (4) „percentage of the cohort with high engagement“ benötigt eine klare Definition von „high engagement“ (z.B. CES > 0.7 laut Domain-Wissen) und ob der Nenner die gesamte Kohorte oder die jeweilige Digital-Native-Untergruppe ist. (5) „high-engagement percentage broken down by digital native status“ ist redundant/unklar, weil bereits nach digital native gruppiert werden soll; es ist unklar, ob zusätzlich eine Gesamtzeile pro Kohorte (ohne Breakdown) erwartet wird.. Klärungsfragen: Wie genau soll der „Cohort Quarter“ berechnet werden: aus core_record.scoredate oder timemark, und ist die Kohorte das Kalenderquartal des (scoredate - tenureyrs in Jahren) oder etwas anderes?, Wie definieren Sie „digital natives“ konkret: soll dafür die vorhandene Regel „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes') verwendet werden, oder eine andere Definition?",
+  "summary": "Die Abfrage liefert keine quartalsbasierten Tenure-Kohorten, sondern nur einen Vergleich nach Digital-Native-Status: Nicht‑Digital‑Natives stellen mit 715 Kunden die größere Gruppe und haben einen leicht höheren durchschnittlichen Engagement-Score (0,547 vs. 0,543) sowie einen höheren Anteil mit hohem Engagement (21,1% vs. 16,8%) als Digital Natives (285 Kunden). Insgesamt deutet das darauf hin, dass Digital Natives in diesem Datensatz nicht automatisch stärker engagiert sind. Nächster Schritt wäre, ein Tenure-/Startdatum in die Base-CTE aufzunehmen und daraus Cohort-Quarter zu berechnen, um die gewünschte Quartals-Kohortenanalyse inkl. Aufschlüsselung nach Digital-Native-Status zu ermöglichen.",
+  "explanation": "Builds a customer-level base set with (1) is_digital_native defined per the Digital First Customer rule using qualified JSON fields from bank_and_transactions, and (2) CES computed via the BSL formula. Because no explicit time range is provided, it returns the required 2-row summary grouped only by is_digital_native: cohort_size, avg_engagement (CES), and pct_high_engagement (CES > 0.7). [BSL compliance regeneration]",
+  "error": null
+}

@@ -1,0 +1,286 @@
+{
+  "question": "Can you identify all customers focused on investments in our database? I need to see their IDs, investment amounts and total assets.",
+  "ambiguity_check": {
+    "is_ambiguous": true,
+    "reason": "„Focused on investments“ ist nicht eindeutig definiert. Im Domain-Wissen existiert zwar eine Definition für „Investment Focused“, diese erfordert jedoch zusätzlich JSON-Felder (invcluster.investport, invcluster.investexp) und eine Schwelle (investamt > 0.3 × totassets). Die Frage nennt diese Kriterien nicht explizit und sagt auch nicht, ob genau diese Definition verwendet werden soll. Außerdem ist „customer IDs“ unklar, ob damit clientref (Kunden-ID) oder coreregistry (Record-ID) gemeint ist.",
+    "questions": [
+      "Soll „focused on investments“ exakt nach der Domain-Definition „Investment Focused“ gefiltert werden (invcluster.investport ∈ {Moderate, Aggressive} AND invcluster.investexp = Extensive AND investamt > 0.3 × totassets)?",
+      "Welche ID soll ausgegeben werden: clientref (Customer ID) aus core_record oder coreregistry (Core-Record-ID) bzw. ein anderer Identifier?"
+    ]
+  },
+  "generated_sql": "SELECT\n  cr.clientref AS customer_id,\n  ea.investamt AS investment_amount,\n  ea.totassets AS total_assets\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nWHERE json_extract(bt.chaninvdatablock, '$.invcluster.investport') IN ('Moderate', 'Aggressive')\n  AND json_extract(bt.chaninvdatablock, '$.invcluster.investexp') = 'Extensive'\n  AND ea.investamt > 0.3 * ea.totassets",
+  "validation": {
+    "is_valid": true,
+    "errors": [],
+    "severity": "low",
+    "suggestions": [
+      "Optional: Guard against NULL totals to avoid NULL comparison results: add `ea.totassets IS NOT NULL AND ea.totassets != 0` (and/or `ea.investamt IS NOT NULL`).",
+      "Optional: If `chaninvdatablock` can contain invalid JSON, wrap with `json_valid(bt.chaninvdatablock)` in WHERE to prevent unexpected NULLs from `json_extract`.",
+      "Logic check: The example JSON shows `invcluster.investexp` values like 'Moderate'; filtering for `= 'Extensive'` may return few/no rows depending on actual data distribution."
+    ]
+  },
+  "results": [
+    {
+      "customer_id": "CU510437",
+      "investment_amount": 795900.0,
+      "total_assets": 194996.0
+    },
+    {
+      "customer_id": "CU590052",
+      "investment_amount": 708061.0,
+      "total_assets": 934678.0
+    },
+    {
+      "customer_id": "CU876471",
+      "investment_amount": 462864.0,
+      "total_assets": 1073011.0
+    },
+    {
+      "customer_id": "CU906564",
+      "investment_amount": 589529.0,
+      "total_assets": 1887143.0
+    },
+    {
+      "customer_id": "CU205099",
+      "investment_amount": 291820.0,
+      "total_assets": 586082.0
+    },
+    {
+      "customer_id": "CU805853",
+      "investment_amount": 783620.0,
+      "total_assets": 4474.0
+    },
+    {
+      "customer_id": "CU979203",
+      "investment_amount": 302362.0,
+      "total_assets": 304027.0
+    },
+    {
+      "customer_id": "CU933465",
+      "investment_amount": 148415.0,
+      "total_assets": 335865.0
+    },
+    {
+      "customer_id": "CU152246",
+      "investment_amount": 884380.0,
+      "total_assets": 122019.0
+    },
+    {
+      "customer_id": "CU485747",
+      "investment_amount": 360202.0,
+      "total_assets": 955663.0
+    },
+    {
+      "customer_id": "CU367158",
+      "investment_amount": 285443.0,
+      "total_assets": 888087.0
+    },
+    {
+      "customer_id": "CU772323",
+      "investment_amount": 602116.0,
+      "total_assets": 445419.0
+    },
+    {
+      "customer_id": "CU510937",
+      "investment_amount": 648606.0,
+      "total_assets": 808018.0
+    },
+    {
+      "customer_id": "CU221557",
+      "investment_amount": 661040.0,
+      "total_assets": 1433499.0
+    },
+    {
+      "customer_id": "CU536200",
+      "investment_amount": 305263.0,
+      "total_assets": 777763.0
+    },
+    {
+      "customer_id": "CU857784",
+      "investment_amount": 905742.0,
+      "total_assets": 1935526.0
+    },
+    {
+      "customer_id": "CU299135",
+      "investment_amount": 686760.0,
+      "total_assets": 430677.0
+    },
+    {
+      "customer_id": "CU850967",
+      "investment_amount": 631427.0,
+      "total_assets": 1910484.0
+    },
+    {
+      "customer_id": "CU586098",
+      "investment_amount": 737733.0,
+      "total_assets": 1413670.0
+    },
+    {
+      "customer_id": "CU795375",
+      "investment_amount": 703597.0,
+      "total_assets": 353346.0
+    },
+    {
+      "customer_id": "CU145752",
+      "investment_amount": 405358.0,
+      "total_assets": 309841.0
+    },
+    {
+      "customer_id": "CU566777",
+      "investment_amount": 639693.0,
+      "total_assets": 482323.0
+    },
+    {
+      "customer_id": "CU660850",
+      "investment_amount": 716230.0,
+      "total_assets": 1161485.0
+    },
+    {
+      "customer_id": "CU467816",
+      "investment_amount": 959322.0,
+      "total_assets": 70796.0
+    },
+    {
+      "customer_id": "CU474384",
+      "investment_amount": 710281.0,
+      "total_assets": 774932.0
+    },
+    {
+      "customer_id": "CU576359",
+      "investment_amount": 815014.0,
+      "total_assets": 1261144.0
+    },
+    {
+      "customer_id": "CU179700",
+      "investment_amount": 122953.0,
+      "total_assets": 31283.0
+    },
+    {
+      "customer_id": "CU566504",
+      "investment_amount": 49289.0,
+      "total_assets": 76121.0
+    },
+    {
+      "customer_id": "CU854993",
+      "investment_amount": 659300.0,
+      "total_assets": 1007432.0
+    },
+    {
+      "customer_id": "CU523128",
+      "investment_amount": 609511.0,
+      "total_assets": 271847.0
+    },
+    {
+      "customer_id": "CU895068",
+      "investment_amount": 906923.0,
+      "total_assets": 988022.0
+    },
+    {
+      "customer_id": "CU352386",
+      "investment_amount": 352761.0,
+      "total_assets": 240369.0
+    },
+    {
+      "customer_id": "CU629031",
+      "investment_amount": 727240.0,
+      "total_assets": 1121571.0
+    },
+    {
+      "customer_id": "CU557882",
+      "investment_amount": 438063.0,
+      "total_assets": 688337.0
+    },
+    {
+      "customer_id": "CU322817",
+      "investment_amount": 215107.0,
+      "total_assets": 503329.0
+    },
+    {
+      "customer_id": "CU561367",
+      "investment_amount": 858477.0,
+      "total_assets": 788838.0
+    },
+    {
+      "customer_id": "CU702212",
+      "investment_amount": 518392.0,
+      "total_assets": 860229.0
+    },
+    {
+      "customer_id": "CU459906",
+      "investment_amount": 893188.0,
+      "total_assets": 957980.0
+    },
+    {
+      "customer_id": "CU397888",
+      "investment_amount": 776657.0,
+      "total_assets": 1630529.0
+    },
+    {
+      "customer_id": "CU807412",
+      "investment_amount": 691519.0,
+      "total_assets": 1179182.0
+    },
+    {
+      "customer_id": "CU320296",
+      "investment_amount": 531856.0,
+      "total_assets": 1011677.0
+    },
+    {
+      "customer_id": "CU157244",
+      "investment_amount": 585866.0,
+      "total_assets": 1603898.0
+    },
+    {
+      "customer_id": "CU929125",
+      "investment_amount": 368520.0,
+      "total_assets": 1025269.0
+    },
+    {
+      "customer_id": "CU158159",
+      "investment_amount": 814909.0,
+      "total_assets": 148363.0
+    },
+    {
+      "customer_id": "CU176011",
+      "investment_amount": 729524.0,
+      "total_assets": 1415145.0
+    },
+    {
+      "customer_id": "CU635750",
+      "investment_amount": 286240.0,
+      "total_assets": 744165.0
+    },
+    {
+      "customer_id": "CU358701",
+      "investment_amount": 599552.0,
+      "total_assets": 1463068.0
+    },
+    {
+      "customer_id": "CU625221",
+      "investment_amount": 506229.0,
+      "total_assets": 369310.0
+    },
+    {
+      "customer_id": "CU183051",
+      "investment_amount": 808298.0,
+      "total_assets": 1492879.0
+    },
+    {
+      "customer_id": "CU572655",
+      "investment_amount": 346273.0,
+      "total_assets": 1126459.0
+    }
+  ],
+  "row_count": 50,
+  "query_id": "d0a427b0e1e24ec09fa1822f494d5267",
+  "page": 1,
+  "page_size": 50,
+  "total_pages": 2,
+  "total_rows": 95,
+  "has_next_page": true,
+  "has_previous_page": false,
+  "notice": "Seite 1 von 2 (50 von 95 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Focused on investments“ ist nicht eindeutig definiert. Im Domain-Wissen existiert zwar eine Definition für „Investment Focused“, diese erfordert jedoch zusätzlich JSON-Felder (invcluster.investport, invcluster.investexp) und eine Schwelle (investamt > 0.3 × totassets). Die Frage nennt diese Kriterien nicht explizit und sagt auch nicht, ob genau diese Definition verwendet werden soll. Außerdem ist „customer IDs“ unklar, ob damit clientref (Kunden-ID) oder coreregistry (Record-ID) gemeint ist.. Klärungsfragen: Soll „focused on investments“ exakt nach der Domain-Definition „Investment Focused“ gefiltert werden (invcluster.investport ∈ {Moderate, Aggressive} AND invcluster.investexp = Extensive AND investamt > 0.3 × totassets)?, Welche ID soll ausgegeben werden: clientref (Customer ID) aus core_record oder coreregistry (Core-Record-ID) bzw. ein anderer Identifier?",
+  "summary": "Die Abfrage identifiziert 95 Kunden mit „Moderate“ oder „Aggressive“ Investmentprofil und „Extensive“ Investment-Erfahrung, deren Investmentbetrag zudem mehr als 30% ihrer Gesamtassets ausmacht; auf Seite 1 werden 50 Treffer angezeigt. Auffällig sind u. a. CU510437 (Investment 795.900 bei Total Assets 194.996), CU590052 (708.061 bei 934.678) und CU876471 (462.864 bei 1.073.011), wobei CU510437 besonders heraussticht, da der Investmentbetrag die ausgewiesenen Gesamtassets deutlich übersteigt.",
+  "explanation": "Returns one row per customer who meets the BSL 'Investment Focused' definition, showing the CU-format customer_id plus their investment amount and total assets. Uses the required join chain and qualified JSON extraction for investment profile fields.",
+  "error": null
+}

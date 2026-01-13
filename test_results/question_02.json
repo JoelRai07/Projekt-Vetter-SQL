@@ -1,0 +1,186 @@
+{
+  "question": "Please find all the customer IDs who are highly digital.",
+  "ambiguity_check": {
+    "is_ambiguous": true,
+    "reason": "„Highly digital“ ist im Schema nicht als eindeutiges Feld definiert. Es gibt zwar digitale Nutzungsindikatoren (chaninvdatablock.onlineuse, mobileuse, autopay, depostat) und im Domain-Wissen eine Definition für „Digital First Customer“, aber die Frage sagt nicht, ob genau diese Definition verwendet werden soll oder welche Schwelle/Kriterien „highly digital“ konkret meint. Außerdem ist „customer IDs“ nicht direkt in den Digital-Feldern vorhanden; die digitale Nutzung hängt an bank_and_transactions (bankexpref) und muss über mehrere Tabellen zu core_record.clientref gejoint werden—die Frage spezifiziert nicht, ob alle Kunden oder nur solche mit vollständiger Datenkette berücksichtigt werden sollen.",
+    "questions": [
+      "Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ bestimmt werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?",
+      "Sollen nur eindeutige clientref (Customer IDs) zurückgegeben werden, und sollen Kunden ohne vorhandene bank_and_transactions/chaninvdatablock-Daten ausgeschlossen werden oder trotzdem (z.B. als nicht-digital) behandelt werden?"
+    ]
+  },
+  "generated_sql": "SELECT DISTINCT\n  cr.clientref AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
+  "validation": {
+    "is_valid": true,
+    "errors": [],
+    "severity": "low",
+    "suggestions": [
+      "JOIN-Kette ist korrekt, kann aber vereinfacht werden: Da bank_and_transactions.bankexpref direkt auf expenses_and_assets.expemplref zeigt, ist der Join auf employment_and_income für diese Abfrage nicht nötig, solange nur cr.clientref ausgegeben wird (core_record -> employment_and_income bleibt dann aber weiterhin erforderlich, um von core_record zu expenses_and_assets zu gelangen).",
+      "Optional: json_extract(...) mehrfach genutzt – zur Performance/Lesbarkeit könnten die extrahierten Werte in einer CTE/Subquery einmalig berechnet werden.",
+      "Optional: Wenn chaninvdatablock ungültiges JSON enthalten kann, liefert json_extract NULL; falls das ausgeschlossen werden soll, zusätzlich `json_valid(bt.chaninvdatablock) = 1` filtern."
+    ]
+  },
+  "results": [
+    {
+      "customer_id": "CU572395"
+    },
+    {
+      "customer_id": "CU466756"
+    },
+    {
+      "customer_id": "CU993201"
+    },
+    {
+      "customer_id": "CU572551"
+    },
+    {
+      "customer_id": "CU496685"
+    },
+    {
+      "customer_id": "CU590052"
+    },
+    {
+      "customer_id": "CU628920"
+    },
+    {
+      "customer_id": "CU459105"
+    },
+    {
+      "customer_id": "CU689896"
+    },
+    {
+      "customer_id": "CU170558"
+    },
+    {
+      "customer_id": "CU427485"
+    },
+    {
+      "customer_id": "CU363871"
+    },
+    {
+      "customer_id": "CU788298"
+    },
+    {
+      "customer_id": "CU324804"
+    },
+    {
+      "customer_id": "CU893047"
+    },
+    {
+      "customer_id": "CU906583"
+    },
+    {
+      "customer_id": "CU925927"
+    },
+    {
+      "customer_id": "CU351564"
+    },
+    {
+      "customer_id": "CU747975"
+    },
+    {
+      "customer_id": "CU677308"
+    },
+    {
+      "customer_id": "CU906564"
+    },
+    {
+      "customer_id": "CU159634"
+    },
+    {
+      "customer_id": "CU215767"
+    },
+    {
+      "customer_id": "CU205099"
+    },
+    {
+      "customer_id": "CU723708"
+    },
+    {
+      "customer_id": "CU982924"
+    },
+    {
+      "customer_id": "CU308190"
+    },
+    {
+      "customer_id": "CU169517"
+    },
+    {
+      "customer_id": "CU360562"
+    },
+    {
+      "customer_id": "CU960443"
+    },
+    {
+      "customer_id": "CU485747"
+    },
+    {
+      "customer_id": "CU430068"
+    },
+    {
+      "customer_id": "CU367158"
+    },
+    {
+      "customer_id": "CU812251"
+    },
+    {
+      "customer_id": "CU318546"
+    },
+    {
+      "customer_id": "CU772323"
+    },
+    {
+      "customer_id": "CU489538"
+    },
+    {
+      "customer_id": "CU517606"
+    },
+    {
+      "customer_id": "CU221557"
+    },
+    {
+      "customer_id": "CU408274"
+    },
+    {
+      "customer_id": "CU452899"
+    },
+    {
+      "customer_id": "CU586421"
+    },
+    {
+      "customer_id": "CU143993"
+    },
+    {
+      "customer_id": "CU536200"
+    },
+    {
+      "customer_id": "CU697174"
+    },
+    {
+      "customer_id": "CU760386"
+    },
+    {
+      "customer_id": "CU878767"
+    },
+    {
+      "customer_id": "CU149495"
+    },
+    {
+      "customer_id": "CU978629"
+    },
+    {
+      "customer_id": "CU186883"
+    }
+  ],
+  "row_count": 50,
+  "query_id": "a02b534f3c56456b9af9919d1f38ce11",
+  "page": 1,
+  "page_size": 50,
+  "total_pages": 6,
+  "total_rows": 285,
+  "has_next_page": true,
+  "has_previous_page": false,
+  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist im Schema nicht als eindeutiges Feld definiert. Es gibt zwar digitale Nutzungsindikatoren (chaninvdatablock.onlineuse, mobileuse, autopay, depostat) und im Domain-Wissen eine Definition für „Digital First Customer“, aber die Frage sagt nicht, ob genau diese Definition verwendet werden soll oder welche Schwelle/Kriterien „highly digital“ konkret meint. Außerdem ist „customer IDs“ nicht direkt in den Digital-Feldern vorhanden; die digitale Nutzung hängt an bank_and_transactions (bankexpref) und muss über mehrere Tabellen zu core_record.clientref gejoint werden—die Frage spezifiziert nicht, ob alle Kunden oder nur solche mit vollständiger Datenkette berücksichtigt werden sollen.. Klärungsfragen: Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ bestimmt werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?, Sollen nur eindeutige clientref (Customer IDs) zurückgegeben werden, und sollen Kunden ohne vorhandene bank_and_transactions/chaninvdatablock-Daten ausgeschlossen werden oder trotzdem (z.B. als nicht-digital) behandelt werden?",
+  "summary": "Die Abfrage identifiziert insgesamt 285 eindeutige Customer IDs, die als „hoch digital“ eingestuft sind (Online- oder Mobile-Nutzung = High) und zusätzlich Autopay aktiviert haben; auf Seite 1 werden 50 von 285 Treffern angezeigt. Beispiele aus den ersten Ergebnissen sind CU572395, CU466756 und CU993201. Wenn du die Liste weiter eingrenzen möchtest, könntest du Onlineuse und Mobileuse beide auf „High“ setzen oder zusätzliche Kriterien (z. B. Zeitraum/Transaktionsaktivität) ergänzen.",
+  "explanation": "Returns the CU-format customer IDs (core_record.clientref) for customers who meet the BSL 'Digital First Customer' definition: high online or mobile usage and autopay enabled, using the required FK join chain and qualified JSON extraction.",
+  "error": null
+}
