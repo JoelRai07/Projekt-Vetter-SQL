@@ -2,22 +2,22 @@
   "question": "For each customer, show their ID, liquid and total assets, liquidity measure, monthly income, investment amount and label of their investment potential.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "Mehrere zentrale Begriffe sind nicht eindeutig definiert: (1) „customer ID“ kann clientref oder der durchgängige Schlüssel coreregistry/…ref sein. (2) „liquidity measure“ ist nicht spezifiziert (es gibt mehrere naheliegende Kennzahlen im Domain-Wissen, z.B. ALR=liqassets/totassets oder FSI-Komponenten). (3) „label of their investment potential“ ist nicht definiert (keine Regel/Schwellenwerte für Labels wie High/Medium/Low; auch unklar, ob Investment Potential über investamt-Anteil an totassets, IPQ, ALR+mthincome etc. bestimmt werden soll). Ohne diese Festlegungen ist keine sichere, korrekte SQL-Abfrage möglich.",
+    "reason": "Die Frage verlangt „für jeden Kunden“ eine Ausgabe, aber im Schema ist die eindeutige Kunden-ID nicht konsistent über alle benötigten Tabellen verfügbar: Liquid/Total Assets und investamt liegen in expenses_and_assets (Schlüssel expemplref), monatliches Einkommen in employment_and_income (emplcoreref) und die Kunden-ID (clientref) nur in core_record (coreregistry). Zwar gibt es eine FK-Kette core_record → employment_and_income → expenses_and_assets, aber es ist unklar, ob „Kunde“ als clientref oder als coreregistry/expemplref verstanden werden soll (ein clientref kann mehrere core_record/appref haben). Zusätzlich ist „liquidity measure“ nicht eindeutig definiert (ALR vs. FSI-Komponente vs. anderes), und „Label der investment potential“ ist nicht spezifiziert (welche Regel/Schwellen oder welches Domain-Konstrukt soll zur Klassifizierung genutzt werden).",
     "questions": [
-      "Welche ID soll ausgegeben werden: core_record.clientref (Kunden-ID) oder der Record-Schlüssel core_record.coreregistry (der über die Tabellenkette joinbar ist)?",
-      "Was genau meinst du mit „liquidity measure“: Asset Liquidity Ratio (liqassets/totassets), Financial Stability Index (FSI) oder eine andere Kennzahl?",
-      "Wie soll „investment potential“ gelabelt werden (welche Logik/Schwellenwerte oder welche definierte Kennzahl wie IPQ/Investment Services Target/Investment Focused)?"
+      "Welche ID soll als „Customer ID“ ausgegeben werden: core_record.clientref (Kunde) oder core_record.coreregistry/expemplref (Record/Antrag)? Falls clientref: wie sollen mehrere Records pro Kunde aggregiert/ausgewählt werden (z.B. neuester scoredate/timemark)?",
+      "Was genau ist mit „liquidity measure“ gemeint: Asset Liquidity Ratio (liqassets/totassets), Financial Stability Index (FSI) oder eine andere Kennzahl?",
+      "Wie soll „investment potential“ gelabelt werden: nach einer konkreten Regel (z.B. „Investment Services Target“: ALR > 0.3 und mthincome > 5000) oder nach Quartilen/Schwellenwerten von investamt bzw. investamt/totassets?"
     ]
   },
-  "generated_sql": "SELECT\n  cr.clientref AS customer_id,\n  ea.liqassets,\n  ea.totassets,\n  CASE\n    WHEN ea.totassets IS NULL OR ea.totassets = 0 THEN NULL\n    ELSE ea.liqassets * 1.0 / ea.totassets\n  END AS liquidity_measure,\n  ei.mthincome,\n  ea.investamt,\n  CASE\n    WHEN ea.investamt IS NULL THEN 'Unknown'\n    WHEN ea.totassets IS NULL OR ea.totassets = 0 THEN 'Unknown'\n    WHEN (ea.investamt * 1.0 / ea.totassets) >= 0.30 THEN 'High'\n    WHEN (ea.investamt * 1.0 / ea.totassets) >= 0.10 THEN 'Moderate'\n    ELSE 'Low'\n  END AS investment_potential_label\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref",
+  "generated_sql": "SELECT\n  cr.clientref AS customer_id,\n  ea.liqassets,\n  ea.totassets,\n  CASE\n    WHEN ea.totassets IS NULL OR ea.totassets = 0 THEN NULL\n    ELSE ea.liqassets / ea.totassets\n  END AS liquidity_measure,\n  ei.mthincome,\n  ea.investamt,\n  CASE\n    WHEN ea.totassets IS NULL OR ea.totassets = 0 OR ea.investamt IS NULL THEN 'Unknown'\n    WHEN (ea.investamt / ea.totassets) >= 0.30 THEN 'High'\n    WHEN (ea.investamt / ea.totassets) >= 0.10 THEN 'Medium'\n    ELSE 'Low'\n  END AS investment_potential_label\nFROM core_record cr\nJOIN employment_and_income ei\n  ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea\n  ON ei.emplcoreref = ea.expemplref",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
       "Optional: Use LEFT JOIN instead of JOIN if you want to keep core_record rows even when employment_and_income or expenses_and_assets is missing.",
-      "Optional: If you want to avoid NULL liquidity_measure when liqassets is NULL, wrap liqassets with COALESCE(ea.liqassets, 0) (only if that matches your business logic).",
-      "Optional: Consider rounding liquidity_measure (e.g., ROUND(..., 4)) for presentation consistency."
+      "Optional: Consider guarding against ea.liqassets being NULL in liquidity_measure (currently returns NULL via arithmetic NULL propagation, which may be fine).",
+      "Optional: If you want deterministic output ordering, add an ORDER BY clause (e.g., ORDER BY cr.clientref)."
     ]
   },
   "results": [
@@ -28,7 +28,7 @@
       "liquidity_measure": 0.062987713416938,
       "mthincome": 6564.25,
       "investamt": 163007.0,
-      "investment_potential_label": "Moderate"
+      "investment_potential_label": "Medium"
     },
     {
       "customer_id": "CU209954",
@@ -244,7 +244,7 @@
       "liquidity_measure": 0.08939795558054302,
       "mthincome": 15466.08,
       "investamt": 455900.0,
-      "investment_potential_label": "Moderate"
+      "investment_potential_label": "Medium"
     },
     {
       "customer_id": "CU872801",
@@ -352,7 +352,7 @@
       "liquidity_measure": 0.23368580537230516,
       "mthincome": 28803.83,
       "investamt": 248950.0,
-      "investment_potential_label": "Moderate"
+      "investment_potential_label": "Medium"
     },
     {
       "customer_id": "CU406149",
@@ -361,7 +361,7 @@
       "liquidity_measure": 0.11567413899693123,
       "mthincome": 36181.75,
       "investamt": 398727.0,
-      "investment_potential_label": "Moderate"
+      "investment_potential_label": "Medium"
     },
     {
       "customer_id": "CU287208",
@@ -433,7 +433,7 @@
       "liquidity_measure": 0.11447277115301883,
       "mthincome": 10665.33,
       "investamt": 416820.0,
-      "investment_potential_label": "Moderate"
+      "investment_potential_label": "Medium"
     },
     {
       "customer_id": "CU911050",
@@ -473,15 +473,15 @@
     }
   ],
   "row_count": 50,
-  "query_id": "61323e64c1d540c097934833a4699f54",
+  "query_id": "0072e1a995c345bfa8811ebcca294cd7",
   "page": 1,
   "page_size": 50,
   "total_pages": 20,
   "total_rows": 1000,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Mehrere zentrale Begriffe sind nicht eindeutig definiert: (1) „customer ID“ kann clientref oder der durchgängige Schlüssel coreregistry/…ref sein. (2) „liquidity measure“ ist nicht spezifiziert (es gibt mehrere naheliegende Kennzahlen im Domain-Wissen, z.B. ALR=liqassets/totassets oder FSI-Komponenten). (3) „label of their investment potential“ ist nicht definiert (keine Regel/Schwellenwerte für Labels wie High/Medium/Low; auch unklar, ob Investment Potential über investamt-Anteil an totassets, IPQ, ALR+mthincome etc. bestimmt werden soll). Ohne diese Festlegungen ist keine sichere, korrekte SQL-Abfrage möglich.. Klärungsfragen: Welche ID soll ausgegeben werden: core_record.clientref (Kunden-ID) oder der Record-Schlüssel core_record.coreregistry (der über die Tabellenkette joinbar ist)?, Was genau meinst du mit „liquidity measure“: Asset Liquidity Ratio (liqassets/totassets), Financial Stability Index (FSI) oder eine andere Kennzahl?, Wie soll „investment potential“ gelabelt werden (welche Logik/Schwellenwerte oder welche definierte Kennzahl wie IPQ/Investment Services Target/Investment Focused)?",
-  "summary": "Die Abfrage liefert pro Kunde (insgesamt 1000 Zeilen, hier die ersten 50) Liquid- und Gesamtvermögen, daraus die Liquiditätsquote, das monatliche Einkommen sowie den Investitionsbetrag inkl. Einstufung des Investmentpotenzials (Low/Moderate/High basierend auf Investamt/Gesamtvermögen). In den Beispielzeilen fällt CU209954 mit sehr hohem Monatseinkommen (33.835,58) und „High“-Potenzial (643.448 Investamt bei 1.923.802 Gesamtvermögen) sowie CU314145 mit hoher Liquiditätsquote (~0,341) und ebenfalls „High“ (523.492 bei 1.259.260) auf. CU338528 liegt bei niedrigerer Liquiditätsquote (~0,063) und „Moderate“ (163.007 bei 1.495.371), was zeigt, dass die Einstufung stark vom Investitionsanteil am Gesamtvermögen abhängt.",
-  "explanation": "Returns one row per customer with CU-format customer_id, liquid and total assets, a liquidity measure (liqassets/totassets), monthly income, investment amount, and a derived investment potential label based on investment share of total assets.",
+  "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Die Frage verlangt „für jeden Kunden“ eine Ausgabe, aber im Schema ist die eindeutige Kunden-ID nicht konsistent über alle benötigten Tabellen verfügbar: Liquid/Total Assets und investamt liegen in expenses_and_assets (Schlüssel expemplref), monatliches Einkommen in employment_and_income (emplcoreref) und die Kunden-ID (clientref) nur in core_record (coreregistry). Zwar gibt es eine FK-Kette core_record → employment_and_income → expenses_and_assets, aber es ist unklar, ob „Kunde“ als clientref oder als coreregistry/expemplref verstanden werden soll (ein clientref kann mehrere core_record/appref haben). Zusätzlich ist „liquidity measure“ nicht eindeutig definiert (ALR vs. FSI-Komponente vs. anderes), und „Label der investment potential“ ist nicht spezifiziert (welche Regel/Schwellen oder welches Domain-Konstrukt soll zur Klassifizierung genutzt werden).. Klärungsfragen: Welche ID soll als „Customer ID“ ausgegeben werden: core_record.clientref (Kunde) oder core_record.coreregistry/expemplref (Record/Antrag)? Falls clientref: wie sollen mehrere Records pro Kunde aggregiert/ausgewählt werden (z.B. neuester scoredate/timemark)?, Was genau ist mit „liquidity measure“ gemeint: Asset Liquidity Ratio (liqassets/totassets), Financial Stability Index (FSI) oder eine andere Kennzahl?, Wie soll „investment potential“ gelabelt werden: nach einer konkreten Regel (z.B. „Investment Services Target“: ALR > 0.3 und mthincome > 5000) oder nach Quartilen/Schwellenwerten von investamt bzw. investamt/totassets?",
+  "summary": "Die Abfrage liefert pro Kunde (insgesamt 1.000 Zeilen, hier 50 angezeigt) Liquid- und Gesamtvermögen, eine Liquiditätsquote (liqassets/totassets), Monatseinkommen, Investitionsbetrag sowie ein Investment-Potenzial-Label basierend auf investamt/totassets. In den ersten Zeilen fällt CU209954 mit sehr hohem Monatseinkommen (33.835,58) und „High“-Potenzial (643.448 von 1.923.802) auf, während CU314145 eine besonders hohe Liquiditätsquote (~0,341) bei ebenfalls „High“-Potenzial zeigt. CU338528 hat dagegen eine niedrige Liquiditätsquote (~0,063) und wird trotz 163.007 Investitionsbetrag aufgrund des Verhältnisses zum Gesamtvermögen als „Medium“ eingestuft.",
+  "explanation": "Returns one row per customer with CU-format customer_id plus liquid assets, total assets, a computed liquidity measure (liqassets/totassets), monthly income, investment amount, and a derived investment potential label based on investment amount as a share of total assets.",
   "error": null
 }

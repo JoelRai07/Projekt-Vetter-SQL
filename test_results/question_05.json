@@ -1,336 +1,336 @@
 {
   "question": "To analyze customer property leverage, please show the customer ID, property value, mortgage balance, and the calculated ratio.",
   "ambiguity_check": {
-    "is_ambiguous": true,
-    "reason": "Die Anfrage ist grundsätzlich machbar (Property Value und Mortgage Balance liegen in expenses_and_assets.propfinancialdata), aber es ist unklar, welche Kennung als „customer ID“ ausgegeben werden soll (core_record.clientref vs. core_record.coreregistry vs. appref). Außerdem ist nicht spezifiziert, ob alle Kunden oder nur Kunden mit Eigentum/Mortgage gezeigt werden sollen und wie mit fehlenden/NULL- oder 0-Werten (propvalue oder mortbalance) umzugehen ist, was die sichere Berechnung des Ratios beeinflusst.",
+    "is_ambiguous": false,
+    "reason": "Die Anfrage ist ausreichend klar: Customer ID kann über core_record.clientref geliefert werden; Property Value und Mortgage Balance stehen in expenses_and_assets.propfinancialdata (JSONB) unter propvalue bzw. mortgagebits.mortbalance; das „calculated ratio“ ist im Domain-Wissen als LTV (mortbalance/propvalue) definiert. Es ist keine zwingende Zeit- oder Aggregationsvorgabe nötig, da pro Kunde/Record ein aktueller Snapshot ausgegeben werden kann.",
     "questions": [
-      "Welche Spalte soll als „customer ID“ ausgegeben werden: core_record.clientref (Kunden-ID), core_record.coreregistry (Record-ID) oder appref?",
-      "Sollen nur Kunden mit propfinancialdata.propown = 'Own' und vorhandenem mortgagebits.mortbalance angezeigt werden, oder alle Kunden (inkl. NULL/fehlender Werte)?"
+      "Soll das Ergebnis pro core_record (coreregistry) oder eindeutig pro Kunde (clientref) dedupliziert werden, falls mehrere Records pro Kunde existieren?",
+      "Sollen nur Kunden mit propown = 'Own' berücksichtigt werden oder alle, bei denen propvalue und mortbalance vorhanden sind?"
     ]
   },
-  "generated_sql": "SELECT\n  cr.clientref AS customer_id,\n  CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_value,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mortgage_balance,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL)\n    / NULLIF(CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL), 0) AS property_leverage_ratio\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nWHERE json_extract(ea.propfinancialdata, '$.propvalue') IS NOT NULL\n  AND json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') IS NOT NULL",
+  "generated_sql": "SELECT\n  ea.expemplref AS customer_id,\n  CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_value,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mortgage_balance,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL)\n    / CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_leverage_ratio\nFROM expenses_and_assets ea\nWHERE\n  json_extract(ea.propfinancialdata, '$.propvalue') IS NOT NULL\n  AND CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) <> 0\n  AND json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') IS NOT NULL\nORDER BY property_leverage_ratio DESC",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: Add a filter to avoid division by zero/NULL results explicitly, e.g. WHERE CAST(json_extract(ea.propfinancialdata,'$.propvalue') AS REAL) > 0.",
-      "Optional: If you only want rows where the ratio is computable, add AND CAST(json_extract(ea.propfinancialdata,'$.propvalue') AS REAL) != 0 (NULLIF already prevents errors but will return NULL).",
-      "Optional: Consider using a CTE/subquery to compute property_value and mortgage_balance once to avoid repeating json_extract/Cast expressions."
+      "Optional: Guard against non-numeric JSON values by filtering with json_type(ea.propfinancialdata, '$.propvalue') IN ('integer','real') and json_type(ea.propfinancialdata, '$.mortgagebits.mortbalance') IN ('integer','real') to avoid CAST producing 0.0 unexpectedly.",
+      "Optional: Add a filter to avoid negative or nonsensical ratios if needed (e.g., property_value > 0 AND mortgage_balance >= 0).",
+      "Optional: If you want to exclude rows where mortgage_balance is 0, add AND CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) <> 0."
     ]
   },
   "results": [
     {
-      "customer_id": "CU488662",
-      "property_value": 615904.0,
-      "mortgage_balance": 1148577.0,
-      "property_leverage_ratio": 1.8648636800540344
+      "customer_id": "CS108475",
+      "property_value": 1018.0,
+      "mortgage_balance": 1276018.0,
+      "property_leverage_ratio": 1253.4557956777996
     },
     {
-      "customer_id": "CU390121",
-      "property_value": 1201841.0,
-      "mortgage_balance": 450289.0,
-      "property_leverage_ratio": 0.37466603319407477
+      "customer_id": "CS232079",
+      "property_value": 389.0,
+      "mortgage_balance": 433348.0,
+      "property_leverage_ratio": 1114.0051413881747
     },
     {
-      "customer_id": "CU259187",
-      "property_value": 339977.0,
-      "mortgage_balance": 4809.0,
-      "property_leverage_ratio": 0.014145074519746925
+      "customer_id": "CS138931",
+      "property_value": 3029.0,
+      "mortgage_balance": 560342.0,
+      "property_leverage_ratio": 184.992406734896
     },
     {
-      "customer_id": "CU596654",
-      "property_value": 1234339.0,
-      "mortgage_balance": 1387602.0,
-      "property_leverage_ratio": 1.1241660516276324
+      "customer_id": "CS977546",
+      "property_value": 2911.0,
+      "mortgage_balance": 402921.0,
+      "property_leverage_ratio": 138.41326004809343
     },
     {
-      "customer_id": "CU572395",
-      "property_value": 1799995.0,
-      "mortgage_balance": 682803.0,
-      "property_leverage_ratio": 0.37933605371126033
+      "customer_id": "CS391718",
+      "property_value": 15854.0,
+      "mortgage_balance": 1380340.0,
+      "property_leverage_ratio": 87.06572473823641
     },
     {
-      "customer_id": "CU646174",
-      "property_value": 448006.0,
-      "mortgage_balance": 983084.0,
-      "property_leverage_ratio": 2.194354539894555
-    },
-    {
-      "customer_id": "CU466756",
-      "property_value": 1551182.0,
-      "mortgage_balance": 602359.0,
-      "property_leverage_ratio": 0.3883225823920082
-    },
-    {
-      "customer_id": "CU478628",
-      "property_value": 66103.0,
-      "mortgage_balance": 1164642.0,
-      "property_leverage_ratio": 17.618595222607144
-    },
-    {
-      "customer_id": "CU133084",
-      "property_value": 1707270.0,
-      "mortgage_balance": 1428142.0,
-      "property_leverage_ratio": 0.836506235100482
-    },
-    {
-      "customer_id": "CU993201",
-      "property_value": 487436.0,
-      "mortgage_balance": 50516.0,
-      "property_leverage_ratio": 0.10363616967150559
-    },
-    {
-      "customer_id": "CU572551",
-      "property_value": 1284164.0,
-      "mortgage_balance": 986716.0,
-      "property_leverage_ratio": 0.7683722639787441
-    },
-    {
-      "customer_id": "CU450680",
-      "property_value": 341019.0,
-      "mortgage_balance": 1348990.0,
-      "property_leverage_ratio": 3.9557619956659305
-    },
-    {
-      "customer_id": "CU496685",
-      "property_value": 457310.0,
-      "mortgage_balance": 578346.0,
-      "property_leverage_ratio": 1.264669480221294
-    },
-    {
-      "customer_id": "CU990238",
-      "property_value": 274830.0,
-      "mortgage_balance": 577981.0,
-      "property_leverage_ratio": 2.1030491576610997
-    },
-    {
-      "customer_id": "CU465765",
-      "property_value": 1631952.0,
-      "mortgage_balance": 704075.0,
-      "property_leverage_ratio": 0.4314311940547271
-    },
-    {
-      "customer_id": "CU950980",
-      "property_value": 1182617.0,
-      "mortgage_balance": 703560.0,
-      "property_leverage_ratio": 0.594917881275172
-    },
-    {
-      "customer_id": "CU510437",
-      "property_value": 774944.0,
-      "mortgage_balance": 383906.0,
-      "property_leverage_ratio": 0.49539837717306023
-    },
-    {
-      "customer_id": "CU226752",
-      "property_value": 1399916.0,
-      "mortgage_balance": 92398.0,
-      "property_leverage_ratio": 0.06600253158046626
-    },
-    {
-      "customer_id": "CU790495",
-      "property_value": 1105334.0,
-      "mortgage_balance": 463613.0,
-      "property_leverage_ratio": 0.41943249732659993
-    },
-    {
-      "customer_id": "CU334526",
-      "property_value": 823658.0,
-      "mortgage_balance": 1155067.0,
-      "property_leverage_ratio": 1.4023623882728025
-    },
-    {
-      "customer_id": "CU872801",
-      "property_value": 1455553.0,
-      "mortgage_balance": 162119.0,
-      "property_leverage_ratio": 0.11137966120093187
-    },
-    {
-      "customer_id": "CU706313",
-      "property_value": 1932008.0,
-      "mortgage_balance": 107088.0,
-      "property_leverage_ratio": 0.055428341911627696
-    },
-    {
-      "customer_id": "CU257943",
-      "property_value": 472425.0,
-      "mortgage_balance": 1390761.0,
-      "property_leverage_ratio": 2.9438768058421974
-    },
-    {
-      "customer_id": "CU590052",
-      "property_value": 327032.0,
-      "mortgage_balance": 492496.0,
-      "property_leverage_ratio": 1.5059566036351182
-    },
-    {
-      "customer_id": "CU250617",
+      "customer_id": "CS688942",
       "property_value": 11771.0,
       "mortgage_balance": 840171.0,
       "property_leverage_ratio": 71.37634865347039
     },
     {
-      "customer_id": "CU543548",
-      "property_value": 705459.0,
-      "mortgage_balance": 938543.0,
-      "property_leverage_ratio": 1.3304004910278273
+      "customer_id": "CS535463",
+      "property_value": 16928.0,
+      "mortgage_balance": 969991.0,
+      "property_leverage_ratio": 57.300980623818525
     },
     {
-      "customer_id": "CU776107",
+      "customer_id": "CS834551",
+      "property_value": 25667.0,
+      "mortgage_balance": 1405642.0,
+      "property_leverage_ratio": 54.76456149920131
+    },
+    {
+      "customer_id": "CS255224",
+      "property_value": 13055.0,
+      "mortgage_balance": 506328.0,
+      "property_leverage_ratio": 38.784220605132134
+    },
+    {
+      "customer_id": "CS118800",
+      "property_value": 36820.0,
+      "mortgage_balance": 1359382.0,
+      "property_leverage_ratio": 36.91966322650733
+    },
+    {
+      "customer_id": "CS299524",
+      "property_value": 26621.0,
+      "mortgage_balance": 866219.0,
+      "property_leverage_ratio": 32.5389354269186
+    },
+    {
+      "customer_id": "CS456305",
+      "property_value": 35937.0,
+      "mortgage_balance": 1137642.0,
+      "property_leverage_ratio": 31.656565656565657
+    },
+    {
+      "customer_id": "CS873731",
+      "property_value": 48533.0,
+      "mortgage_balance": 1477880.0,
+      "property_leverage_ratio": 30.45103331753652
+    },
+    {
+      "customer_id": "CS507190",
+      "property_value": 41709.0,
+      "mortgage_balance": 1246377.0,
+      "property_leverage_ratio": 29.882687189815147
+    },
+    {
+      "customer_id": "CS964207",
+      "property_value": 48706.0,
+      "mortgage_balance": 1446260.0,
+      "property_leverage_ratio": 29.69367223750667
+    },
+    {
+      "customer_id": "CS189697",
+      "property_value": 42738.0,
+      "mortgage_balance": 1268554.0,
+      "property_leverage_ratio": 29.682109598015817
+    },
+    {
+      "customer_id": "CS760966",
+      "property_value": 53826.0,
+      "mortgage_balance": 1363693.0,
+      "property_leverage_ratio": 25.335209749934975
+    },
+    {
+      "customer_id": "CS834384",
+      "property_value": 9232.0,
+      "mortgage_balance": 209007.0,
+      "property_leverage_ratio": 22.639406412478337
+    },
+    {
+      "customer_id": "CS378996",
+      "property_value": 60617.0,
+      "mortgage_balance": 1286710.0,
+      "property_leverage_ratio": 21.226883547519673
+    },
+    {
+      "customer_id": "CS797734",
+      "property_value": 74699.0,
+      "mortgage_balance": 1438525.0,
+      "property_leverage_ratio": 19.25762058394356
+    },
+    {
+      "customer_id": "CS620062",
+      "property_value": 73658.0,
+      "mortgage_balance": 1326515.0,
+      "property_leverage_ratio": 18.009109669010833
+    },
+    {
+      "customer_id": "CS399140",
+      "property_value": 39039.0,
+      "mortgage_balance": 688896.0,
+      "property_leverage_ratio": 17.646353646353646
+    },
+    {
+      "customer_id": "CS429393",
+      "property_value": 66103.0,
+      "mortgage_balance": 1164642.0,
+      "property_leverage_ratio": 17.618595222607144
+    },
+    {
+      "customer_id": "CS367960",
+      "property_value": 35025.0,
+      "mortgage_balance": 571052.0,
+      "property_leverage_ratio": 16.30412562455389
+    },
+    {
+      "customer_id": "CS657281",
+      "property_value": 43860.0,
+      "mortgage_balance": 712501.0,
+      "property_leverage_ratio": 16.244892840857272
+    },
+    {
+      "customer_id": "CS289722",
       "property_value": 39256.0,
       "mortgage_balance": 619529.0,
       "property_leverage_ratio": 15.781765844711636
     },
     {
-      "customer_id": "CU628920",
-      "property_value": 1745506.0,
-      "mortgage_balance": 1000410.0,
-      "property_leverage_ratio": 0.57313466696763
+      "customer_id": "CS171476",
+      "property_value": 36360.0,
+      "mortgage_balance": 555735.0,
+      "property_leverage_ratio": 15.284240924092408
     },
     {
-      "customer_id": "CU459105",
-      "property_value": 1226955.0,
-      "mortgage_balance": 1289621.0,
-      "property_leverage_ratio": 1.0510744077818666
+      "customer_id": "CS106874",
+      "property_value": 71638.0,
+      "mortgage_balance": 918529.0,
+      "property_leverage_ratio": 12.821812445908597
     },
     {
-      "customer_id": "CU245038",
-      "property_value": 1261312.0,
-      "mortgage_balance": 899859.0,
-      "property_leverage_ratio": 0.7134309354069414
+      "customer_id": "CS471468",
+      "property_value": 79086.0,
+      "mortgage_balance": 993049.0,
+      "property_leverage_ratio": 12.556571327415725
     },
     {
-      "customer_id": "CU146539",
-      "property_value": 522205.0,
-      "mortgage_balance": 494875.0,
-      "property_leverage_ratio": 0.9476642314799744
+      "customer_id": "CS109017",
+      "property_value": 73521.0,
+      "mortgage_balance": 847585.0,
+      "property_leverage_ratio": 11.528474857523701
     },
     {
-      "customer_id": "CU396524",
-      "property_value": 959484.0,
-      "mortgage_balance": 1254416.0,
-      "property_leverage_ratio": 1.3073860533370019
+      "customer_id": "CS411845",
+      "property_value": 51849.0,
+      "mortgage_balance": 546601.0,
+      "property_leverage_ratio": 10.542170533665066
     },
     {
-      "customer_id": "CU406149",
+      "customer_id": "CS392396",
+      "property_value": 114903.0,
+      "mortgage_balance": 1165029.0,
+      "property_leverage_ratio": 10.1392391843555
+    },
+    {
+      "customer_id": "CS626118",
+      "property_value": 70650.0,
+      "mortgage_balance": 713405.0,
+      "property_leverage_ratio": 10.097735314932768
+    },
+    {
+      "customer_id": "CS674943",
+      "property_value": 126169.0,
+      "mortgage_balance": 1255430.0,
+      "property_leverage_ratio": 9.950384008750168
+    },
+    {
+      "customer_id": "CS340974",
+      "property_value": 72890.0,
+      "mortgage_balance": 716833.0,
+      "property_leverage_ratio": 9.834449169982165
+    },
+    {
+      "customer_id": "CS275485",
+      "property_value": 150704.0,
+      "mortgage_balance": 1423908.0,
+      "property_leverage_ratio": 9.44837562373925
+    },
+    {
+      "customer_id": "CS795226",
+      "property_value": 137821.0,
+      "mortgage_balance": 1164761.0,
+      "property_leverage_ratio": 8.451259242060354
+    },
+    {
+      "customer_id": "CS831931",
+      "property_value": 148657.0,
+      "mortgage_balance": 1237078.0,
+      "property_leverage_ratio": 8.321693563034367
+    },
+    {
+      "customer_id": "CS727563",
+      "property_value": 44509.0,
+      "mortgage_balance": 364223.0,
+      "property_leverage_ratio": 8.18313150149408
+    },
+    {
+      "customer_id": "CS637923",
+      "property_value": 161949.0,
+      "mortgage_balance": 1308215.0,
+      "property_leverage_ratio": 8.07794429110399
+    },
+    {
+      "customer_id": "CS343253",
+      "property_value": 41249.0,
+      "mortgage_balance": 332742.0,
+      "property_leverage_ratio": 8.066668282867463
+    },
+    {
+      "customer_id": "CS580015",
+      "property_value": 74603.0,
+      "mortgage_balance": 569334.0,
+      "property_leverage_ratio": 7.631516158867606
+    },
+    {
+      "customer_id": "CS438769",
+      "property_value": 85919.0,
+      "mortgage_balance": 638404.0,
+      "property_leverage_ratio": 7.430300631990596
+    },
+    {
+      "customer_id": "CS971966",
+      "property_value": 108235.0,
+      "mortgage_balance": 802970.0,
+      "property_leverage_ratio": 7.418764724904144
+    },
+    {
+      "customer_id": "CS228336",
+      "property_value": 161865.0,
+      "mortgage_balance": 1192259.0,
+      "property_leverage_ratio": 7.365761591449665
+    },
+    {
+      "customer_id": "CS616098",
       "property_value": 144526.0,
       "mortgage_balance": 1034036.0,
       "property_leverage_ratio": 7.15467113183787
     },
     {
-      "customer_id": "CU287208",
-      "property_value": 1558965.0,
-      "mortgage_balance": 814902.0,
-      "property_leverage_ratio": 0.5227198814598147
+      "customer_id": "CS143502",
+      "property_value": 188903.0,
+      "mortgage_balance": 1285410.0,
+      "property_leverage_ratio": 6.80460342080327
     },
     {
-      "customer_id": "CU695152",
-      "property_value": 1596852.0,
-      "mortgage_balance": 1495393.0,
-      "property_leverage_ratio": 0.9364631161810862
+      "customer_id": "CS532792",
+      "property_value": 117243.0,
+      "mortgage_balance": 790094.0,
+      "property_leverage_ratio": 6.738943902834285
     },
     {
-      "customer_id": "CU636798",
-      "property_value": 1338313.0,
-      "mortgage_balance": 211411.0,
-      "property_leverage_ratio": 0.15796827797383722
+      "customer_id": "CS155730",
+      "property_value": 222358.0,
+      "mortgage_balance": 1497868.0,
+      "property_leverage_ratio": 6.736290126732566
     },
     {
-      "customer_id": "CU472683",
-      "property_value": 1140553.0,
-      "mortgage_balance": 1239234.0,
-      "property_leverage_ratio": 1.086520310761534
-    },
-    {
-      "customer_id": "CU689896",
-      "property_value": 717562.0,
-      "mortgage_balance": 14568.0,
-      "property_leverage_ratio": 0.02030207842667254
-    },
-    {
-      "customer_id": "CU716365",
-      "property_value": 583569.0,
-      "mortgage_balance": 1359545.0,
-      "property_leverage_ratio": 2.3297073696512323
-    },
-    {
-      "customer_id": "CU239744",
-      "property_value": 312387.0,
-      "mortgage_balance": 673706.0,
-      "property_leverage_ratio": 2.156639040677109
-    },
-    {
-      "customer_id": "CU899231",
-      "property_value": 751562.0,
-      "mortgage_balance": 781955.0,
-      "property_leverage_ratio": 1.0404397774235525
-    },
-    {
-      "customer_id": "CU911050",
-      "property_value": 890594.0,
-      "mortgage_balance": 1231024.0,
-      "property_leverage_ratio": 1.3822504979822456
-    },
-    {
-      "customer_id": "CU257244",
-      "property_value": 981314.0,
-      "mortgage_balance": 539977.0,
-      "property_leverage_ratio": 0.5502591423336465
-    },
-    {
-      "customer_id": "CU139206",
-      "property_value": 526792.0,
-      "mortgage_balance": 1046795.0,
-      "property_leverage_ratio": 1.9871125605552096
-    },
-    {
-      "customer_id": "CU121543",
-      "property_value": 1883790.0,
-      "mortgage_balance": 1103484.0,
-      "property_leverage_ratio": 0.5857786695969296
-    },
-    {
-      "customer_id": "CU289231",
-      "property_value": 1538524.0,
-      "mortgage_balance": 933707.0,
-      "property_leverage_ratio": 0.6068849104726348
-    },
-    {
-      "customer_id": "CU728406",
-      "property_value": 487257.0,
-      "mortgage_balance": 237610.0,
-      "property_leverage_ratio": 0.4876482020781641
-    },
-    {
-      "customer_id": "CU958618",
-      "property_value": 1057811.0,
-      "mortgage_balance": 827077.0,
-      "property_leverage_ratio": 0.7818759683913289
-    },
-    {
-      "customer_id": "CU296275",
-      "property_value": 719497.0,
-      "mortgage_balance": 227030.0,
-      "property_leverage_ratio": 0.3155398841134848
-    },
-    {
-      "customer_id": "CU102579",
-      "property_value": 1213986.0,
-      "mortgage_balance": 1423627.0,
-      "property_leverage_ratio": 1.172688152911154
+      "customer_id": "CS431093",
+      "property_value": 18975.0,
+      "mortgage_balance": 126135.0,
+      "property_leverage_ratio": 6.647430830039526
     }
   ],
   "row_count": 50,
-  "query_id": "6f3d5b0bf5c043ce8a89a76863132bb7",
+  "query_id": "44d7c0b84be0463ba62c9784f663a04d",
   "page": 1,
   "page_size": 50,
   "total_pages": 20,
   "total_rows": 1000,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Die Anfrage ist grundsätzlich machbar (Property Value und Mortgage Balance liegen in expenses_and_assets.propfinancialdata), aber es ist unklar, welche Kennung als „customer ID“ ausgegeben werden soll (core_record.clientref vs. core_record.coreregistry vs. appref). Außerdem ist nicht spezifiziert, ob alle Kunden oder nur Kunden mit Eigentum/Mortgage gezeigt werden sollen und wie mit fehlenden/NULL- oder 0-Werten (propvalue oder mortbalance) umzugehen ist, was die sichere Berechnung des Ratios beeinflusst.. Klärungsfragen: Welche Spalte soll als „customer ID“ ausgegeben werden: core_record.clientref (Kunden-ID), core_record.coreregistry (Record-ID) oder appref?, Sollen nur Kunden mit propfinancialdata.propown = 'Own' und vorhandenem mortgagebits.mortbalance angezeigt werden, oder alle Kunden (inkl. NULL/fehlender Werte)?",
-  "summary": "Die Abfrage liefert 1.000 Kunden (50 pro Seite) mit Immobilienwert, Hypothekensaldo und berechneter Leverage-Quote (mortgage_balance/property_value), wobei nur Datensätze mit beiden Werten berücksichtigt werden. In den ersten Zeilen fällt CU488662 mit einer sehr hohen Quote von ca. 1,86 auf (Hypothek 1.148.577 bei Immobilienwert 615.904), während CU390121 moderat gehebelt ist (ca. 0,37) und CU259187 nahezu schuldenfrei wirkt (ca. 0,01). Insgesamt zeigt die Stichprobe eine große Spannweite der Beleihung; als nächster Schritt bietet sich an, die Verteilung (z. B. Median/Perzentile) zu berechnen und Ausreißer mit Quote >1 gezielt zu prüfen.",
-  "explanation": "Returns one row per customer with CU-format customer_id plus property value and mortgage balance extracted from expenses_and_assets.propfinancialdata, and computes the leverage ratio (mortgage_balance / property_value) with NULLIF to avoid division-by-zero.",
+  "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar. ",
+  "summary": "Die Abfrage liefert 1.000 Kunden mit vorhandenen Immobilienwerten und Hypothekensalden und sortiert sie nach dem höchsten Beleihungsgrad (mortgage_balance/property_value). Auffällig sind extrem hohe Leverage-Ratios in den Top-Ergebnissen: CS108475 hat bei einem Immobilienwert von 1.018 einen Hypothekensaldo von 1.276.018 (Ratio ~1253,46), CS232079 liegt bei 389 vs. 433.348 (Ratio ~1114,01) und CS138931 bei 3.029 vs. 560.342 (Ratio ~184,99). Diese Ausreißer deuten auf sehr stark übersteigende Hypothekensalden im Verhältnis zum erfassten Immobilienwert hin und sollten ggf. auf Datenqualität/Einheiten (z. B. Wert in Tsd.) geprüft werden.",
+  "explanation": "Lists each customer record from expenses_and_assets with property value and mortgage balance extracted from propfinancialdata JSON, computes leverage ratio (mortgage_balance/property_value), filters out invalid rows (missing mortgage balance, missing/zero property value), and ranks customers by highest leverage first.",
   "error": null
 }

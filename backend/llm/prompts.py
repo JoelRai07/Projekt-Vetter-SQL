@@ -56,6 +56,8 @@ MANDATORY RULES:
    FROM core_record cr
    JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref
    ```
+   - If a BSL override specifies a table-native identifier (e.g., expenses_and_assets.expemplref for property leverage),
+     follow the override instead of clientref.
 
 2. **AGGREGATION RULES** (From BSL)
    - "by category" / "by segment" → MUST use GROUP BY
@@ -66,6 +68,8 @@ MANDATORY RULES:
    - "segment breakdown AND total" → Use UNION ALL
    - Exception: if question asks for categories AND customer details, return row-level records with category (no GROUP BY)
    - If credit classification is requested and details are not explicit, default to summary: category + count + avg score
+   - Never use SQL parameter placeholders (?,?,:name,@name,$name). Use explicit numeric literals.
+     If the question says "few customers" without a threshold, default to HAVING COUNT(*) >= 10.
 
 3. **BUSINESS RULES** (From BSL)
    Apply exact filters from domain knowledge:

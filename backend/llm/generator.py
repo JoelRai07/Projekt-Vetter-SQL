@@ -125,6 +125,24 @@ class OpenAIGenerator:
             return True
         return False
 
+    def _contains_param_placeholders(self, sql: str) -> bool:
+        """Detect SQL parameter placeholders which are not supported by execution."""
+        if not sql:
+            return False
+        # Strip single-quoted strings to avoid false positives.
+        stripped = re.sub(r"'(?:''|[^'])*'", "", sql)
+        return bool(
+            re.search(r"(\?(\d+)?|:[a-zA-Z_]\w*|@[a-zA-Z_]\w*|\$[a-zA-Z_]\w*)", stripped)
+        )
+
+    def _is_property_leverage_question(self, question: str) -> bool:
+        q = question.lower()
+        if any(k in q for k in ["property leverage", "mortgage ratio", "loan-to-value", "ltv"]):
+            return True
+        if "property value" in q and "mortgage" in q and ("ratio" in q or "leverage" in q):
+            return True
+        return False
+
     def _is_digital_engagement_cohort_question(self, question: str) -> bool:
         q = question.lower()
         return ("cohort" in q and "engagement" in q and "digital" in q)
@@ -170,27 +188,59 @@ class OpenAIGenerator:
 
     def _bsl_compliance_instruction(self, question: str, sql: str) -> str | None:
         sql_lower = sql.lower()
+        instructions = []
+
+        if self._contains_param_placeholders(sql):
+            instructions.append(
+                "SQL must not use parameter placeholders (?,?,:name,@name,$name). "
+                "Use explicit numeric literals. If the question says 'few customers' without a threshold, "
+                "default to HAVING COUNT(*) >= 10."
+            )
+
         if self._is_digital_engagement_cohort_question(question) and not self._has_explicit_time_range(question):
             if "cohort_quarter" in sql_lower or "strftime(" in sql_lower:
-                return (
-                    "BSL compliance: No explicit time range was given. "
+                instructions.append(
+                    "No explicit time range was given. "
                     "Do NOT compute or select cohort_quarter or any time-series columns. "
                     "Return only a 2-row summary grouped by is_digital_native with "
                     "cohort_size, avg_engagement (CES), and pct_high_engagement (CES > 0.7)."
                 )
+
         if self._is_credit_classification_details_question(question):
             if "group by" in sql_lower:
-                return (
-                    "BSL compliance: The question asks for credit categories AND customer details. "
+                instructions.append(
+                    "The question asks for credit categories AND customer details. "
                     "Return row-level records with a credit_category CASE expression and customer details. "
                     "Do NOT use GROUP BY or aggregates."
                 )
+
         if self._is_credit_classification_summary_question(question):
             if "group by" not in sql_lower:
-                return (
-                    "BSL compliance: Credit classification without explicit detail fields should return a summary. "
+                instructions.append(
+                    "Credit classification without explicit detail fields should return a summary. "
                     "Group by credit_category and output credit_category, customer_count, and average_credscore."
                 )
+
+        if self._is_property_leverage_question(question):
+            property_issues = []
+            if "join" in sql_lower or "core_record" in sql_lower or "employment_and_income" in sql_lower:
+                property_issues.append(
+                    "Read directly from expenses_and_assets only (no joins) when property leverage "
+                    "metrics come from propfinancialdata."
+                )
+            if "expemplref" not in sql_lower:
+                property_issues.append("Use expenses_and_assets.expemplref as customer_id.")
+            if "order by" not in sql_lower:
+                property_issues.append("Order by the leverage ratio descending.")
+            if property_issues:
+                property_issues.append(
+                    "Compute ratio as mortgage_balance / property_value from propfinancialdata and "
+                    "exclude NULL or zero property_value."
+                )
+                instructions.append("Property leverage rule: " + " ".join(property_issues))
+
+        if instructions:
+            return "BSL compliance: " + " ".join(instructions)
         return None
 
     def _regenerate_with_bsl_compliance(

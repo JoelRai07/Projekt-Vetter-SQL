@@ -366,6 +366,14 @@ class BSLBuilder:
                 "- When net worth is required, compute it as totassets - totliabs.",
                 "- Do not use expenses_and_assets.networth unless explicitly requested.",
                 "",
+                "Property leverage (LTV / mortgage ratio):",
+                "- When the question asks for property leverage/ratio and all needed fields are in expenses_and_assets.propfinancialdata:",
+                "  use expenses_and_assets.expemplref as customer_id.",
+                "- Query directly from expenses_and_assets; do not join core_record or employment_and_income.",
+                "- Compute ratio = mortgage_balance / property_value using JSON fields.",
+                "- Exclude NULL or zero property_value and NULL mortgage_balance.",
+                "- Order by the ratio descending.",
+                "",
                 "Credit classification defaults:",
                 "- If a question asks for credit classification WITHOUT explicit customer detail fields, return a summary:",
                 "  credit_category, customer_count, average_credscore (GROUP BY credit_category).",
@@ -379,6 +387,10 @@ class BSLBuilder:
                 "- If the question says \"quarterly cohorts\" but no explicit years/quarters are given, do not include cohort_quarter in output.",
                 "- Only use cohort_quarter or time-series when a concrete time range is explicitly requested.",
                 "- If this conflicts with generic cohort rules, prefer this section.",
+                "",
+                "Defaults for vague thresholds:",
+                "- Do not use SQL parameter placeholders (?,?,:name,@name,$name). Use explicit numeric literals.",
+                "- If a question says \"few customers\" without a threshold, default to HAVING COUNT(*) >= 10.",
             ]
         }
 

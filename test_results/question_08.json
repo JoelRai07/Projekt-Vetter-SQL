@@ -1,19 +1,79 @@
 {
   "question": "I need to analyze debt burden across different customer segments. Can you provide a summary for each segment with relevant debt metrics? Also add a grant total row. Exclude any customer segment with few customers and order the results.",
-  "ambiguity_check": null,
-  "generated_sql": "",
-  "validation": null,
-  "results": [],
-  "row_count": 0,
-  "query_id": null,
+  "ambiguity_check": {
+    "is_ambiguous": true,
+    "reason": "Wesentliche Spezifikationen fehlen, um eine korrekte und sichere SQL-Abfrage zu erstellen: (1) „debt burden“ ist nicht eindeutig, da mehrere mögliche Kennzahlen existieren (z. B. DTI=debincratio, totliabs, totloanamt, CUR/credutil oder Kombinationen). (2) „relevant debt metrics“ ist unbestimmt (welche Spalten/KPIs genau, Aggregationen wie AVG/SUM/MEDIAN). (3) „few customers“ benötigt einen konkreten Schwellenwert (z. B. <10) oder eine Regel (z. B. unteres Quantil). (4) „order the results“ ist unklar (nach Segmentname, Kundenzahl, DTI, liabilities etc., auf-/absteigend). (5) „grand total row“ ist unklar, ob es ein Gesamt-über-alle-Segmente Aggregat mit denselben Metriken sein soll und ob es oben/unten stehen soll.",
+    "questions": [
+      "Welche Kennzahl(en) definieren für dich „debt burden“? Soll primär DTI (employment_and_income.debincratio) verwendet werden oder z. B. totliabs, totloanamt, credutil bzw. eine Kombination?",
+      "Welche „relevant debt metrics“ sollen pro Segment ausgegeben werden (z. B. customer_count, avg_dti, median_dti, avg_totliabs, sum_totloanamt, avg_credutil, delinquency_rate etc.) und welche Aggregation (AVG/SUM/MEDIAN/MAX)?",
+      "Wie soll „few customers“ definiert werden (konkreter Mindestwert für Kundenzahl pro Segment, z. B. mindestens 30)?",
+      "Nach welcher Spalte sollen die Ergebnisse sortiert werden und in welcher Richtung (ASC/DESC)?",
+      "Wie genau soll die „grand total“ Zeile aussehen: gleiche Metriken über alle Segmente, und soll sie am Ende der Liste stehen?"
+    ]
+  },
+  "generated_sql": "WITH base AS (\n  SELECT\n    cr.clientseg AS customer_segment,\n    ei.debincratio AS dti,\n    ea.totliabs AS total_liabilities,\n    ea.totassets AS total_assets,\n    (ea.totassets - ea.totliabs) AS net_worth\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n),\nsegment_summary AS (\n  SELECT\n    customer_segment,\n    COUNT(*) AS customer_count,\n    AVG(dti) AS avg_dti,\n    AVG(total_liabilities) AS avg_total_liabilities,\n    AVG(total_assets) AS avg_total_assets,\n    AVG(net_worth) AS avg_net_worth,\n    CAST(SUM(CASE WHEN dti > 0.43 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) AS pct_dti_over_0_43,\n    CAST(SUM(CASE WHEN dti > 0.50 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) AS pct_dti_over_0_50\n  FROM base\n  GROUP BY customer_segment\n  HAVING COUNT(*) >= 10\n),\ngrand_total AS (\n  SELECT\n    'Grand Total' AS customer_segment,\n    COUNT(*) AS customer_count,\n    AVG(dti) AS avg_dti,\n    AVG(total_liabilities) AS avg_total_liabilities,\n    AVG(total_assets) AS avg_total_assets,\n    AVG(net_worth) AS avg_net_worth,\n    CAST(SUM(CASE WHEN dti > 0.43 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) AS pct_dti_over_0_43,\n    CAST(SUM(CASE WHEN dti > 0.50 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) AS pct_dti_over_0_50\n  FROM base\n)\nSELECT\n  customer_segment,\n  customer_count,\n  avg_dti,\n  avg_total_liabilities,\n  avg_total_assets,\n  avg_net_worth,\n  pct_dti_over_0_43,\n  pct_dti_over_0_50\nFROM (\n  SELECT 0 AS sort_key, ss.*\n  FROM segment_summary ss\n\n  UNION ALL\n\n  SELECT 1 AS sort_key, gt.*\n  FROM grand_total gt\n)\nORDER BY\n  sort_key ASC,\n  avg_dti DESC",
+  "validation": {
+    "is_valid": true,
+    "errors": [],
+    "severity": "low",
+    "suggestions": [
+      "Division-by-zero absichern: In segment_summary/grand_total wird durch COUNT(*) geteilt. Zwar verhindert HAVING COUNT(*) >= 10 das für segment_summary, aber grand_total könnte bei leerer base 0 sein. Verwende z.B. CAST(SUM(...) AS REAL) / NULLIF(COUNT(*), 0).",
+      "Optional: NULL-Werte in dti berücksichtigen. AVG(dti) ignoriert NULLs; die CASE-Ausdrücke behandeln NULL als 'else 0'. Falls NULLs nicht als 0 zählen sollen, nutze CASE WHEN dti IS NOT NULL AND dti > ... THEN 1 END und teile durch NULLIF(COUNT(dti),0).",
+      "Stil: explizite Spaltenliste statt ss.* / gt.* kann Wartbarkeit erhöhen (insb. bei Schema-/CTE-Änderungen)."
+    ]
+  },
+  "results": [
+    {
+      "customer_segment": "Basic",
+      "customer_count": 346,
+      "avg_dti": 0.3013526011560694,
+      "avg_total_liabilities": 499857.6329479769,
+      "avg_total_assets": 1051656.1040462428,
+      "avg_net_worth": 551798.4710982658,
+      "pct_dti_over_0_43": 0.28901734104046245,
+      "pct_dti_over_0_50": 0.18208092485549132
+    },
+    {
+      "customer_segment": "Standard",
+      "customer_count": 340,
+      "avg_dti": 0.29964411764705884,
+      "avg_total_liabilities": 488187.4794117647,
+      "avg_total_assets": 1040977.1794117647,
+      "avg_net_worth": 552789.7,
+      "pct_dti_over_0_43": 0.2676470588235294,
+      "pct_dti_over_0_50": 0.1588235294117647
+    },
+    {
+      "customer_segment": "Premium",
+      "customer_count": 314,
+      "avg_dti": 0.2982484076433121,
+      "avg_total_liabilities": 475622.2675159236,
+      "avg_total_assets": 1036613.5350318472,
+      "avg_net_worth": 560991.2675159236,
+      "pct_dti_over_0_43": 0.29936305732484075,
+      "pct_dti_over_0_50": 0.1464968152866242
+    },
+    {
+      "customer_segment": "Grand Total",
+      "customer_count": 1000,
+      "avg_dti": 0.29979700000000004,
+      "avg_total_liabilities": 488279.876,
+      "avg_total_assets": 1043301.903,
+      "avg_net_worth": 555022.027,
+      "pct_dti_over_0_43": 0.285,
+      "pct_dti_over_0_50": 0.163
+    }
+  ],
+  "row_count": 4,
+  "query_id": "036c52dff39c4b72bec8384687e2fad9",
   "page": 1,
-  "page_size": 100,
-  "total_pages": null,
-  "total_rows": null,
+  "page_size": 50,
+  "total_pages": 1,
+  "total_rows": 4,
   "has_next_page": false,
   "has_previous_page": false,
-  "notice": null,
-  "summary": null,
-  "explanation": "Interner Fehler – bitte erneut versuchen.",
-  "error": "Interner Fehler: Incorrect number of bindings supplied. The current statement uses 1, and there are 0 supplied."
+  "notice": " Hinweis: Ambiguity: Wesentliche Spezifikationen fehlen, um eine korrekte und sichere SQL-Abfrage zu erstellen: (1) „debt burden“ ist nicht eindeutig, da mehrere mögliche Kennzahlen existieren (z. B. DTI=debincratio, totliabs, totloanamt, CUR/credutil oder Kombinationen). (2) „relevant debt metrics“ ist unbestimmt (welche Spalten/KPIs genau, Aggregationen wie AVG/SUM/MEDIAN). (3) „few customers“ benötigt einen konkreten Schwellenwert (z. B. <10) oder eine Regel (z. B. unteres Quantil). (4) „order the results“ ist unklar (nach Segmentname, Kundenzahl, DTI, liabilities etc., auf-/absteigend). (5) „grand total row“ ist unklar, ob es ein Gesamt-über-alle-Segmente Aggregat mit denselben Metriken sein soll und ob es oben/unten stehen soll.. Klärungsfragen: Welche Kennzahl(en) definieren für dich „debt burden“? Soll primär DTI (employment_and_income.debincratio) verwendet werden oder z. B. totliabs, totloanamt, credutil bzw. eine Kombination?, Welche „relevant debt metrics“ sollen pro Segment ausgegeben werden (z. B. customer_count, avg_dti, median_dti, avg_totliabs, sum_totloanamt, avg_credutil, delinquency_rate etc.) und welche Aggregation (AVG/SUM/MEDIAN/MAX)?, Wie soll „few customers“ definiert werden (konkreter Mindestwert für Kundenzahl pro Segment, z. B. mindestens 30)?, Nach welcher Spalte sollen die Ergebnisse sortiert werden und in welcher Richtung (ASC/DESC)?, Wie genau soll die „grand total“ Zeile aussehen: gleiche Metriken über alle Segmente, und soll sie am Ende der Liste stehen?",
+  "summary": "Über die drei ausreichend großen Segmente (Basic n=346, Standard n=340, Premium n=314) liegen die durchschnittlichen DTI-Werte sehr nah beieinander und sind insgesamt moderat (ca. 0,298–0,301), wobei Basic den höchsten avg_dti aufweist. Beim Anteil höher belasteter Kunden zeigt sich Premium mit dem höchsten Anteil über 0,43 DTI (29,9%), während Basic den höchsten Anteil über 0,50 DTI hat (18,2%); Standard liegt bei beiden Schwellen darunter (26,8% bzw. 15,9%). Die Vermögenslage ist ebenfalls ähnlich: durchschnittliche Verbindlichkeiten sinken von Basic (~499,9k) zu Premium (~475,6k), während Premium den höchsten durchschnittlichen Net Worth aufweist (~561,0k) bei Assets um ~1,04–1,05 Mio.",
+  "explanation": "Builds a row-level base dataset with segment, DTI (debincratio), assets, liabilities, and computed net worth (totassets - totliabs). Aggregates debt-burden metrics by customer segment (counts, averages, and % above DTI thresholds 0.43 and 0.50). Excludes segments with fewer than 10 customers (HAVING). Adds a Grand Total row via UNION ALL and orders segments by highest average DTI, with the total row last.",
+  "error": null
 }
