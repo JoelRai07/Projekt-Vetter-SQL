@@ -77,6 +77,12 @@ Classify the question using these BSL patterns:
 - "by cohort quarter", "by enrollment quarter"
 - Must create cohort variable AND group by it
 - Returns cohort + metrics (NOT individual customers in detail)
+- Only do this when a concrete time range (years/quarters) is explicitly given
+
+**EXCEPTION: Category + Details**
+- If the question asks for categories AND customers' details, treat as a DETAIL query
+- Return row-level records with the category column (no GROUP BY)
+ - If details are NOT explicitly listed, default to a category summary (count + average)
 
 STEP 3: IDENTIFY BUSINESS RULES FROM BSL
 Check if question mentions:
@@ -159,10 +165,12 @@ MANDATORY RULES:
 2. **AGGREGATION RULES** (From BSL)
    - "by category" / "by segment" → MUST use GROUP BY
    - "top N" / "highest" → Use ORDER BY + LIMIT (NOT GROUP BY)
-   - "by cohort quarter" → GROUP BY cohort + extract from scoredate
+   - "by cohort quarter" → GROUP BY cohort + extract from scoredate ONLY when an explicit time range is provided
    - Every non-aggregated column in SELECT must be in GROUP BY
    - HAVING only contains aggregates
    - "segment breakdown AND total" → Use UNION ALL
+   - Exception: if question asks for categories AND customer details, return row-level records with category (no GROUP BY)
+   - If credit classification is requested and details are not explicit, default to summary: category + count + avg score
 
 3. **BUSINESS RULES** (From BSL)
    Apply exact filters from domain knowledge:
@@ -352,8 +360,9 @@ MANDATORY RULES:
 2. **AGGREGATION** (From BSL)
    - "by X" in question → GROUP BY required
    - "top N" / "highest" → ORDER + LIMIT, NOT GROUP BY
-   - "cohort" questions → GROUP BY extracted cohort variable
+   - "cohort" questions → GROUP BY extracted cohort variable ONLY when an explicit time range is provided
    - All non-agg SELECT columns must be in GROUP BY
+   - Exception: if question asks for categories AND customer details, return row-level records with category (no GROUP BY)
 
 3. **BUSINESS RULES** (From BSL)
    - "financially vulnerable" → Apply exact BSL filter

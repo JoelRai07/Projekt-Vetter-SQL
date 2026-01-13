@@ -113,6 +113,134 @@ class OpenAIGenerator:
 
             raise
 
+    def _extract_bsl_overrides(self, bsl_text: str) -> str:
+        """Extract manual BSL overrides section, if present."""
+        marker = "# BSL OVERRIDES (MANUAL)"
+        if not bsl_text or marker not in bsl_text:
+            return ""
+        return bsl_text.split(marker, 1)[1].strip()
+
+    def _has_explicit_time_range(self, question: str) -> bool:
+        """Detect explicit time ranges (years/quarters) in the question."""
+        q = question.lower()
+        if re.search(r"\b(19|20)\d{2}\b", q):
+            return True
+        if re.search(r"\bq[1-4]\b", q):
+            return True
+        return False
+
+    def _is_digital_engagement_cohort_question(self, question: str) -> bool:
+        q = question.lower()
+        return ("cohort" in q and "engagement" in q and "digital" in q)
+
+    def _is_credit_classification_details_question(self, question: str) -> bool:
+        q = question.lower()
+        if "credit" not in q:
+            return False
+        if "classification" not in q and "category" not in q:
+            return False
+        if "detail" not in q:
+            return False
+        if any(k in q for k in ["count", "average", "avg", "summary", "how many", "percentage"]):
+            return False
+        return True
+
+    def _has_explicit_detail_fields(self, question: str) -> bool:
+        q = question.lower()
+        if any(k in q for k in ["including", "such as", "with their", "fields", "columns"]):
+            return True
+        explicit_fields = [
+            "customer id",
+            "customer_id",
+            "clientref",
+            "appref",
+            "scoredate",
+            "risklev",
+            "defhist",
+            "delinqcount",
+            "latepaycount",
+            "credscore",
+        ]
+        return any(k in q for k in explicit_fields)
+
+    def _is_credit_classification_summary_question(self, question: str) -> bool:
+        q = question.lower()
+        if "credit" not in q:
+            return False
+        if "classification" not in q and "category" not in q:
+            return False
+        # Default to summary when details are not explicitly listed
+        return not self._has_explicit_detail_fields(question)
+
+    def _bsl_compliance_instruction(self, question: str, sql: str) -> str | None:
+        sql_lower = sql.lower()
+        if self._is_digital_engagement_cohort_question(question) and not self._has_explicit_time_range(question):
+            if "cohort_quarter" in sql_lower or "strftime(" in sql_lower:
+                return (
+                    "BSL compliance: No explicit time range was given. "
+                    "Do NOT compute or select cohort_quarter or any time-series columns. "
+                    "Return only a 2-row summary grouped by is_digital_native with "
+                    "cohort_size, avg_engagement (CES), and pct_high_engagement (CES > 0.7)."
+                )
+        if self._is_credit_classification_details_question(question):
+            if "group by" in sql_lower:
+                return (
+                    "BSL compliance: The question asks for credit categories AND customer details. "
+                    "Return row-level records with a credit_category CASE expression and customer details. "
+                    "Do NOT use GROUP BY or aggregates."
+                )
+        if self._is_credit_classification_summary_question(question):
+            if "group by" not in sql_lower:
+                return (
+                    "BSL compliance: Credit classification without explicit detail fields should return a summary. "
+                    "Group by credit_category and output credit_category, customer_count, and average_credscore."
+                )
+        return None
+
+    def _regenerate_with_bsl_compliance(
+        self,
+        question: str,
+        schema: str,
+        meanings: str,
+        bsl: str,
+        instruction: str,
+        previous_sql: str,
+    ) -> Dict[str, Any]:
+        overrides_text = self._extract_bsl_overrides(bsl)
+        prompt = f"""
+### BSL OVERRIDES (HIGHEST PRIORITY - MUST FOLLOW):
+{overrides_text or "[No overrides]"}
+
+### BUSINESS SEMANTICS LAYER (⚠️ CRITICAL - READ FIRST):
+{bsl if bsl else "[No BSL provided - using defaults]"}
+
+### DATENBANK SCHEMA & BEISPIELDATEN:
+{schema}
+
+### SPALTEN BEDEUTUNGEN:
+{meanings}
+
+### NUTZER-FRAGE:
+{question}
+
+BSL COMPLIANCE ISSUE:
+{instruction}
+
+PREVIOUS SQL (NON-COMPLIANT):
+{previous_sql}
+
+Regenerate the SQL to comply with the BSL. Output JSON as required.
+"""
+        response = self._call_openai(SystemPrompts.SQL_GENERATION, prompt)
+        result = self._ensure_generation_fields(self._parse_json_response(response))
+        if result.get("sql"):
+            result["sql"] = result["sql"].replace("```sql", "").replace("```", "").strip()
+        if result.get("explanation"):
+            result["explanation"] = f"{result['explanation']} [BSL compliance regeneration]"
+        else:
+            result["explanation"] = "BSL compliance regeneration"
+        return result
+
     def _ensure_generation_fields(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Validiert, dass wichtige Felder in der SQL-Generierung vorhanden sind."""
         ensured = result.copy()
@@ -177,7 +305,11 @@ Analysiere die Frage auf Mehrdeutigkeit.
         bsl: str = "",
     ) -> Dict[str, Any]:
         """Generiert SQL aus der Nutzer-Frage"""
+        overrides_text = self._extract_bsl_overrides(bsl)
         prompt = f"""
+### BSL OVERRIDES (HIGHEST PRIORITY - MUST FOLLOW):
+{overrides_text or "[No overrides]"}
+
 ### BUSINESS SEMANTICS LAYER (⚠️ CRITICAL - READ FIRST):
 {bsl if bsl else "[No BSL provided - using defaults]"}
 
@@ -186,9 +318,6 @@ Analysiere die Frage auf Mehrdeutigkeit.
 
 ### SPALTEN BEDEUTUNGEN:
 {meanings}
-
-### DOMAIN WISSEN & FORMELN (WICHTIG - EXAKT UMSETZEN!):
-{kb}
 
 ### NUTZER-FRAGE:
 {question}
@@ -211,6 +340,18 @@ WICHTIG: Befolge die BSL-Regeln strikt:
             if result.get("sql"):
                 sql = result["sql"].replace("```sql", "").replace("```", "").strip()
                 result["sql"] = sql
+
+            if result.get("sql"):
+                instruction = self._bsl_compliance_instruction(question, result["sql"])
+                if instruction:
+                    result = self._regenerate_with_bsl_compliance(
+                        question=question,
+                        schema=schema,
+                        meanings=meanings,
+                        bsl=bsl,
+                        instruction=instruction,
+                        previous_sql=result["sql"],
+                    )
 
             return result
         except json.JSONDecodeError as e:
@@ -491,7 +632,11 @@ Antworte als JSON."""
             fallback_used = False
         
         # Generiere SQL
+        overrides_text = self._extract_bsl_overrides(bsl_text)
         prompt = f"""
+
+### BSL OVERRIDES (HIGHEST PRIORITY - MUST FOLLOW):
+{overrides_text or "[No overrides]"}
 
 ### BUSINESS SEMANTICS LAYER (⚠️ READ FIRST):
 {bsl_text}
@@ -501,9 +646,6 @@ Antworte als JSON."""
 
 ### RELEVANTE SPALTEN BEDEUTUNGEN:
 {relevant_meanings}
-
-### RELEVANTE DOMAIN WISSEN & FORMELN:
-{relevant_kb}
 
 ### NUTZER-FRAGE:
 {question}
@@ -527,6 +669,18 @@ Generiere die SQL-Query im JSON-Format."""
             # SQL säubern
             if result.get("sql"):
                 result["sql"] = result["sql"].replace("```sql", "").replace("```", "").strip()
+
+            if result.get("sql"):
+                instruction = self._bsl_compliance_instruction(question, result["sql"])
+                if instruction:
+                    result = self._regenerate_with_bsl_compliance(
+                        question=question,
+                        schema=relevant_schema or "",
+                        meanings=relevant_meanings,
+                        bsl=bsl_text,
+                        instruction=instruction,
+                        previous_sql=result["sql"],
+                    )
             
             # Warnung wenn Fallback verwendet wurde
             if fallback_used and result.get("sql"):

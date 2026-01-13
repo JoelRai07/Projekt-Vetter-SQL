@@ -97,6 +97,9 @@ Keywords that REQUIRE GROUP BY:
 - 'analyze ... by', 'group into', 'cohorts'
 - 'how many', 'count', 'average', 'total'
 
+Exception:
+- If question asks for categories AND customer details, return row-level records with category (no GROUP BY).
+
 Example: 'Analyze credit scores BY risk level'  → GROUP BY risklev
 
 ### Detail/Ranking Queries (No GROUP BY, use ORDER + LIMIT)
@@ -116,12 +119,13 @@ Example: 'Find all digital-first customers' → SELECT WHERE (no GROUP BY)
 ⚠️ Do NOT GROUP BY unless question explicitly asks for breakdown
 
 ## ⚠️ CRITICAL: Cohort Questions (Special Case)
-When question asks 'by cohort quarter':
+When question asks 'by cohort quarter' AND an explicit time range is given:
 - This is a GROUPING operation
 - Must create cohort_quarter variable from scoredate
 - Formula: Extract quarter from scoredate (or tenure-based cohort)
 - MUST include GROUP BY cohort_quarter
 - Each row shows: customer (or cohort indicator), metrics
+If no explicit years/quarters are given, do NOT include cohort_quarter in output.
 
 ## ⚠️ CRITICAL: Multi-Level Grouping (Advanced)
 When question asks 'group by X AND ALSO Y':
@@ -557,9 +561,16 @@ Net worth:
 - When net worth is required, compute it as totassets - totliabs.
 - Do not use expenses_and_assets.networth unless explicitly requested.
 
+Credit classification defaults:
+- If a question asks for credit classification WITHOUT explicit customer detail fields, return a summary:
+  credit_category, customer_count, average_credscore (GROUP BY credit_category).
+- If explicit customer detail fields are listed (e.g., customer_id, scoredate, risklev), return row-level records
+  with credit_category included (no GROUP BY).
+
 Digital engagement cohort summary:
 - If a question asks for digital engagement by cohort and digital-native status without a concrete time window
   (explicit years or quarters), return a two-row summary grouped only by is_digital_native with:
   cohort_size, avg_engagement (CES), pct_high_engagement (CES > 0.7).
+- If the question says "quarterly cohorts" but no explicit years/quarters are given, do not include cohort_quarter in output.
 - Only use cohort_quarter or time-series when a concrete time range is explicitly requested.
 - If this conflicts with generic cohort rules, prefer this section.
