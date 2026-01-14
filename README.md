@@ -130,7 +130,7 @@ npm start
 │  │    → Business Semantics Layer (BSL)              │   │
 │  │    → Vollständiges Schema + Meanings + BSL       │   │
 │  │    → Explizite Business Rules                    │   │
-│  │    → Temperature=0.2 für Determinismus          │   │
+│  │    → Temperature=0 für Determinismus            │   │
 │  └─────────────────────────────────────────────────┘   │
 │                          │                             │
 │                          ↓                             │
