@@ -2,50 +2,50 @@
   "question": "To pinpoint customers who might be facing financial hardship, I'd like to see their customer ID, the calculated vulnerability score, their net worth, delinquency count, and late payment count. Only output the customers with signs of financial hardship.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "„Signs of financial hardship“ ist nicht eindeutig definiert. Im Domain-Wissen gibt es mehrere mögliche Regeln/Indikatoren (z.B. Financially Vulnerable, Financial Stress Indicator, FVS>0.7 + weitere Bedingungen), aber die Frage sagt nicht, welche Definition/Schwellenwerte für das Filtern verwendet werden sollen. Außerdem ist unklar, welche ID als „customer ID“ gemeint ist (core_record.clientref vs. coreregistry), und der „calculated vulnerability score“ könnte mehrere Scores meinen (z.B. FVS vs. FSI/CHS).",
+    "reason": "„Signs of financial hardship“ ist nicht eindeutig als filterbare Bedingung definiert. Im Domain-Wissen gibt es mehrere mögliche Definitionen/Regeln (z. B. Financially Vulnerable, Financial Stress Indicator, FVS > 0.7 plus weitere Kriterien), aber die Frage sagt nicht, welche davon verwendet werden soll. Außerdem ist „calculated vulnerability score“ nicht eindeutig: es könnte der Financial Vulnerability Score (FVS) sein, oder eine andere Vulnerabilitätsdefinition. Ohne diese Festlegung ist keine sichere, korrekte SQL-Filterlogik möglich.",
     "questions": [
-      "Welche konkrete Definition soll für „signs of financial hardship“ gelten (z.B. Regel „Financially Vulnerable“, „Financial Stress Indicator“, oder nur FVS über einem bestimmten Schwellenwert)?",
-      "Welchen „vulnerability score“ soll ich berechnen/ausgeben (FVS gemäß Formel, oder eine andere Kennzahl)?",
-      "Welche ID soll als „customer ID“ ausgegeben werden: core_record.clientref (Kunden-ID) oder coreregistry (Record-ID)?"
+      "Welche konkrete Definition soll für „signs of financial hardship“ als Filter gelten (z. B. Regel „Financially Vulnerable“ oder „Financial Stress Indicator“ oder nur FVS über einem Schwellenwert)?",
+      "Mit „calculated vulnerability score“ meinst du explizit den Financial Vulnerability Score (FVS) aus dem Domain-Wissen (0.5*DTI + 0.5*(1 - liqassets/(mthincome*6))) oder eine andere Kennzahl?"
     ]
   },
-  "generated_sql": "SELECT\n  cr.clientref AS customer_id,\n  (\n    0.5 * ei.debincratio\n    + 0.5 * (\n      1 - (ea.liqassets / (ei.mthincome * 6))\n    )\n  ) AS vulnerability_score,\n  (ea.totassets - ea.totliabs) AS net_worth,\n  cc.delinqcount,\n  cc.latepaycount\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nWHERE\n  ei.mthincome IS NOT NULL\n  AND ei.mthincome > 0\n  AND ea.liqassets IS NOT NULL\n  AND (\n    0.5 * ei.debincratio\n    + 0.5 * (1 - (ea.liqassets / (ei.mthincome * 6)))\n  ) > 0.7\n  AND (cc.delinqcount > 0 OR cc.latepaycount > 0)\n  AND (ea.totassets - ea.totliabs) < 0",
+  "generated_sql": "WITH base AS (\n  SELECT\n    cr.clientref AS customer_id,\n    (\n      0.5 * ei.debincratio\n      + 0.5 * (\n        1.0 - (ea.liqassets / (ei.mthincome * 6.0))\n      )\n    ) AS vulnerability_score,\n    (ea.totassets - ea.totliabs) AS net_worth,\n    cc.delinqcount,\n    cc.latepaycount\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\n  JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\n  JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\n  WHERE\n    ei.mthincome IS NOT NULL\n    AND ei.mthincome > 0\n    AND ea.liqassets IS NOT NULL\n)\nSELECT\n  customer_id,\n  vulnerability_score,\n  net_worth,\n  delinqcount,\n  latepaycount\nFROM base\nWHERE\n  vulnerability_score > 0.7\n  AND (delinqcount > 0 OR latepaycount > 0)\n  AND net_worth < 0\nORDER BY vulnerability_score DESC",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: Add NULL-safety for ei.debincratio (e.g., COALESCE(ei.debincratio, 0)) to avoid vulnerability_score becoming NULL and filtering out rows unintentionally.",
-      "Optional: Guard against NULL ea.totassets/ea.totliabs if those can be NULL (e.g., COALESCE(ea.totassets,0) - COALESCE(ea.totliabs,0)).",
-      "Optional: Consider whether the filter '(cc.delinqcount > 0 OR cc.latepaycount > 0)' should treat NULLs as 0 (use COALESCE) if NULL means 'no data' rather than '0'."
+      "Division-by-zero/NULL vermeiden: In vulnerability_score wird durch (ei.mthincome * 6.0) geteilt. Zwar ist mthincome > 0 gefiltert, aber ea.liqassets kann 0 sein (ok) und ei.debincratio kann NULL sein → vulnerability_score wird dann NULL und fällt aus dem Ergebnis. Falls gewünscht: COALESCE(ei.debincratio, 0) verwenden.",
+      "Optional: ea.liqassets / (ei.mthincome * 6.0) kann > 1 werden (wenn Liquid Assets sehr hoch sind), dadurch wird vulnerability_score ggf. negativ. Falls Score auf [0,1] begrenzt werden soll, clampen (z.B. MIN/MAX).",
+      "JOIN-Kette ist FK-konform, aber alle JOINs sind INNER JOINs: Datensätze ohne Credit/Bank/History fallen komplett raus. Falls das nicht beabsichtigt ist, LEFT JOINs für cc/cah/bt erwägen.",
+      "Style: ORDER BY vulnerability_score DESC ist ok; optional zusätzlich customer_id als Tie-Breaker (ORDER BY vulnerability_score DESC, customer_id)."
     ]
   },
   "results": [
-    {
-      "customer_id": "CU456680",
-      "vulnerability_score": 0.7420225883917988,
-      "net_worth": -589973.0,
-      "delinqcount": 5,
-      "latepaycount": 10
-    },
     {
       "customer_id": "CU582141",
       "vulnerability_score": 0.7817902361020886,
       "net_worth": -320071.0,
       "delinqcount": 2,
       "latepaycount": 14
+    },
+    {
+      "customer_id": "CU456680",
+      "vulnerability_score": 0.7420225883917988,
+      "net_worth": -589973.0,
+      "delinqcount": 5,
+      "latepaycount": 10
     }
   ],
   "row_count": 2,
-  "query_id": "f259f15f27854a63bb4cca29c658b579",
+  "query_id": "1ae6257a89dd44fda8212f37b91b4365",
   "page": 1,
   "page_size": 50,
   "total_pages": 1,
   "total_rows": 2,
   "has_next_page": false,
   "has_previous_page": false,
-  "notice": " Hinweis: Ambiguity: „Signs of financial hardship“ ist nicht eindeutig definiert. Im Domain-Wissen gibt es mehrere mögliche Regeln/Indikatoren (z.B. Financially Vulnerable, Financial Stress Indicator, FVS>0.7 + weitere Bedingungen), aber die Frage sagt nicht, welche Definition/Schwellenwerte für das Filtern verwendet werden sollen. Außerdem ist unklar, welche ID als „customer ID“ gemeint ist (core_record.clientref vs. coreregistry), und der „calculated vulnerability score“ könnte mehrere Scores meinen (z.B. FVS vs. FSI/CHS).. Klärungsfragen: Welche konkrete Definition soll für „signs of financial hardship“ gelten (z.B. Regel „Financially Vulnerable“, „Financial Stress Indicator“, oder nur FVS über einem bestimmten Schwellenwert)?, Welchen „vulnerability score“ soll ich berechnen/ausgeben (FVS gemäß Formel, oder eine andere Kennzahl)?, Welche ID soll als „customer ID“ ausgegeben werden: core_record.clientref (Kunden-ID) oder coreregistry (Record-ID)?",
-  "summary": "Die Abfrage identifiziert 2 Kunden mit klaren Anzeichen finanzieller Härte (Vulnerability Score > 0,7, negative Net Worth sowie Delinquenzen oder verspätete Zahlungen). CU582141 weist den höchsten Vulnerability Score (0,782) und die meisten Late Payments (14) auf, während CU456680 mit -589.973 die deutlich negativere Nettovermögensposition hat und zudem 5 Delinquenzen sowie 10 Late Payments zeigt.",
-  "explanation": "Lists customers (CU customer_id) who meet the BSL-defined Financial Hardship/Stress condition by computing FVS from DTI (debincratio) and emergency-fund adequacy, computing net worth as totassets - totliabs, and filtering to FVS > 0.7 with any delinquency/late payments and negative net worth.",
+  "notice": " Hinweis: Ambiguity: „Signs of financial hardship“ ist nicht eindeutig als filterbare Bedingung definiert. Im Domain-Wissen gibt es mehrere mögliche Definitionen/Regeln (z. B. Financially Vulnerable, Financial Stress Indicator, FVS > 0.7 plus weitere Kriterien), aber die Frage sagt nicht, welche davon verwendet werden soll. Außerdem ist „calculated vulnerability score“ nicht eindeutig: es könnte der Financial Vulnerability Score (FVS) sein, oder eine andere Vulnerabilitätsdefinition. Ohne diese Festlegung ist keine sichere, korrekte SQL-Filterlogik möglich.. Klärungsfragen: Welche konkrete Definition soll für „signs of financial hardship“ als Filter gelten (z. B. Regel „Financially Vulnerable“ oder „Financial Stress Indicator“ oder nur FVS über einem Schwellenwert)?, Mit „calculated vulnerability score“ meinst du explizit den Financial Vulnerability Score (FVS) aus dem Domain-Wissen (0.5*DTI + 0.5*(1 - liqassets/(mthincome*6))) oder eine andere Kennzahl?",
+  "summary": "Die Abfrage identifiziert 2 Kunden mit klaren Anzeichen finanzieller Härte (Vulnerability Score > 0,7, negative Net Worth sowie Delinquenzen oder verspätete Zahlungen). CU582141 weist den höchsten Vulnerability Score (0,782) bei einem Nettovermögen von -320.071, 2 Delinquenzen und 14 verspäteten Zahlungen auf; CU456680 folgt mit 0,742, einem noch stärkeren negativen Nettovermögen von -589.973 sowie 5 Delinquenzen und 10 verspäteten Zahlungen. Insgesamt deuten beide Profile auf erhöhte finanzielle Verwundbarkeit in Kombination mit bereits auffälligem Zahlungsverhalten hin.",
+  "explanation": "Builds a customer-level dataset (CU customer_id) with (1) vulnerability_score computed via the BSL FVS formula using DTI=debincratio, liquid assets, and monthly income; (2) net_worth computed as totassets - totliabs per override; then filters to only customers meeting the Financial Hardship/Stress rule and returns the requested delinquency/late-payment indicators.",
   "error": null
 }

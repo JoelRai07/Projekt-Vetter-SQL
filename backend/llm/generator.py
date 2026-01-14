@@ -27,7 +27,7 @@ class OpenAIGenerator:
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.2,
+                temperature=0,
             )
             content = response.choices[0].message.content or ""
             return content.strip()

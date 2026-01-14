@@ -2,22 +2,23 @@
   "question": "Can you show me the top wealthy customers with their financial value? Including their IDs, total assets, total liabilities, the computed net worth value, and their ranking.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "Wesentliche Parameter für eine korrekte SQL-Abfrage fehlen: Was genau bedeutet „top wealthy“ (Ranking nach networth oder totassets?), wie viele Kunden sollen gezeigt werden (Top N), und ob negative Net Worth ausgeschlossen werden soll. Außerdem ist „their IDs“ unklar (clientref vs. coreregistry vs. appref), und „financial value“ kann mehrere Kennzahlen meinen (networth, totassets, custlifeval).",
+    "reason": "Wesentliche Parameter sind nicht festgelegt: Was bedeutet „top wealthy“ (nach networth, totassets, liqassets oder anderer Kennzahl) und wie viele Kunden sollen gezeigt werden. Außerdem ist „financial value“ unklar (meint es net worth, custlifeval/CLV, totassets oder etwas anderes). Für ein korrektes Ranking muss zudem definiert werden, wie mit negativen/NULL Net Worth umzugehen ist und ob es eine zeitliche Einschränkung (z.B. aktuelles scoredate) geben soll, da core_record mehrere Zeitpunkte enthalten kann.",
     "questions": [
-      "Wie definieren Sie „top wealthy“: nach berechnetem Net Worth (networth bzw. totassets - totliabs) oder nach Total Assets (totassets)?",
-      "Wie viele Datensätze sollen ausgegeben werden (Top 10, Top 100, etc.) und sollen Kunden mit negativem Net Worth ausgeschlossen werden?",
-      "Welche ID soll angezeigt werden: coreregistry (Kernschlüssel), clientref (Kunden-ID) oder appref (Antrags-ID)?",
-      "Was meinen Sie mit „financial value“: Net Worth, Total Assets, oder Customer Lifetime Value (custlifeval)?"
+      "Woran soll „top wealthy“ gemessen werden: nach Net Worth (networth bzw. totassets - totliabs) oder nach Total Assets (totassets) oder etwas anderem?",
+      "Was genau meinst du mit „financial value“: Net Worth, Customer Lifetime Value (custlifeval/CLV) oder eine andere Kennzahl?",
+      "Wie viele Kunden sollen ausgegeben werden (Top 10/50/100) und sollen Kunden mit negativem oder NULL Net Worth ausgeschlossen werden?",
+      "Soll die Auswertung auf einen bestimmten Zeitraum/Stand begrenzt werden (z.B. neuestes scoredate/decidedate), falls es mehrere core_record-Einträge pro Kunde gibt?"
     ]
   },
-  "generated_sql": "WITH base AS (\n  SELECT\n    cr.clientref AS customer_id,\n    ea.totassets AS total_assets,\n    ea.totliabs AS total_liabilities,\n    (ea.totassets - ea.totliabs) AS computed_net_worth\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  WHERE ea.totassets IS NOT NULL\n    AND ea.totliabs IS NOT NULL\n)\nSELECT\n  customer_id,\n  total_assets,\n  total_liabilities,\n  computed_net_worth,\n  DENSE_RANK() OVER (ORDER BY computed_net_worth DESC) AS wealth_rank\nFROM base\nORDER BY computed_net_worth DESC\nLIMIT 10",
+  "generated_sql": "WITH ranked AS (\n  SELECT\n    cr.clientref AS customer_id,\n    ea.totassets AS total_assets,\n    ea.totliabs AS total_liabilities,\n    (ea.totassets - ea.totliabs) AS computed_net_worth,\n    RANK() OVER (ORDER BY (ea.totassets - ea.totliabs) DESC) AS wealth_rank\n  FROM core_record cr\n  JOIN employment_and_income ei\n    ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea\n    ON ei.emplcoreref = ea.expemplref\n)\nSELECT\n  customer_id,\n  total_assets,\n  total_liabilities,\n  computed_net_worth,\n  wealth_rank\nFROM ranked\nORDER BY wealth_rank\nLIMIT 10",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: Add a deterministic tie-breaker to the window ORDER BY (e.g., ORDER BY computed_net_worth DESC, customer_id) to make ranking stable when net worth ties occur.",
-      "Optional: If you want to exclude negative net worth, add a filter like WHERE (ea.totassets - ea.totliabs) >= 0 in the CTE."
+      "Optional: Tie-breaker für deterministisches Ranking hinzufügen, z.B. RANK() OVER (ORDER BY (ea.totassets - ea.totliabs) DESC, cr.clientref) und/oder ORDER BY wealth_rank, customer_id im finalen SELECT.",
+      "Optional: Wenn nur eindeutige Top-10 ohne Lücken gewünscht sind, DENSE_RANK() statt RANK() verwenden.",
+      "Optional: Falls NULL-Werte in totassets/totliabs möglich sind, COALESCE(ea.totassets,0) und COALESCE(ea.totliabs,0) nutzen, um NULL-Net-Worth zu vermeiden."
     ]
   },
   "results": [
@@ -93,15 +94,15 @@
     }
   ],
   "row_count": 10,
-  "query_id": "0b113cde3f0948bbb673d4f279581815",
+  "query_id": "e72c8c2dde684ba7b38b519992b0b883",
   "page": 1,
   "page_size": 50,
   "total_pages": 1,
   "total_rows": 10,
   "has_next_page": false,
   "has_previous_page": false,
-  "notice": " Hinweis: Ambiguity: Wesentliche Parameter für eine korrekte SQL-Abfrage fehlen: Was genau bedeutet „top wealthy“ (Ranking nach networth oder totassets?), wie viele Kunden sollen gezeigt werden (Top N), und ob negative Net Worth ausgeschlossen werden soll. Außerdem ist „their IDs“ unklar (clientref vs. coreregistry vs. appref), und „financial value“ kann mehrere Kennzahlen meinen (networth, totassets, custlifeval).. Klärungsfragen: Wie definieren Sie „top wealthy“: nach berechnetem Net Worth (networth bzw. totassets - totliabs) oder nach Total Assets (totassets)?, Wie viele Datensätze sollen ausgegeben werden (Top 10, Top 100, etc.) und sollen Kunden mit negativem Net Worth ausgeschlossen werden?, Welche ID soll angezeigt werden: coreregistry (Kernschlüssel), clientref (Kunden-ID) oder appref (Antrags-ID)?, Was meinen Sie mit „financial value“: Net Worth, Total Assets, oder Customer Lifetime Value (custlifeval)?",
-  "summary": "Die Abfrage zeigt die Top-10 vermögendsten Kunden basierend auf dem berechneten Nettovermögen (Total Assets minus Total Liabilities) inklusive Ranking. Auf Platz 1 liegt CU154870 mit 1,966,126 Gesamtvermögen und 50,822 Verbindlichkeiten (Nettovermögen 1,915,304), gefolgt von CU203973 (Nettovermögen 1,900,606) und CU452686 (Nettovermögen 1,896,679). Insgesamt liegen die Top-3 sehr nah beieinander, mit Nettovermögen jeweils knapp unter bzw. über 1,9 Mio.",
-  "explanation": "Returns the top 10 customers by computed net worth (total_assets - total_liabilities), showing CU-format customer_id, assets, liabilities, computed net worth, and a rank (1 = highest net worth).",
+  "notice": " Hinweis: Ambiguity: Wesentliche Parameter sind nicht festgelegt: Was bedeutet „top wealthy“ (nach networth, totassets, liqassets oder anderer Kennzahl) und wie viele Kunden sollen gezeigt werden. Außerdem ist „financial value“ unklar (meint es net worth, custlifeval/CLV, totassets oder etwas anderes). Für ein korrektes Ranking muss zudem definiert werden, wie mit negativen/NULL Net Worth umzugehen ist und ob es eine zeitliche Einschränkung (z.B. aktuelles scoredate) geben soll, da core_record mehrere Zeitpunkte enthalten kann.. Klärungsfragen: Woran soll „top wealthy“ gemessen werden: nach Net Worth (networth bzw. totassets - totliabs) oder nach Total Assets (totassets) oder etwas anderem?, Was genau meinst du mit „financial value“: Net Worth, Customer Lifetime Value (custlifeval/CLV) oder eine andere Kennzahl?, Wie viele Kunden sollen ausgegeben werden (Top 10/50/100) und sollen Kunden mit negativem oder NULL Net Worth ausgeschlossen werden?, Soll die Auswertung auf einen bestimmten Zeitraum/Stand begrenzt werden (z.B. neuestes scoredate/decidedate), falls es mehrere core_record-Einträge pro Kunde gibt?",
+  "summary": "Die Abfrage liefert die Top-10 vermögendsten Kunden nach berechnetem Nettovermögen (Total Assets minus Total Liabilities) inklusive Ranking. Auf Platz 1 liegt CU154870 mit 1,966,126 Gesamtvermögen und 50,822 Verbindlichkeiten (Net Worth 1,915,304), gefolgt von CU203973 (Net Worth 1,900,606) und CU452686 (Net Worth 1,896,679). Insgesamt liegen die führenden Nettovermögen eng beieinander (rund 1,90–1,92 Mio.), wobei die Verbindlichkeiten im Vergleich zu den Assets relativ gering ausfallen.",
+  "explanation": "Lists the top 10 wealthiest customers by computed net worth (total_assets - total_liabilities). Outputs CU-format customer_id, assets, liabilities, computed net worth, and a rank based on net worth (1 = highest).",
   "error": null
 }

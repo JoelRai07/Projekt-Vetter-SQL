@@ -2,21 +2,21 @@
   "question": "Please find all the customer IDs who are highly digital.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "„Highly digital“ ist im Schema/Domainwissen nicht als eindeutiges Kriterium definiert. Es gibt zwar eine Definition für „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage verwendet einen anderen Begriff und nennt keine Schwellen/Regeln. Außerdem ist „customer IDs“ nicht direkt in den Digital-Attribut-Tabellen vorhanden; clientref steht in core_record, während die Digital-Felder in bank_and_transactions.chaninvdatablock liegen, sodass ohne bestätigte Join-Logik/Schlüsselbezug nicht sicher ist, wie die IDs korrekt zugeordnet werden sollen.",
+    "reason": "„Highly digital“ ist im Schema/Domainwissen nicht als eindeutiges Kriterium definiert. Es gibt zwar eine Definition für „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Regel gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung reicht bzw. ein Score/Schwellenwert verwendet werden soll. Außerdem ist „customer IDs“ als clientref in core_record vorhanden, aber die Verknüpfung zu den Digital-Attributen läuft über mehrere Tabellen; ohne klare Definition kann die Filterlogik nicht sicher festgelegt werden.",
     "questions": [
-      "Soll „highly digital“ genau der Domain-Definition „Digital First Customer“ entsprechen (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?",
-      "Welche ID soll ausgegeben werden: core_record.clientref (Customer ID) oder coreregistry (Record ID)? Und soll die Zuordnung über die Kette core_record → employment_and_income → expenses_and_assets → bank_and_transactions erfolgen?"
+      "Soll „highly digital“ exakt der Domain-Definition „Digital First Customer“ entsprechen (onlineuse oder mobileuse = 'High' und autopay = 'Yes')?",
+      "Falls nein: Welche konkreten Kriterien/Schwellenwerte sollen „highly digital“ bestimmen (z.B. nur onlineuse/mobileuse = 'High', depostat = 'Yes', oder ein zusammengesetzter Score)?"
     ]
   },
-  "generated_sql": "SELECT\n  cr.clientref AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
+  "generated_sql": "SELECT DISTINCT\n  cr.clientref AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: DISTINCT hinzufügen, falls pro clientref mehrere verknüpfte Datensätze existieren können (z.B. durch Duplikate entlang der 1:1-Kette): SELECT DISTINCT cr.clientref ...",
-      "Optional: NULL-sicher filtern, falls chaninvdatablock NULL oder ungültiges JSON enthalten kann (json_extract liefert dann NULL und die Bedingungen greifen nicht).",
-      "Optional: Performance: Wenn häufig gefiltert wird, könnte ein generated column / Index auf json_extract(bt.chaninvdatablock, '$.onlineuse'), '$.mobileuse', '$.autopay' helfen (SQLite abhängig von Version/Setup)."
+      "JOINs sind korrekt, aber redundant: Da die FK-Kette bt.bankexpref -> ea.expemplref -> ei.emplcoreref -> cr.coreregistry gilt, könntest du (falls nur customer_id benötigt wird) auch direkt von bank_and_transactions über die FK-Kette joinen; funktional ist die Query aber korrekt.",
+      "Optional: json_extract(...) mehrfach genutzt – für Performance/Lesbarkeit könntest du die JSON-Werte in einer CTE/Subquery einmal extrahieren und dann filtern.",
+      "Optional: Wenn chaninvdatablock ungültiges JSON enthalten kann, kann json_extract NULL liefern; falls das relevant ist, ggf. mit json_valid(bt.chaninvdatablock) absichern."
     ]
   },
   "results": [
@@ -172,15 +172,15 @@
     }
   ],
   "row_count": 50,
-  "query_id": "b6d00e194dc5481f905e2b0957b54df2",
+  "query_id": "596d4ceee17f4fba98af6420b8933ae2",
   "page": 1,
   "page_size": 50,
   "total_pages": 6,
   "total_rows": 285,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist im Schema/Domainwissen nicht als eindeutiges Kriterium definiert. Es gibt zwar eine Definition für „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage verwendet einen anderen Begriff und nennt keine Schwellen/Regeln. Außerdem ist „customer IDs“ nicht direkt in den Digital-Attribut-Tabellen vorhanden; clientref steht in core_record, während die Digital-Felder in bank_and_transactions.chaninvdatablock liegen, sodass ohne bestätigte Join-Logik/Schlüsselbezug nicht sicher ist, wie die IDs korrekt zugeordnet werden sollen.. Klärungsfragen: Soll „highly digital“ genau der Domain-Definition „Digital First Customer“ entsprechen (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?, Welche ID soll ausgegeben werden: core_record.clientref (Customer ID) oder coreregistry (Record ID)? Und soll die Zuordnung über die Kette core_record → employment_and_income → expenses_and_assets → bank_and_transactions erfolgen?",
-  "summary": "Die Abfrage identifiziert insgesamt 285 „hoch digitale“ Kunden-IDs (Seite 1 zeigt 50 von 285), definiert als Kunden mit hoher Online- oder Mobile-Nutzung und aktivierter Autopay-Funktion. In den ersten Ergebnissen erscheinen u. a. die Customer IDs CU572395, CU466756 und CU993201. Für eine vollständigere Auswertung wäre als nächster Schritt sinnvoll, alle Seiten zu exportieren bzw. die Ergebnisse zu deduplizieren, falls durch die Joins Mehrfachtreffer pro Kunde entstehen.",
-  "explanation": "Returns the CU-format customer IDs (core_record.clientref) for customers who meet the BSL 'Digital First Customer' definition using digital usage and autopay flags stored in bank_and_transactions.chaninvdatablock JSON.",
+  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist im Schema/Domainwissen nicht als eindeutiges Kriterium definiert. Es gibt zwar eine Definition für „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Regel gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung reicht bzw. ein Score/Schwellenwert verwendet werden soll. Außerdem ist „customer IDs“ als clientref in core_record vorhanden, aber die Verknüpfung zu den Digital-Attributen läuft über mehrere Tabellen; ohne klare Definition kann die Filterlogik nicht sicher festgelegt werden.. Klärungsfragen: Soll „highly digital“ exakt der Domain-Definition „Digital First Customer“ entsprechen (onlineuse oder mobileuse = 'High' und autopay = 'Yes')?, Falls nein: Welche konkreten Kriterien/Schwellenwerte sollen „highly digital“ bestimmen (z.B. nur onlineuse/mobileuse = 'High', depostat = 'Yes', oder ein zusammengesetzter Score)?",
+  "summary": "Die Abfrage identifiziert insgesamt 285 eindeutige Customer IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden 50 von 285 Treffern angezeigt. Beispiele aus den ersten Ergebnissen sind die Kunden CU572395, CU466756 und CU993201; für eine vollständige Liste sollten die weiteren Seiten abgerufen bzw. exportiert werden.",
+  "explanation": "Returns the CU-format customer IDs (core_record.clientref) for customers who meet the BSL 'Digital First Customer' definition: high online or mobile usage and autopay enabled, using qualified JSON extraction and the required join chain to reach bank_and_transactions.",
   "error": null
 }
