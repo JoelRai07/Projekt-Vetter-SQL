@@ -159,5 +159,39 @@ $env:PYTHONIOENCODING='utf-8'; python bsl_builder.py
 
 - Ambiguity detection can still warn on vague wording, but SQL generation should
   follow BSL rules even if ambiguity is flagged.
-- If future datasets change fields or semantics, BSL rules must be updated and
-  regenerated.
+- If future datasets change fields or semantics, BSL rules must be updated and regenerated.
+
+
+Ja wir haben eine echte (wenn auch schlanke) BSL implementiert, diese wird aber technisch über das Prompting umgesetzt.
+BSL=Inhalt/Schicht
+Prompting=Transport/Mechanismus
+
+Was typischerweise unter BSL verstanden wird
+Aus Architektursicht ist eine Business Semantics Layer:
+Explizite fachliche Regeln (Begriffe, Metriken, Schwellen, Identitäten, Aggregationslogik …)
+Getrennt vom reinen Datenmodell (Schema) gehalten
+Zentral wartbar & auditierbar, nicht verstreut in Code/Hacks
+Von Domänen-Experten lesbar, nicht nur für Entwickler
+
+Was wir konkret macht
+credit_bsl.txt wird aus credit_kb.jsonl + credit_column_meaning_base.json generiert.
+Darin stehen u.a.:
+Identity-Regeln (CU vs. CS, Join-Chain)
+Aggregationsregeln (top N vs. GROUP BY, Cohorts)
+Geschäftsregeln (Financially Vulnerable, Digital Native, etc.)
+JSON-/Join-Regeln und Metrikformeln
+Diese Regeln werden als eigenständiges Artefakt geladen (context_loader.py) und im Prompt explizit vor Schema/Meanings platziert (BSL-first).
+Der Generator hat explizite BSL-Compliance-Schritte (Regeneration bei Verstößen).
+
+Das erfüllt die Kernideen einer BSL: explizite, getrennte, wiederverwendbare Business-Semantik, nicht nur „mehr Text im Prompt“.
+
+---
+
+Wo es „nur“ Prompting ist
+Die BSL wird nicht als eigene Laufzeit-Schicht (z.B. Rules Engine, Services) exekutiert, sondern vom LLM interpretiert.
+Durchsetzung passiert „soft“ über Prompting + Validation, nicht als harte Policy Engine im Code.
+
+Für Vetter:
+Architektur-Sicht:
+„Wir haben eine Business Semantics Layer als separate Wissensschicht eingeführt, die Identity-, Aggregations- und Geschäftsregeln explizit definiert und versionierbar macht.“
+„Diese BSL wird zur Laufzeit in den LLM-Prompt injiziert und steuert damit die SQL-Generierung. Prompting ist hier das Transportmedium, nicht der Ersatz für die BSL.“
