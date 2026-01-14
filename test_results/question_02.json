@@ -2,20 +2,22 @@
   "question": "Please find all the customer IDs who are highly digital.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "Der Begriff „highly digital“ ist im Schema/Domain-Wissen nicht eindeutig als Filter definiert. Es gibt zwar eine Definition für „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes' in chaninvdatablock), aber die Nutzerfrage sagt nicht, ob genau diese Regel gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung reicht. Außerdem ist unklar, welche ID ausgegeben werden soll („customer IDs“ könnte core_record.clientref oder der technische Schlüssel coreregistry sein).",
+    "reason": "„Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Kriterium definiert. Es gibt zwar eine Definition für „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Regel gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung reicht. Außerdem ist unklar, aus welcher Tabelle/Beziehung die „customer IDs“ (core_record.clientref) mit den Digital-Attributen (bank_and_transactions.chaninvdatablock) verknüpft werden sollen, da kein direkter FK von bank_and_transactions zu core_record existiert (nur eine Kette über mehrere Tabellen).",
     "questions": [
-      "Soll „highly digital“ nach der Domain-Regel „Digital First Customer“ bestimmt werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes') oder nach einem anderen Kriterium?",
-      "Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder coreregistry (Core-Record-ID)?"
+      "Soll „highly digital“ exakt nach der Domain-Regel „Digital First Customer“ definiert werden (onlineuse oder mobileuse = 'High' UND autopay = 'Yes')?",
+      "Welche ID soll ausgegeben werden: core_record.clientref (Customer ID) oder der Datensatz-Schlüssel coreregistry/bankexpref?",
+      "Soll die Verknüpfung über die vollständige FK-Kette core_record → employment_and_income → expenses_and_assets → bank_and_transactions erfolgen, um die Digital-Attribute zu den Customer IDs zuzuordnen?"
     ]
   },
-  "generated_sql": "SELECT DISTINCT\n  cr.clientref AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
+  "generated_sql": "SELECT\n  cr.clientref AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "DISTINCT ist hier wahrscheinlich redundant, da core_record.coreregistry ein PK ist und die FK-Kette (core_record -> employment_and_income -> expenses_and_assets -> bank_and_transactions) jeweils 1:1 über die PK/FK-Spalten ist. Du kannst DISTINCT weglassen, sofern die Datenintegrität eingehalten wird.",
-      "Optional: Wenn du NULL-Werte in chaninvdatablock erwartest, könntest du die JSON-Extrakte mit COALESCE(...,'') absichern, ist aber nicht erforderlich."
+      "Optional: DISTINCT hinzufügen, falls pro Kunde mehrere Zeilen über die Join-Kette entstehen können (z.B. mehrere bank_and_transactions pro expemplref): SELECT DISTINCT cr.clientref ...",
+      "Optional: NULL-sicher filtern, falls chaninvdatablock NULL oder ungültiges JSON enthalten kann: bt.chaninvdatablock IS NOT NULL AND json_valid(bt.chaninvdatablock) AND ...",
+      "Optional: Wenn nur Kunden mit vorhandenen Bankdaten gewünscht sind, ist JOIN korrekt; falls Kunden ohne Bankdaten trotzdem erscheinen sollen, LEFT JOIN verwenden und Filter entsprechend anpassen."
     ]
   },
   "results": [
@@ -171,15 +173,15 @@
     }
   ],
   "row_count": 50,
-  "query_id": "cd5922c107b14ff3bdf8d32f832f9065",
+  "query_id": "7f5641ea81624dfe840d26da2f171eb2",
   "page": 1,
   "page_size": 50,
   "total_pages": 6,
   "total_rows": 285,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Der Begriff „highly digital“ ist im Schema/Domain-Wissen nicht eindeutig als Filter definiert. Es gibt zwar eine Definition für „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes' in chaninvdatablock), aber die Nutzerfrage sagt nicht, ob genau diese Regel gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung reicht. Außerdem ist unklar, welche ID ausgegeben werden soll („customer IDs“ könnte core_record.clientref oder der technische Schlüssel coreregistry sein).. Klärungsfragen: Soll „highly digital“ nach der Domain-Regel „Digital First Customer“ bestimmt werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes') oder nach einem anderen Kriterium?, Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder coreregistry (Core-Record-ID)?",
-  "summary": "Die Abfrage identifiziert insgesamt 285 eindeutige Customer IDs, die als „hoch digital“ gelten, d. h. entweder hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf Seite 1 werden 50 von 285 Treffern angezeigt. Beispiele aus den ersten Ergebnissen sind die Kunden CU572395, CU466756 und CU993201; als nächster Schritt könnten Sie die weiteren Seiten abrufen oder die Kriterien (z. B. Autopay) lockern, um mehr bzw. andere Kunden zu erfassen.",
-  "explanation": "Returns the CU-format customer IDs (core_record.clientref) for customers who meet the BSL Digital First (Digital Native) criteria: high online or mobile usage AND autopay enabled, using the required join chain to reach the channel JSON data.",
+  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Kriterium definiert. Es gibt zwar eine Definition für „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Regel gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung reicht. Außerdem ist unklar, aus welcher Tabelle/Beziehung die „customer IDs“ (core_record.clientref) mit den Digital-Attributen (bank_and_transactions.chaninvdatablock) verknüpft werden sollen, da kein direkter FK von bank_and_transactions zu core_record existiert (nur eine Kette über mehrere Tabellen).. Klärungsfragen: Soll „highly digital“ exakt nach der Domain-Regel „Digital First Customer“ definiert werden (onlineuse oder mobileuse = 'High' UND autopay = 'Yes')?, Welche ID soll ausgegeben werden: core_record.clientref (Customer ID) oder der Datensatz-Schlüssel coreregistry/bankexpref?, Soll die Verknüpfung über die vollständige FK-Kette core_record → employment_and_income → expenses_and_assets → bank_and_transactions erfolgen, um die Digital-Attribute zu den Customer IDs zuzuordnen?",
+  "summary": "Die Abfrage identifiziert 285 Kunden-IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden 50 von 285 Treffern angezeigt. Beispiele aus den ersten Ergebnissen sind die Kunden CU572395, CU466756 und CU993201. Wenn du die Liste weiter eingrenzen möchtest, könntest du zusätzlich verlangen, dass sowohl Online- als auch Mobile-Nutzung „High“ sind (statt nur eines von beiden).",
+  "explanation": "Returns all customer IDs (CU format) for customers who meet the BSL Digital First (digital native) criteria based on digital channel usage and autopay status stored in bank_and_transactions.chaninvdatablock.",
   "error": null
 }

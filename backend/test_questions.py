@@ -52,7 +52,7 @@ def test_question(question_num, question_text):
         }
         
         print(f"📤 Sende Request an {API_URL}...")
-        response = requests.post(API_URL, json=payload, timeout=60)
+        response = requests.post(API_URL, json=payload, timeout=120)
         response.raise_for_status()
         
         result = response.json()
@@ -85,7 +85,7 @@ def test_question(question_num, question_text):
         return None
     
     except requests.exceptions.Timeout:
-        print(f"⏱️  Timeout: Request zu lange ({60}s)")
+        print(f"⏱️  Timeout: Request zu lange ({120}s)")
         return None
     
     except Exception as e:

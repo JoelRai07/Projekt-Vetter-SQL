@@ -2,18 +2,18 @@
   "question": "To analyze customer property leverage, please show the customer ID, property value, mortgage balance, and the calculated ratio.",
   "ambiguity_check": {
     "is_ambiguous": false,
-    "reason": "Die Anfrage ist mit dem Schema eindeutig beantwortbar: Customer ID kommt aus core_record.clientref; Property Value und Mortgage Balance liegen in expenses_and_assets.propfinancialdata (JSON-Felder propvalue und mortgagebits.mortbalance); der „calculated ratio“ ist im Domain-Wissen als LTV (mortbalance/propvalue) definiert. Es ist kein Zeitraum, keine Aggregation und kein zusätzlicher Filter erforderlich.",
+    "reason": "Die Anfrage ist mit dem Schema eindeutig beantwortbar: Customer ID kommt aus core_record.clientref; Property Value und Mortgage Balance stehen in expenses_and_assets.propfinancialdata (JSONB) als propvalue bzw. mortgagebits.mortbalance; der gewünschte Leverage ist als Verhältnis mortgage balance / property value (LTV) im Domain-Wissen definiert. Es ist keine zwingende Zeit- oder Filterangabe erforderlich, da die Frage eine einfache Auflistung verlangt.",
     "questions": []
   },
-  "generated_sql": "SELECT\n  ea.expemplref AS customer_id,\n  CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_value,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mortgage_balance,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL)\n    / CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_leverage_ratio\nFROM expenses_and_assets ea\nWHERE json_extract(ea.propfinancialdata, '$.propvalue') IS NOT NULL\n  AND CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) <> 0\n  AND json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') IS NOT NULL\nORDER BY property_leverage_ratio DESC",
+  "generated_sql": "SELECT\n  ea.expemplref AS customer_id,\n  CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_value,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mortgage_balance,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL)\n    / CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_leverage_ratio\nFROM expenses_and_assets ea\nWHERE json_extract(ea.propfinancialdata, '$.propvalue') IS NOT NULL\n  AND CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) > 0.0\n  AND json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') IS NOT NULL\nORDER BY property_leverage_ratio DESC",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: Guard against non-numeric JSON values by using NULLIF and/or checking json_type(...) before CAST to avoid unexpected 0/NULL results.",
-      "Optional: Also filter mortgage balance <> 0 if you want to exclude zero-leverage cases.",
-      "Optional: Add a LIMIT clause if this is intended for top-N results."
+      "Optional: Guard against division by zero/NULL explicitly using NULLIF, e.g. CAST(json_extract(...) AS REAL) / NULLIF(CAST(json_extract(...) AS REAL), 0.0).",
+      "Optional: If you want to exclude non-numeric JSON values, add a numeric check (e.g. typeof(json_extract(...)) IN ('integer','real') or use a stricter CAST + filter).",
+      "Optional: Also filter mortgage_balance >= 0 if negative values are not meaningful for leverage."
     ]
   },
   "results": [
@@ -319,7 +319,7 @@
     }
   ],
   "row_count": 50,
-  "query_id": "155902e6380c4fadb3238db2860efd0a",
+  "query_id": "59207d4dcf504c8fbdfd34b1f0279962",
   "page": 1,
   "page_size": 50,
   "total_pages": 20,
@@ -327,7 +327,7 @@
   "has_next_page": true,
   "has_previous_page": false,
   "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar. ",
-  "summary": "Die Abfrage liefert 50 Kunden auf Seite 1 (insgesamt 1000 Treffer) und sortiert nach dem höchsten Property-Leverage-Ratio (Hypothek/Immobilienwert). Auffällig sind extrem hohe Hebel bei CS108475 (Property Value 1.018, Mortgage Balance 1.276.018, Ratio ~1253,46) und CS232079 (389 vs. 433.348, Ratio ~1114,01), während CS138931 mit 3.029 vs. 560.342 immer noch sehr hoch liegt (Ratio ~184,99). Diese Spitzenwerte deuten entweder auf stark unterbewertete/fehlerhafte Property-Value-Einträge oder außergewöhnlich hohe Hypothekenstände hin und sollten für Datenqualität bzw. Plausibilitätschecks priorisiert werden.",
-  "explanation": "Returns one row per expenses_and_assets record with property value and mortgage balance extracted from propfinancialdata, computes property leverage (mortgage_balance/property_value), filters out missing or zero property values (and missing mortgage balances), and ranks customers by highest leverage. Because the BSL override forbids joins for this metric, the identifier returned is ea.expemplref (table-native key) rather than core_record.clientref. [BSL compliance regeneration]",
+  "summary": "Die Abfrage liefert 1.000 Kunden mit vorhandenen Immobilienwerten und Hypothekensalden und sortiert nach dem höchsten Beleihungsgrad (mortgage_balance/property_value). Auffällig sind extrem hohe Leverage-Ratios, z. B. CS108475 mit property_value 1.018, mortgage_balance 1.276.018 und Ratio ~1253,46 sowie CS232079 mit 389, 433.348 und Ratio ~1114,01; auch CS138931 liegt mit 3.029, 560.342 und Ratio ~184,99 deutlich über 1. Als nächster Schritt wäre eine Plausibilitätsprüfung der Einheiten/Skalierung von property_value sinnvoll, da die sehr kleinen Immobilienwerte die Ratios stark verzerren könnten.",
+  "explanation": "Returns one row per expenses_and_assets record with property value and mortgage balance extracted from propfinancialdata, computes property leverage (mortgage_balance/property_value), filters out missing or zero property values, and sorts customers from highest to lowest leverage. Per the BSL override, this query reads only from expenses_and_assets; therefore the identifier returned is ea.expemplref (CS-format chain key), not core_record.clientref (CU). [BSL compliance regeneration]",
   "error": null
 }
