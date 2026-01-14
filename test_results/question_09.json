@@ -2,485 +2,486 @@
   "question": "For each customer, show their ID, liquid and total assets, liquidity measure, monthly income, investment amount and label of their investment potential.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "Wesentliche Punkte sind nicht eindeutig definiert: (1) „liquidity measure“ ist kein vorhandenes Feld und es gibt mehrere mögliche Kennzahlen im Domain-Wissen (z. B. ALR oder FSI-Komponenten). (2) „label of their investment potential“ ist nicht als eindeutige Regel/Definition im Domain-Wissen festgelegt (es gibt z. B. „Investment Services Target“, „Investment Focused“, IPQ), daher ist unklar, welche Logik/Schwellenwerte zur Label-Bildung genutzt werden sollen. Außerdem ist „customer ID“ mehrdeutig (clientref vs. coreregistry), und „monthly income“ könnte mthincome oder hshincome sein.",
+    "reason": "Die Frage verlangt ein „liquidity measure“ und ein „Label der investment potential“, aber im Schema/Domain-Wissen sind dafür mehrere mögliche Kennzahlen/Definitionen vorhanden (z.B. ALR vs. FSI-Komponenten für Liquidität; „Investment Focused“ vs. „Investment Services Target“ vs. IPQ/Schwellenwerte für Investment-Potenzial). Ohne Festlegung, welche Metrik/Formel und welche Label-Logik verwendet werden soll, ist keine eindeutige, sichere SQL-Abfrage möglich. Zusätzlich ist „customer ID“ mehrdeutig (clientref vs. coreregistry).",
     "questions": [
-      "Welche Kennzahl meinst du mit „liquidity measure“ (z. B. Asset Liquidity Ratio (ALR), Financial Stability Index (FSI) oder etwas anderes)?",
-      "Wie soll „investment potential“ gelabelt werden—nach welcher Definition/Regel (z. B. Investment Services Target, Investment Focused, IPQ mit Schwellenwerten) und welche Kategorien/Thresholds sollen verwendet werden?"
+      "Welche ID soll ausgegeben werden: core_record.clientref (Customer-ID) oder core_record.coreregistry (Record-ID)?",
+      "Was genau ist mit „liquidity measure“ gemeint: Asset Liquidity Ratio (ALR = liqassets/totassets), Financial Stability Index (FSI) oder eine andere Kennzahl?",
+      "Wie soll „investment potential“ gelabelt werden: anhand einer bestehenden Regel (z.B. „Investment Focused“ oder „Investment Services Target“) oder anhand eines Scores (z.B. IPQ) mit von Ihnen vorgegebenen Schwellenwerten?"
     ]
   },
-  "generated_sql": "SELECT\n  cr.clientref AS customer_id,\n  ea.liqassets AS liquid_assets,\n  ea.totassets AS total_assets,\n  CASE\n    WHEN ea.totassets IS NULL OR ea.totassets = 0 THEN NULL\n    ELSE ea.liqassets * 1.0 / ea.totassets\n  END AS liquidity_measure,\n  ei.mthincome AS monthly_income,\n  ea.investamt AS investment_amount,\n  CASE\n    WHEN ea.totassets IS NULL OR ea.totassets = 0 OR ea.investamt IS NULL THEN 'Unknown'\n    WHEN ea.investamt >= 0.30 * ea.totassets THEN 'High'\n    WHEN ea.investamt >= 0.10 * ea.totassets THEN 'Medium'\n    ELSE 'Low'\n  END AS investment_potential_label\nFROM core_record cr\nJOIN employment_and_income ei\n  ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea\n  ON ei.emplcoreref = ea.expemplref",
+  "generated_sql": "SELECT\n  cr.clientref AS customer_id,\n  ea.liqassets,\n  ea.totassets,\n  CASE\n    WHEN ea.totassets IS NULL OR ea.totassets = 0 THEN NULL\n    ELSE ea.liqassets * 1.0 / ea.totassets\n  END AS liquidity_measure_alr,\n  ei.mthincome,\n  ea.investamt,\n  CASE\n    WHEN json_extract(bt.chaninvdatablock, '$.invcluster.investport') IN ('Moderate','Aggressive')\n         AND json_extract(bt.chaninvdatablock, '$.invcluster.investexp') = 'Extensive'\n         AND ea.totassets IS NOT NULL AND ea.totassets <> 0\n         AND ea.investamt > 0.3 * ea.totassets\n      THEN 'Investment Focused'\n    ELSE 'Not Investment Focused'\n  END AS investment_potential_label\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: If you want to keep rows even when employment/assets data is missing, use LEFT JOIN instead of JOIN.",
-      "Optional: Consider guarding against ea.liqassets IS NULL in liquidity_measure if you want NULL instead of NULL/number behavior (currently NULL propagates naturally).",
-      "Optional: If negative totassets are possible, the liquidity_measure and investment thresholds may become counterintuitive; consider adding a filter or handling for ea.totassets < 0."
+      "Optional: If you want to keep customers even when bank/credit tables are missing, change the later JOINs (bt/cc/cah) to LEFT JOIN; current INNER JOIN chain filters them out.",
+      "Optional: Guard against NULL investamt in the label logic (e.g., add `ea.investamt IS NOT NULL`) if you want deterministic behavior when investamt is NULL.",
+      "Optional: If `chaninvdatablock` can contain invalid JSON, wrap json_extract usage with `json_valid(bt.chaninvdatablock)` to avoid NULL-driven misclassification."
     ]
   },
   "results": [
     {
       "customer_id": "CU338528",
-      "liquid_assets": 94190.0,
-      "total_assets": 1495371.0,
-      "liquidity_measure": 0.062987713416938,
-      "monthly_income": 6564.25,
-      "investment_amount": 163007.0,
-      "investment_potential_label": "Medium"
+      "liqassets": 94190.0,
+      "totassets": 1495371.0,
+      "liquidity_measure_alr": 0.062987713416938,
+      "mthincome": 6564.25,
+      "investamt": 163007.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU209954",
-      "liquid_assets": 186120.0,
-      "total_assets": 1923802.0,
-      "liquidity_measure": 0.0967459229172233,
-      "monthly_income": 33835.58,
-      "investment_amount": 643448.0,
-      "investment_potential_label": "High"
+      "liqassets": 186120.0,
+      "totassets": 1923802.0,
+      "liquidity_measure_alr": 0.0967459229172233,
+      "mthincome": 33835.58,
+      "investamt": 643448.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU314145",
-      "liquid_assets": 429061.0,
-      "total_assets": 1259260.0,
-      "liquidity_measure": 0.3407247113384051,
-      "monthly_income": 18687.75,
-      "investment_amount": 523492.0,
-      "investment_potential_label": "High"
+      "liqassets": 429061.0,
+      "totassets": 1259260.0,
+      "liquidity_measure_alr": 0.3407247113384051,
+      "mthincome": 18687.75,
+      "investamt": 523492.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU727930",
-      "liquid_assets": 326737.0,
-      "total_assets": 555132.0,
-      "liquidity_measure": 0.5885753298314635,
-      "monthly_income": 21272.83,
-      "investment_amount": 363903.0,
-      "investment_potential_label": "High"
+      "liqassets": 326737.0,
+      "totassets": 555132.0,
+      "liquidity_measure_alr": 0.5885753298314635,
+      "mthincome": 21272.83,
+      "investamt": 363903.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU794268",
-      "liquid_assets": 226494.0,
-      "total_assets": 846173.0,
-      "liquidity_measure": 0.2676686682274192,
-      "monthly_income": 29862.83,
-      "investment_amount": 312806.0,
-      "investment_potential_label": "High"
+      "liqassets": 226494.0,
+      "totassets": 846173.0,
+      "liquidity_measure_alr": 0.2676686682274192,
+      "mthincome": 29862.83,
+      "investamt": 312806.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU488662",
-      "liquid_assets": 172739.0,
-      "total_assets": 277451.0,
-      "liquidity_measure": 0.6225928181913203,
-      "monthly_income": 5401.75,
-      "investment_amount": 285627.0,
-      "investment_potential_label": "High"
+      "liqassets": 172739.0,
+      "totassets": 277451.0,
+      "liquidity_measure_alr": 0.6225928181913203,
+      "mthincome": 5401.75,
+      "investamt": 285627.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU390121",
-      "liquid_assets": 284607.0,
-      "total_assets": 1190666.0,
-      "liquidity_measure": 0.23903176877478655,
-      "monthly_income": 29779.67,
-      "investment_amount": 377119.0,
-      "investment_potential_label": "High"
+      "liqassets": 284607.0,
+      "totassets": 1190666.0,
+      "liquidity_measure_alr": 0.23903176877478655,
+      "mthincome": 29779.67,
+      "investamt": 377119.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU259187",
-      "liquid_assets": 50319.0,
-      "total_assets": 1079715.0,
-      "liquidity_measure": 0.04660396493519123,
-      "monthly_income": 7582.5,
-      "investment_amount": 698147.0,
-      "investment_potential_label": "High"
+      "liqassets": 50319.0,
+      "totassets": 1079715.0,
+      "liquidity_measure_alr": 0.04660396493519123,
+      "mthincome": 7582.5,
+      "investamt": 698147.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU596654",
-      "liquid_assets": 262653.0,
-      "total_assets": 1838678.0,
-      "liquidity_measure": 0.14284882943071053,
-      "monthly_income": 20711.92,
-      "investment_amount": 108554.0,
-      "investment_potential_label": "Low"
+      "liqassets": 262653.0,
+      "totassets": 1838678.0,
+      "liquidity_measure_alr": 0.14284882943071053,
+      "mthincome": 20711.92,
+      "investamt": 108554.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU572395",
-      "liquid_assets": 114233.0,
-      "total_assets": 663194.0,
-      "liquidity_measure": 0.17224673323341286,
-      "monthly_income": 3105.67,
-      "investment_amount": 706349.0,
-      "investment_potential_label": "High"
+      "liqassets": 114233.0,
+      "totassets": 663194.0,
+      "liquidity_measure_alr": 0.17224673323341286,
+      "mthincome": 3105.67,
+      "investamt": 706349.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU646174",
-      "liquid_assets": 200195.0,
-      "total_assets": 631745.0,
-      "liquidity_measure": 0.31689210045192284,
-      "monthly_income": 28742.08,
-      "investment_amount": 675468.0,
-      "investment_potential_label": "High"
+      "liqassets": 200195.0,
+      "totassets": 631745.0,
+      "liquidity_measure_alr": 0.31689210045192284,
+      "mthincome": 28742.08,
+      "investamt": 675468.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU466756",
-      "liquid_assets": 374806.0,
-      "total_assets": 634974.0,
-      "liquidity_measure": 0.5902698378201312,
-      "monthly_income": 10998.33,
-      "investment_amount": 383086.0,
-      "investment_potential_label": "High"
+      "liqassets": 374806.0,
+      "totassets": 634974.0,
+      "liquidity_measure_alr": 0.5902698378201312,
+      "mthincome": 10998.33,
+      "investamt": 383086.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU478628",
-      "liquid_assets": 4920.0,
-      "total_assets": 449712.0,
-      "liquidity_measure": 0.010940335147827943,
-      "monthly_income": 30262.75,
-      "investment_amount": 933147.0,
-      "investment_potential_label": "High"
+      "liqassets": 4920.0,
+      "totassets": 449712.0,
+      "liquidity_measure_alr": 0.010940335147827943,
+      "mthincome": 30262.75,
+      "investamt": 933147.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU133084",
-      "liquid_assets": 275510.0,
-      "total_assets": 829580.0,
-      "liquidity_measure": 0.33210781359242025,
-      "monthly_income": 12955.58,
-      "investment_amount": 303766.0,
-      "investment_potential_label": "High"
+      "liqassets": 275510.0,
+      "totassets": 829580.0,
+      "liquidity_measure_alr": 0.33210781359242025,
+      "mthincome": 12955.58,
+      "investamt": 303766.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU993201",
-      "liquid_assets": 225367.0,
-      "total_assets": 382490.0,
-      "liquidity_measure": 0.589210175429423,
-      "monthly_income": 26878.67,
-      "investment_amount": 845844.0,
-      "investment_potential_label": "High"
+      "liqassets": 225367.0,
+      "totassets": 382490.0,
+      "liquidity_measure_alr": 0.589210175429423,
+      "mthincome": 26878.67,
+      "investamt": 845844.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU572551",
-      "liquid_assets": 250760.0,
-      "total_assets": 1700935.0,
-      "liquidity_measure": 0.14742479871364866,
-      "monthly_income": 1925.33,
-      "investment_amount": 510567.0,
-      "investment_potential_label": "High"
+      "liqassets": 250760.0,
+      "totassets": 1700935.0,
+      "liquidity_measure_alr": 0.14742479871364866,
+      "mthincome": 1925.33,
+      "investamt": 510567.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU450680",
-      "liquid_assets": 277342.0,
-      "total_assets": 1666761.0,
-      "liquidity_measure": 0.16639578199873886,
-      "monthly_income": 25511.67,
-      "investment_amount": 531761.0,
-      "investment_potential_label": "High"
+      "liqassets": 277342.0,
+      "totassets": 1666761.0,
+      "liquidity_measure_alr": 0.16639578199873886,
+      "mthincome": 25511.67,
+      "investamt": 531761.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU496685",
-      "liquid_assets": 329932.0,
-      "total_assets": 1846280.0,
-      "liquidity_measure": 0.17870095543471196,
-      "monthly_income": 10928.33,
-      "investment_amount": 995124.0,
-      "investment_potential_label": "High"
+      "liqassets": 329932.0,
+      "totassets": 1846280.0,
+      "liquidity_measure_alr": 0.17870095543471196,
+      "mthincome": 10928.33,
+      "investamt": 995124.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU990238",
-      "liquid_assets": 478309.0,
-      "total_assets": 801215.0,
-      "liquidity_measure": 0.5969795872518613,
-      "monthly_income": 5215.83,
-      "investment_amount": 475692.0,
-      "investment_potential_label": "High"
+      "liqassets": 478309.0,
+      "totassets": 801215.0,
+      "liquidity_measure_alr": 0.5969795872518613,
+      "mthincome": 5215.83,
+      "investamt": 475692.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU465765",
-      "liquid_assets": 36203.0,
-      "total_assets": 456257.0,
-      "liquidity_measure": 0.07934782370462261,
-      "monthly_income": 39672.75,
-      "investment_amount": 883237.0,
-      "investment_potential_label": "High"
+      "liqassets": 36203.0,
+      "totassets": 456257.0,
+      "liquidity_measure_alr": 0.07934782370462261,
+      "mthincome": 39672.75,
+      "investamt": 883237.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU950980",
-      "liquid_assets": 390300.0,
-      "total_assets": 264158.0,
-      "liquidity_measure": 1.4775248146942361,
-      "monthly_income": 8876.08,
-      "investment_amount": 318945.0,
-      "investment_potential_label": "High"
+      "liqassets": 390300.0,
+      "totassets": 264158.0,
+      "liquidity_measure_alr": 1.4775248146942361,
+      "mthincome": 8876.08,
+      "investamt": 318945.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU510437",
-      "liquid_assets": 327959.0,
-      "total_assets": 194996.0,
-      "liquidity_measure": 1.6818755256518083,
-      "monthly_income": 4478.17,
-      "investment_amount": 795900.0,
-      "investment_potential_label": "High"
+      "liqassets": 327959.0,
+      "totassets": 194996.0,
+      "liquidity_measure_alr": 1.6818755256518083,
+      "mthincome": 4478.17,
+      "investamt": 795900.0,
+      "investment_potential_label": "Investment Focused"
     },
     {
       "customer_id": "CU226752",
-      "liquid_assets": 68913.0,
-      "total_assets": 909790.0,
-      "liquidity_measure": 0.07574605128656063,
-      "monthly_income": 34752.25,
-      "investment_amount": 862559.0,
-      "investment_potential_label": "High"
+      "liqassets": 68913.0,
+      "totassets": 909790.0,
+      "liquidity_measure_alr": 0.07574605128656063,
+      "mthincome": 34752.25,
+      "investamt": 862559.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU790495",
-      "liquid_assets": 425133.0,
-      "total_assets": 1099502.0,
-      "liquidity_measure": 0.3866595967992782,
-      "monthly_income": 36844.25,
-      "investment_amount": 969288.0,
-      "investment_potential_label": "High"
+      "liqassets": 425133.0,
+      "totassets": 1099502.0,
+      "liquidity_measure_alr": 0.3866595967992782,
+      "mthincome": 36844.25,
+      "investamt": 969288.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU334526",
-      "liquid_assets": 168868.0,
-      "total_assets": 1888947.0,
-      "liquidity_measure": 0.08939795558054302,
-      "monthly_income": 15466.08,
-      "investment_amount": 455900.0,
-      "investment_potential_label": "Medium"
+      "liqassets": 168868.0,
+      "totassets": 1888947.0,
+      "liquidity_measure_alr": 0.08939795558054302,
+      "mthincome": 15466.08,
+      "investamt": 455900.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU872801",
-      "liquid_assets": 445414.0,
-      "total_assets": 163762.0,
-      "liquidity_measure": 2.7198861762802116,
-      "monthly_income": 13932.58,
-      "investment_amount": 921365.0,
-      "investment_potential_label": "High"
+      "liqassets": 445414.0,
+      "totassets": 163762.0,
+      "liquidity_measure_alr": 2.7198861762802116,
+      "mthincome": 13932.58,
+      "investamt": 921365.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU706313",
-      "liquid_assets": 63886.0,
-      "total_assets": 1725531.0,
-      "liquidity_measure": 0.03702396537645513,
-      "monthly_income": 32269.42,
-      "investment_amount": 22619.0,
-      "investment_potential_label": "Low"
+      "liqassets": 63886.0,
+      "totassets": 1725531.0,
+      "liquidity_measure_alr": 0.03702396537645513,
+      "mthincome": 32269.42,
+      "investamt": 22619.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU257943",
-      "liquid_assets": 283634.0,
-      "total_assets": 311818.0,
-      "liquidity_measure": 0.9096139414658551,
-      "monthly_income": 28957.83,
-      "investment_amount": 483546.0,
-      "investment_potential_label": "High"
+      "liqassets": 283634.0,
+      "totassets": 311818.0,
+      "liquidity_measure_alr": 0.9096139414658551,
+      "mthincome": 28957.83,
+      "investamt": 483546.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU590052",
-      "liquid_assets": 475716.0,
-      "total_assets": 934678.0,
-      "liquidity_measure": 0.5089624448205692,
-      "monthly_income": 9145.25,
-      "investment_amount": 708061.0,
-      "investment_potential_label": "High"
+      "liqassets": 475716.0,
+      "totassets": 934678.0,
+      "liquidity_measure_alr": 0.5089624448205692,
+      "mthincome": 9145.25,
+      "investamt": 708061.0,
+      "investment_potential_label": "Investment Focused"
     },
     {
       "customer_id": "CU250617",
-      "liquid_assets": 55503.0,
-      "total_assets": 1033596.0,
-      "liquidity_measure": 0.05369893072341611,
-      "monthly_income": 38216.25,
-      "investment_amount": 446462.0,
-      "investment_potential_label": "High"
+      "liqassets": 55503.0,
+      "totassets": 1033596.0,
+      "liquidity_measure_alr": 0.05369893072341611,
+      "mthincome": 38216.25,
+      "investamt": 446462.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU543548",
-      "liquid_assets": 210790.0,
-      "total_assets": 1415997.0,
-      "liquidity_measure": 0.14886330973865058,
-      "monthly_income": 2055.83,
-      "investment_amount": 717735.0,
-      "investment_potential_label": "High"
+      "liqassets": 210790.0,
+      "totassets": 1415997.0,
+      "liquidity_measure_alr": 0.14886330973865058,
+      "mthincome": 2055.83,
+      "investamt": 717735.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU776107",
-      "liquid_assets": 293278.0,
-      "total_assets": 199067.0,
-      "liquidity_measure": 1.4732627708259027,
-      "monthly_income": 37966.92,
-      "investment_amount": 153689.0,
-      "investment_potential_label": "High"
+      "liqassets": 293278.0,
+      "totassets": 199067.0,
+      "liquidity_measure_alr": 1.4732627708259027,
+      "mthincome": 37966.92,
+      "investamt": 153689.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU628920",
-      "liquid_assets": 411686.0,
-      "total_assets": 76333.0,
-      "liquidity_measure": 5.393289927030249,
-      "monthly_income": 21405.25,
-      "investment_amount": 808502.0,
-      "investment_potential_label": "High"
+      "liqassets": 411686.0,
+      "totassets": 76333.0,
+      "liquidity_measure_alr": 5.393289927030249,
+      "mthincome": 21405.25,
+      "investamt": 808502.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU459105",
-      "liquid_assets": 211931.0,
-      "total_assets": 1793740.0,
-      "liquidity_measure": 0.11815034508903186,
-      "monthly_income": 20519.33,
-      "investment_amount": 981686.0,
-      "investment_potential_label": "High"
+      "liqassets": 211931.0,
+      "totassets": 1793740.0,
+      "liquidity_measure_alr": 0.11815034508903186,
+      "mthincome": 20519.33,
+      "investamt": 981686.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU245038",
-      "liquid_assets": 92141.0,
-      "total_assets": 46156.0,
-      "liquidity_measure": 1.9962951728919318,
-      "monthly_income": 7123.33,
-      "investment_amount": 641089.0,
-      "investment_potential_label": "High"
+      "liqassets": 92141.0,
+      "totassets": 46156.0,
+      "liquidity_measure_alr": 1.9962951728919318,
+      "mthincome": 7123.33,
+      "investamt": 641089.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU146539",
-      "liquid_assets": 86658.0,
-      "total_assets": 780656.0,
-      "liquidity_measure": 0.11100664056895738,
-      "monthly_income": 7871.0,
-      "investment_amount": 842207.0,
-      "investment_potential_label": "High"
+      "liqassets": 86658.0,
+      "totassets": 780656.0,
+      "liquidity_measure_alr": 0.11100664056895738,
+      "mthincome": 7871.0,
+      "investamt": 842207.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU396524",
-      "liquid_assets": 296136.0,
-      "total_assets": 1267240.0,
-      "liquidity_measure": 0.23368580537230516,
-      "monthly_income": 28803.83,
-      "investment_amount": 248950.0,
-      "investment_potential_label": "Medium"
+      "liqassets": 296136.0,
+      "totassets": 1267240.0,
+      "liquidity_measure_alr": 0.23368580537230516,
+      "mthincome": 28803.83,
+      "investamt": 248950.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU406149",
-      "liquid_assets": 217607.0,
-      "total_assets": 1881207.0,
-      "liquidity_measure": 0.11567413899693123,
-      "monthly_income": 36181.75,
-      "investment_amount": 398727.0,
-      "investment_potential_label": "Medium"
+      "liqassets": 217607.0,
+      "totassets": 1881207.0,
+      "liquidity_measure_alr": 0.11567413899693123,
+      "mthincome": 36181.75,
+      "investamt": 398727.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU287208",
-      "liquid_assets": 77885.0,
-      "total_assets": 377314.0,
-      "liquidity_measure": 0.20641958686929188,
-      "monthly_income": 7059.33,
-      "investment_amount": 31706.0,
-      "investment_potential_label": "Low"
+      "liqassets": 77885.0,
+      "totassets": 377314.0,
+      "liquidity_measure_alr": 0.20641958686929188,
+      "mthincome": 7059.33,
+      "investamt": 31706.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU695152",
-      "liquid_assets": 406792.0,
-      "total_assets": 360716.0,
-      "liquidity_measure": 1.1277348384878962,
-      "monthly_income": 41372.58,
-      "investment_amount": 807574.0,
-      "investment_potential_label": "High"
+      "liqassets": 406792.0,
+      "totassets": 360716.0,
+      "liquidity_measure_alr": 1.1277348384878962,
+      "mthincome": 41372.58,
+      "investamt": 807574.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU636798",
-      "liquid_assets": 351033.0,
-      "total_assets": 186906.0,
-      "liquidity_measure": 1.8781259028602613,
-      "monthly_income": 7808.92,
-      "investment_amount": 172474.0,
-      "investment_potential_label": "High"
+      "liqassets": 351033.0,
+      "totassets": 186906.0,
+      "liquidity_measure_alr": 1.8781259028602613,
+      "mthincome": 7808.92,
+      "investamt": 172474.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU472683",
-      "liquid_assets": 11679.0,
-      "total_assets": 1933746.0,
-      "liquidity_measure": 0.006039572932536124,
-      "monthly_income": 33384.83,
-      "investment_amount": 832606.0,
-      "investment_potential_label": "High"
+      "liqassets": 11679.0,
+      "totassets": 1933746.0,
+      "liquidity_measure_alr": 0.006039572932536124,
+      "mthincome": 33384.83,
+      "investamt": 832606.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU689896",
-      "liquid_assets": 72377.0,
-      "total_assets": 1712168.0,
-      "liquidity_measure": 0.042272136846384235,
-      "monthly_income": 34519.42,
-      "investment_amount": 43136.0,
-      "investment_potential_label": "Low"
+      "liqassets": 72377.0,
+      "totassets": 1712168.0,
+      "liquidity_measure_alr": 0.042272136846384235,
+      "mthincome": 34519.42,
+      "investamt": 43136.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU716365",
-      "liquid_assets": 154259.0,
-      "total_assets": 988926.0,
-      "liquidity_measure": 0.1559863933196215,
-      "monthly_income": 16168.67,
-      "investment_amount": 610139.0,
-      "investment_potential_label": "High"
+      "liqassets": 154259.0,
+      "totassets": 988926.0,
+      "liquidity_measure_alr": 0.1559863933196215,
+      "mthincome": 16168.67,
+      "investamt": 610139.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU239744",
-      "liquid_assets": 57044.0,
-      "total_assets": 131279.0,
-      "liquidity_measure": 0.4345249430602,
-      "monthly_income": 22163.67,
-      "investment_amount": 879112.0,
-      "investment_potential_label": "High"
+      "liqassets": 57044.0,
+      "totassets": 131279.0,
+      "liquidity_measure_alr": 0.4345249430602,
+      "mthincome": 22163.67,
+      "investamt": 879112.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU899231",
-      "liquid_assets": 171893.0,
-      "total_assets": 1501606.0,
-      "liquidity_measure": 0.11447277115301883,
-      "monthly_income": 10665.33,
-      "investment_amount": 416820.0,
-      "investment_potential_label": "Medium"
+      "liqassets": 171893.0,
+      "totassets": 1501606.0,
+      "liquidity_measure_alr": 0.11447277115301883,
+      "mthincome": 10665.33,
+      "investamt": 416820.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU911050",
-      "liquid_assets": 491033.0,
-      "total_assets": 48476.0,
-      "liquidity_measure": 10.129404241274033,
-      "monthly_income": 9055.75,
-      "investment_amount": 462258.0,
-      "investment_potential_label": "High"
+      "liqassets": 491033.0,
+      "totassets": 48476.0,
+      "liquidity_measure_alr": 10.129404241274033,
+      "mthincome": 9055.75,
+      "investamt": 462258.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU257244",
-      "liquid_assets": 97540.0,
-      "total_assets": 1720214.0,
-      "liquidity_measure": 0.056702247511065486,
-      "monthly_income": 3771.08,
-      "investment_amount": 947561.0,
-      "investment_potential_label": "High"
+      "liqassets": 97540.0,
+      "totassets": 1720214.0,
+      "liquidity_measure_alr": 0.056702247511065486,
+      "mthincome": 3771.08,
+      "investamt": 947561.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU139206",
-      "liquid_assets": 195905.0,
-      "total_assets": 1743869.0,
-      "liquidity_measure": 0.11233928695332046,
-      "monthly_income": 33668.0,
-      "investment_amount": 853860.0,
-      "investment_potential_label": "High"
+      "liqassets": 195905.0,
+      "totassets": 1743869.0,
+      "liquidity_measure_alr": 0.11233928695332046,
+      "mthincome": 33668.0,
+      "investamt": 853860.0,
+      "investment_potential_label": "Not Investment Focused"
     },
     {
       "customer_id": "CU121543",
-      "liquid_assets": 130170.0,
-      "total_assets": 1187727.0,
-      "liquidity_measure": 0.10959589198527944,
-      "monthly_income": 2624.5,
-      "investment_amount": 823995.0,
-      "investment_potential_label": "High"
+      "liqassets": 130170.0,
+      "totassets": 1187727.0,
+      "liquidity_measure_alr": 0.10959589198527944,
+      "mthincome": 2624.5,
+      "investamt": 823995.0,
+      "investment_potential_label": "Not Investment Focused"
     }
   ],
   "row_count": 50,
-  "query_id": "33f5ba7df4f34c9481fb7bb75119c559",
+  "query_id": "8430f34f33f94512b2adb6787897dbf8",
   "page": 1,
   "page_size": 50,
   "total_pages": 20,
   "total_rows": 1000,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Wesentliche Punkte sind nicht eindeutig definiert: (1) „liquidity measure“ ist kein vorhandenes Feld und es gibt mehrere mögliche Kennzahlen im Domain-Wissen (z. B. ALR oder FSI-Komponenten). (2) „label of their investment potential“ ist nicht als eindeutige Regel/Definition im Domain-Wissen festgelegt (es gibt z. B. „Investment Services Target“, „Investment Focused“, IPQ), daher ist unklar, welche Logik/Schwellenwerte zur Label-Bildung genutzt werden sollen. Außerdem ist „customer ID“ mehrdeutig (clientref vs. coreregistry), und „monthly income“ könnte mthincome oder hshincome sein.. Klärungsfragen: Welche Kennzahl meinst du mit „liquidity measure“ (z. B. Asset Liquidity Ratio (ALR), Financial Stability Index (FSI) oder etwas anderes)?, Wie soll „investment potential“ gelabelt werden—nach welcher Definition/Regel (z. B. Investment Services Target, Investment Focused, IPQ mit Schwellenwerten) und welche Kategorien/Thresholds sollen verwendet werden?",
-  "summary": "Die Abfrage liefert pro Kunde (insgesamt 1000 Zeilen, hier Seite 1 mit 50) die Kennzahlen zu liquiden und gesamten Vermögenswerten, eine Liquiditätsquote (liquid_assets/total_assets), das monatliche Einkommen, den Investmentbetrag sowie ein daraus abgeleitetes Investment-Potenzial (Low/Medium/High; bei fehlenden/0 total_assets oder fehlendem investamt „Unknown“). In den ersten Zeilen zeigt sich z. B. CU338528 mit 94.190 liquiden Mitteln bei 1.495.371 Gesamtvermögen (Liquiditätsquote ~0,063) und 163.007 Investmentbetrag als „Medium“, während CU209954 (186.120/1.923.802; ~0,097) mit 643.448 Investmentbetrag und CU314145 (429.061/1.259.260; ~0,341) mit 523.492 beide als „High“ eingestuft werden. Insgesamt deutet das darauf hin, dass die Einstufung stark vom Verhältnis Investmentbetrag zu Gesamtvermögen abhängt, während die Liquiditätsquote zusätzlich die kurzfristige Finanzflexibilität sichtbar macht.",
-  "explanation": "Returns one row per customer with CU-format customer_id, liquid assets, total assets, a liquidity ratio (liqassets/total_assets), monthly income, investment amount, and a business-friendly investment potential label based on investment amount as a share of total assets.",
+  "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Die Frage verlangt ein „liquidity measure“ und ein „Label der investment potential“, aber im Schema/Domain-Wissen sind dafür mehrere mögliche Kennzahlen/Definitionen vorhanden (z.B. ALR vs. FSI-Komponenten für Liquidität; „Investment Focused“ vs. „Investment Services Target“ vs. IPQ/Schwellenwerte für Investment-Potenzial). Ohne Festlegung, welche Metrik/Formel und welche Label-Logik verwendet werden soll, ist keine eindeutige, sichere SQL-Abfrage möglich. Zusätzlich ist „customer ID“ mehrdeutig (clientref vs. coreregistry).. Klärungsfragen: Welche ID soll ausgegeben werden: core_record.clientref (Customer-ID) oder core_record.coreregistry (Record-ID)?, Was genau ist mit „liquidity measure“ gemeint: Asset Liquidity Ratio (ALR = liqassets/totassets), Financial Stability Index (FSI) oder eine andere Kennzahl?, Wie soll „investment potential“ gelabelt werden: anhand einer bestehenden Regel (z.B. „Investment Focused“ oder „Investment Services Target“) oder anhand eines Scores (z.B. IPQ) mit von Ihnen vorgegebenen Schwellenwerten?",
+  "summary": "Die Abfrage liefert pro Kunde (insgesamt 1000 Zeilen, hier die ersten 50) ID, liquide und gesamte Vermögenswerte, die daraus berechnete Liquiditätsquote, monatliches Einkommen, Investitionsbetrag sowie ein Label zur Investment-Potenzial-Einstufung. In den ersten Ergebnissen sind alle Kunden als „Not Investment Focused“ klassifiziert, z. B. CU338528 (liqassets 94.190 bei totassets 1.495.371; Liquiditätsquote ~0,063; mthincome 6.564; investamt 163.007), CU209954 (Liquiditätsquote ~0,097; mthincome 33.836; investamt 643.448) und CU314145 (Liquiditätsquote ~0,341; mthincome 18.688; investamt 523.492). Auffällig ist die Spannweite der Liquiditätsquote (ca. 0,06 bis 0,34 in den Beispielen) sowie teils hohe Einkommen/Investitionsbeträge, die aber offenbar die Kriterien für „Investment Focused“ (u. a. investamt > 30% der totassets plus bestimmte Cluster-Merkmale) nicht erfüllen.",
+  "explanation": "Returns one row per customer (CU customer_id) with liquid assets, total assets, liquidity measure (ALR = liqassets/totassets), monthly income, investment amount, and an investment potential label based on the BSL 'Investment Focused' rule using qualified JSON fields from bank_and_transactions.chaninvdatablock.",
   "error": null
 }

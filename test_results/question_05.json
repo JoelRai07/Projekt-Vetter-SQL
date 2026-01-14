@@ -2,18 +2,18 @@
   "question": "To analyze customer property leverage, please show the customer ID, property value, mortgage balance, and the calculated ratio.",
   "ambiguity_check": {
     "is_ambiguous": false,
-    "reason": "Die Anfrage ist mit dem Schema eindeutig beantwortbar: customer ID kommt aus core_record.clientref; property value und mortgage balance stehen in expenses_and_assets.propfinancialdata (JSON-Felder propvalue und mortgagebits.mortbalance); der „calculated ratio“ ist im Domain-Wissen als LTV (mortbalance/propvalue) definiert. Es ist keine zusätzliche Zeitspanne, Gruppierung oder Schwelle erforderlich.",
+    "reason": "Die Anfrage ist mit dem Schema eindeutig beantwortbar: Customer ID kommt aus core_record.clientref; Property Value und Mortgage Balance liegen in expenses_and_assets.propfinancialdata (JSON-Felder propvalue und mortgagebits.mortbalance); der „calculated ratio“ ist im Domain-Wissen als LTV (mortbalance/propvalue) definiert. Es ist kein Zeitraum, keine Aggregation und kein zusätzlicher Filter erforderlich.",
     "questions": []
   },
-  "generated_sql": "SELECT\n  ea.expemplref AS customer_id,\n  CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_value,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mortgage_balance,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL)\n    / CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_leverage_ratio\nFROM expenses_and_assets ea\nWHERE\n  json_extract(ea.propfinancialdata, '$.propvalue') IS NOT NULL\n  AND CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) <> 0\n  AND json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') IS NOT NULL\nORDER BY property_leverage_ratio DESC",
+  "generated_sql": "SELECT\n  ea.expemplref AS customer_id,\n  CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_value,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mortgage_balance,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL)\n    / CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_leverage_ratio\nFROM expenses_and_assets ea\nWHERE json_extract(ea.propfinancialdata, '$.propvalue') IS NOT NULL\n  AND CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) <> 0\n  AND json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') IS NOT NULL\nORDER BY property_leverage_ratio DESC",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Division-by-zero is already prevented for propvalue; consider also guarding against non-numeric JSON values by using NULLIF(CAST(...),0) and/or checking json_type(...)= 'number'.",
-      "If some records have propvalue but no mortgagebits.mortbalance, the WHERE clause excludes them; if you want them included with NULL ratio, move the mortgage_balance NOT NULL check into the SELECT (or use LEFT logic).",
-      "For performance, consider extracting propvalue and mortbalance once in a CTE/subquery to avoid repeating json_extract/CAST multiple times."
+      "Optional: Guard against non-numeric JSON values by using NULLIF and/or checking json_type(...) before CAST to avoid unexpected 0/NULL results.",
+      "Optional: Also filter mortgage balance <> 0 if you want to exclude zero-leverage cases.",
+      "Optional: Add a LIMIT clause if this is intended for top-N results."
     ]
   },
   "results": [
@@ -319,7 +319,7 @@
     }
   ],
   "row_count": 50,
-  "query_id": "00ec489598a34ecd9dc6d1894e1b10ad",
+  "query_id": "155902e6380c4fadb3238db2860efd0a",
   "page": 1,
   "page_size": 50,
   "total_pages": 20,
@@ -327,7 +327,7 @@
   "has_next_page": true,
   "has_previous_page": false,
   "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar. ",
-  "summary": "Die Abfrage liefert 1.000 Kunden mit vorhandenen Immobilienwerten und Hypothekensalden, sortiert nach dem höchsten Beleihungsgrad (mortgage_balance/property_value). Auffällig sind extrem hohe Leverage-Ratios in den Top-Ergebnissen: CS108475 hat bei einem property_value von 1.018,0 und mortgage_balance von 1.276.018,0 ein Ratio von 1.253,46; CS232079 liegt bei 389,0 vs. 433.348,0 bei 1.114,01, während CS138931 mit 3.029,0 vs. 560.342,0 deutlich niedriger, aber immer noch sehr hoch bei 184,99 liegt. Diese Ausreißer deuten entweder auf stark überhöhte Verschuldung relativ zum erfassten Immobilienwert oder auf mögliche Daten-/Einheitenprobleme bei property_value hin und sollten validiert werden.",
-  "explanation": "Returns one row per customer (using expenses_and_assets.expemplref per the property-leverage override) with property value and mortgage balance extracted from propfinancialdata JSON, plus the leverage ratio (mortgage_balance / property_value). Rows with missing mortgage balance or missing/zero property value are excluded, and results are sorted by highest leverage first.",
+  "summary": "Die Abfrage liefert 50 Kunden auf Seite 1 (insgesamt 1000 Treffer) und sortiert nach dem höchsten Property-Leverage-Ratio (Hypothek/Immobilienwert). Auffällig sind extrem hohe Hebel bei CS108475 (Property Value 1.018, Mortgage Balance 1.276.018, Ratio ~1253,46) und CS232079 (389 vs. 433.348, Ratio ~1114,01), während CS138931 mit 3.029 vs. 560.342 immer noch sehr hoch liegt (Ratio ~184,99). Diese Spitzenwerte deuten entweder auf stark unterbewertete/fehlerhafte Property-Value-Einträge oder außergewöhnlich hohe Hypothekenstände hin und sollten für Datenqualität bzw. Plausibilitätschecks priorisiert werden.",
+  "explanation": "Returns one row per expenses_and_assets record with property value and mortgage balance extracted from propfinancialdata, computes property leverage (mortgage_balance/property_value), filters out missing or zero property values (and missing mortgage balances), and ranks customers by highest leverage. Because the BSL override forbids joins for this metric, the identifier returned is ea.expemplref (table-native key) rather than core_record.clientref. [BSL compliance regeneration]",
   "error": null
 }

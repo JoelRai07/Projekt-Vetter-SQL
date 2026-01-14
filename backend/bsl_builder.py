@@ -360,33 +360,17 @@ class BSLBuilder:
         overrides: dict[str, list[str]] = {
             "credit": [
                 "Terminology:",
-                "- Treat \"digital native\" as \"Digital First Customer\" unless the user defines another rule.",
+                "- \"digital native\" refers to the BSL definition of a Digital First Customer.",
+                "- \"credit classification\" refers to the credit score category ranges (credscore bands).",
                 "",
-                "Net worth:",
-                "- When net worth is required, compute it as totassets - totliabs.",
-                "- Do not use expenses_and_assets.networth unless explicitly requested.",
+                "Core metric definitions:",
+                "- Net worth = totassets - totliabs (computed).",
+                "- Property leverage / LTV = mortgage balance / property value from expenses_and_assets.propfinancialdata.",
                 "",
-                "Property leverage (LTV / mortgage ratio):",
-                "- When the question asks for property leverage/ratio and all needed fields are in expenses_and_assets.propfinancialdata:",
-                "  use expenses_and_assets.expemplref as customer_id.",
-                "- Query directly from expenses_and_assets; do not join core_record or employment_and_income.",
-                "- Compute ratio = mortgage_balance / property_value using JSON fields.",
-                "- Exclude NULL or zero property_value and NULL mortgage_balance.",
-                "- Order by the ratio descending.",
-                "",
-                "Credit classification defaults:",
-                "- If a question asks for credit classification WITHOUT explicit customer detail fields, return a summary:",
-                "  credit_category, customer_count, average_credscore (GROUP BY credit_category).",
-                "- If explicit customer detail fields are listed (e.g., customer_id, scoredate, risklev), return row-level records",
-                "  with credit_category included (no GROUP BY).",
-                "",
-                "Digital engagement cohort summary:",
-                "- If a question asks for digital engagement by cohort and digital-native status without a concrete time window",
-                "  (explicit years or quarters), return a two-row summary grouped only by is_digital_native with:",
-                "  cohort_size, avg_engagement (CES), pct_high_engagement (CES > 0.7).",
-                "- If the question says \"quarterly cohorts\" but no explicit years/quarters are given, do not include cohort_quarter in output.",
-                "- Only use cohort_quarter or time-series when a concrete time range is explicitly requested.",
-                "- If this conflicts with generic cohort rules, prefer this section.",
+                "Engagement and cohort definitions:",
+                "- Engagement score refers to CES (Customer Engagement Score).",
+                "- High engagement means CES > 0.7.",
+                "- Cohort quarter refers to the tenure-adjusted scoredate aligned to calendar quarters.",
                 "",
                 "Defaults for vague thresholds:",
                 "- Do not use SQL parameter placeholders (?,?,:name,@name,$name). Use explicit numeric literals.",
@@ -538,30 +522,35 @@ class BSLBuilder:
             ""
         ]
         
-        # Add each section
-        bsl_content.extend(self.extract_identity_rules(meanings))
-        bsl_content.extend(self.extract_aggregation_patterns(kb_entries))
-        bsl_content.extend(self.extract_business_rules(kb_entries))
-        bsl_content.extend(self.extract_json_field_rules(meanings))
-        bsl_content.extend(self.extract_join_chain_rules())
-        
         # Add metric formulas section
-        bsl_content.extend([
+        metric_section = [
             "# METRIC CALCULATION FORMULAS",
             "",
             "When a question asks for a calculated metric, use these exact formulas:",
             ""
-        ])
+        ]
         
         calc_metrics = [m for m in kb_entries if m.get('type') == 'calculation_knowledge']
         for metric in calc_metrics:
-            bsl_content.append(f"## {metric['knowledge']}")
-            bsl_content.append(f"**Definition:** {metric['description']}")
-            bsl_content.append(f"**Formula:** {metric['definition']}")
-            bsl_content.append("")
-        
-        # Add complex query templates
-        bsl_content.extend(self.extract_complex_query_templates())
+            metric_section.append(f"## {metric['knowledge']}")
+            metric_section.append(f"**Definition:** {metric['description']}")
+            metric_section.append(f"**Formula:** {metric['definition']}")
+            metric_section.append("")
+
+        sections = [
+            self.extract_identity_rules(meanings),
+            self.extract_aggregation_patterns(kb_entries),
+            self.extract_business_rules(kb_entries),
+            self.extract_json_field_rules(meanings),
+            self.extract_join_chain_rules(),
+            metric_section,
+            self.extract_complex_query_templates(),
+        ]
+
+        for idx, section in enumerate(sections):
+            if idx > 0:
+                bsl_content.extend(["", "---", ""])
+            bsl_content.extend(section)
 
         # Optional manual overrides (if present)
         overrides = self.load_bsl_overrides()

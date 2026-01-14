@@ -87,6 +87,9 @@ Before returning SQL, verify:
 4. ☐ If using coreregistry in SELECT, is it intentional? → Usually wrong
 5. ☐ Are there different customers in results than reference? → Check identifier type
 
+
+---
+
 # AGGREGATION DETECTION RULES
 
 ## ⚠️ CRITICAL: Aggregation vs Detail Queries
@@ -208,6 +211,9 @@ If question asks for 'total' AND segment breakdown:
 - Customer Lifetime Value (CLV): CLV = custlifeval, which factors in product usage, tenure, profitability, and expected future transa...
 - Net Worth: Net Worth = \text{Total Assets} - \text{Total Liabilities} = totassets - totliabs = networth...
 
+
+---
+
 # BUSINESS LOGIC RULES
 
 ## Customer Segmentation Rules:
@@ -284,6 +290,9 @@ Quarter of the year when the customer started with the institution (scoring date
 - Credit Utilization Impact: Credit Utilization (credutil) ranges from 0-1 (or above). Utilization under 0.30 is optimal for credit scores, 0.30-0.50 has moderate negative impact,...
 - Loan-to-Value Ratio Significance: Loan-to-Value ratio (LTV) typically ranges from 0-1 (or above). Below 0.80 generally avoids private mortgage insurance requirements, 0.80-0.95 typical...
 
+
+---
+
 # JSON FIELD EXTRACTION RULES
 
 ## Important: JSON columns must be qualified with table name
@@ -322,6 +331,9 @@ JSONB column. Packs together digital‑channel habits and investment/trading sty
 ```sql
 json_extract(bank_and_transactions.chaninvdatablock, '$.onlineuse')
 ```
+
+
+---
 
 # JOIN CHAIN RULES (CRITICAL)
 
@@ -371,6 +383,9 @@ You can stop at an intermediate table if you don't need downstream data:
 - Need core_record + expenses_and_assets? → Join through employment_and_income
 
 But if you jump across the chain (e.g., core → credit_compliance), it fails.
+
+
+---
 
 # METRIC CALCULATION FORMULAS
 
@@ -455,6 +470,9 @@ When a question asks for a calculated metric, use these exact formulas:
 ## Credit Health Momentum (CHM)
 **Definition:** Measures the trajectory of a customer's credit health over time.
 **Formula:** CHM = CHS × (1 + \Delta_\text{recentbeh}), \text{where CHS is the Credit Health Score and } \Delta_\text{recentbeh} \text{ is +0.1 for 'Improving', 0 for 'Stable', and -0.1 for 'Deteriorating'}
+
+
+---
 
 # MULTI-LEVEL AGGREGATION PATTERNS
 
@@ -555,33 +573,17 @@ SELECT ... FROM aggregated;
 # BSL OVERRIDES (MANUAL)
 
 Terminology:
-- Treat "digital native" as "Digital First Customer" unless the user defines another rule.
+- "digital native" refers to the BSL definition of a Digital First Customer.
+- "credit classification" refers to the credit score category ranges (credscore bands).
 
-Net worth:
-- When net worth is required, compute it as totassets - totliabs.
-- Do not use expenses_and_assets.networth unless explicitly requested.
+Core metric definitions:
+- Net worth = totassets - totliabs (computed).
+- Property leverage / LTV = mortgage balance / property value from expenses_and_assets.propfinancialdata.
 
-Property leverage (LTV / mortgage ratio):
-- When the question asks for property leverage/ratio and all needed fields are in expenses_and_assets.propfinancialdata:
-  use expenses_and_assets.expemplref as customer_id.
-- Query directly from expenses_and_assets; do not join core_record or employment_and_income.
-- Compute ratio = mortgage_balance / property_value using JSON fields.
-- Exclude NULL or zero property_value and NULL mortgage_balance.
-- Order by the ratio descending.
-
-Credit classification defaults:
-- If a question asks for credit classification WITHOUT explicit customer detail fields, return a summary:
-  credit_category, customer_count, average_credscore (GROUP BY credit_category).
-- If explicit customer detail fields are listed (e.g., customer_id, scoredate, risklev), return row-level records
-  with credit_category included (no GROUP BY).
-
-Digital engagement cohort summary:
-- If a question asks for digital engagement by cohort and digital-native status without a concrete time window
-  (explicit years or quarters), return a two-row summary grouped only by is_digital_native with:
-  cohort_size, avg_engagement (CES), pct_high_engagement (CES > 0.7).
-- If the question says "quarterly cohorts" but no explicit years/quarters are given, do not include cohort_quarter in output.
-- Only use cohort_quarter or time-series when a concrete time range is explicitly requested.
-- If this conflicts with generic cohort rules, prefer this section.
+Engagement and cohort definitions:
+- Engagement score refers to CES (Customer Engagement Score).
+- High engagement means CES > 0.7.
+- Cohort quarter refers to the tenure-adjusted scoredate aligned to calendar quarters.
 
 Defaults for vague thresholds:
 - Do not use SQL parameter placeholders (?,?,:name,@name,$name). Use explicit numeric literals.
