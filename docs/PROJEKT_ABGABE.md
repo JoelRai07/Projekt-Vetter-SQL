@@ -10,20 +10,37 @@
 
 ## 📋 Inhaltsverzeichnis
 
-1. [Prototyp mit Live-Demo](#1-prototyp-mit-live-demo)
-2. [Architekturdiagramm](#2-architekturdiagramm)
-3. [Prozessdiagramm](#3-prozessdiagramm)
-4. [Datenmodellierung & -beschreibung](#4-datenmodellierung---beschreibung)
-5. [Architecture Decision Records (ADRs)](#5-architecture-decision-records-adrs)
-6. [Testergebnisse](#6-testergebnisse)
-7. [Limitationen der Lösung](#7-limitationen-der-lösung)
-8. [Produktivierungsanforderungen](#8-produktivierungsanforderungen)
-9. [Organisatorisches](#9-organisatorisches)
-10. [Selbstreflektion (Retrospektive)](#10-selbstreflektion-retrospektive)
+1. [Eingereichte Arbeitsergebnisse (Dokument)](#1-eingereichte-arbeitsergebnisse-dokument)
+2. [Prototyp mit Live-Demo](#2-prototyp-mit-live-demo)
+3. [Architekturdiagramm](#3-architekturdiagramm)
+4. [Prozessdiagramm](#4-prozessdiagramm)
+5. [Datenmodellierung & -beschreibung](#5-datenmodellierung---beschreibung)
+6. [Architecture Decision Records (ADRs)](#6-architecture-decision-records-adrs)
+7. [Testergebnisse](#7-testergebnisse)
+8. [Limitationen der Lösung](#8-limitationen-der-lösung)
+9. [Produktivierungsanforderungen](#9-produktivierungsanforderungen)
+10. [Organisatorisches](#10-organisatorisches)
+11. [Selbstreflektion (Retrospektive)](#11-selbstreflektion-retrospektive)
 
 ---
 
-## 1. Prototyp mit Live-Demo
+## 1. Eingereichte Arbeitsergebnisse (Dokument)
+
+Dieses Dokument enthält die vollständigen Arbeitsergebnisse gemäß Aufgabenstellung:
+- **Prototyp mit Live-Demo**
+- **Architekturdiagramm** (Komponenten + Datenfluss)
+- **Prozessdiagramm** (User-Workflow)
+- **Datenmodellierung & -beschreibung**
+- **ADR (Architecture Decision Record)** inklusive Alternativen, Vor-/Nachteile
+- **Testergebnisse**
+- **Limitationen der Lösung**
+- **Produktivierungsanforderungen**
+- **Organisatorisches** (Projektplan, Rollen, Arbeitspakete)
+- **Selbstreflektion (Retrospektive)** inklusive verworfener Ansätze
+
+---
+
+## 2. Prototyp mit Live-Demo
 
 ### 🚀 Demo-Zugang
 - **Frontend**: http://localhost:5173
@@ -69,7 +86,7 @@ Zeige query_id für konsistentes Paging
 
 ---
 
-## 2. Architekturdiagramm
+## 3. Architekturdiagramm
 
 ### 🏗️ High-Level Architektur
 
@@ -172,7 +189,7 @@ sequenceDiagram
 
 ---
 
-## 3. Prozessdiagramm
+## 4. Prozessdiagramm
 
 ### 👤 User Workflow durch das Tool
 
@@ -219,7 +236,7 @@ flowchart TD
 
 ---
 
-## 4. Datenmodellierung & -beschreibung
+## 5. Datenmodellierung & -beschreibung
 
 ### 🗄️ Datenbank-Schema (Credit DB)
 
@@ -321,7 +338,58 @@ erDiagram
 
 ---
 
-## 5. Architecture Decision Records (ADRs)
+## 6. Architecture Decision Records (ADRs)
+
+### ADR-0001: BSL-first als Zielarchitektur für Text2SQL
+
+**[short title of solved problem and solution]**: BSL-first statt RAG/ReAct für stabile, erklärbare SQL-Generierung  
+**Status**: accepted  
+**Deciders**: Projektteam (Tim Kühne, Dominik Ruoff, Joel Martinez, Umut Polat, Sören Frank)  
+**Date**: 2025-01-14  
+**Technical Story**: Migration von RAG/ReAct zu BSL-first nach Review (Professor-Feedback)
+
+#### Context and Problem Statement
+Die initiale RAG/ReAct-Architektur lieferte uneinheitliche Ergebnisse und erhöhte die Komplexität durch zusätzliche Infrastruktur. Die zentrale Frage war: Wie erreichen wir reproduzierbare und auditierbare SQL-Generierung für die Credit-DB?
+
+#### Decision Drivers
+- Deterministische Ergebnisse für Evaluation
+- Nachvollziehbarkeit (auditierbare Regeln)
+- Reduzierte Systemkomplexität und Dependencies
+- Explizite Abbildung der Business-Logik
+- Feedback des Professors (Scope: Credit-DB)
+
+#### Considered Options
+- **Option 1**: RAG + ReAct beibehalten  
+- **Option 2**: Hybrid-Ansatz (RAG + BSL)  
+- **Option 3**: BSL-first (selected)
+
+#### Decision Outcome
+Chosen option: **"BSL-first"**, because it erfüllt Stabilität, Nachvollziehbarkeit und Wartbarkeit am besten und adressiert die Scope-Vorgaben direkt.
+
+#### Positive Consequences
+- Reproduzierbare SQL-Ergebnisse
+- Klare, prüfbare Business-Regeln (Audit-Readiness)
+- Weniger Abhängigkeiten (kein Vector Store nötig)
+
+#### Negative Consequences
+- Höherer Token-Verbrauch pro Prompt
+- Weniger skalierbar bei Multi-DB-Use-Cases
+
+#### Pros and Cons of the Options
+**Option 1: RAG + ReAct**  
+Good, because geringere Token-Kosten und moderne Retrieval-Methodik.  
+Bad, because variierende Ergebnisse, höhere Komplexität, schwer zu debuggen.
+
+**Option 2: Hybrid**  
+Good, because flexible Kombination aus Retrieval und Regeln.  
+Bad, because Komplexität bleibt hoch, Fehlersuche bleibt schwierig.
+
+**Option 3: BSL-first**  
+Good, because deterministisch, auditierbar, professor-konform.  
+Bad, because hoher Prompt-Overhead und enger Domain-Fit.
+
+#### Links
+- ADR-Verweise: Siehe ADR-002 bis ADR-004 (Modularisierung, Eliminierung von Hardcoding, Consistency Validation)
 
 ### ADR-001: Von RAG/ReAct zu BSL-first Migration
 
@@ -429,7 +497,7 @@ Chosen option: **Mehrstufige Consistency Validation**, because:
 
 ---
 
-## 6. Testergebnisse
+## 7. Testergebnisse
 
 ### 📊 Success Rate: 95% (9.5/10 Fragen)
 
@@ -472,7 +540,7 @@ Chosen option: **Mehrstufige Consistency Validation**, because:
 
 ---
 
-## 7. Limitationen der Lösung
+## 8. Limitationen der Lösung
 
 ### 🔧 Technische Limitationen
 
@@ -522,7 +590,7 @@ Chosen option: **Mehrstufige Consistency Validation**, because:
 
 ---
 
-## 8. Produktivierungsanforderungen
+## 9. Produktivierungsanforderungen
 
 ### 🔧 Technische Anforderungen
 
@@ -603,7 +671,7 @@ Chosen option: **Mehrstufige Consistency Validation**, because:
 
 ---
 
-## 9. Organisatorisches
+## 10. Organisatorisches
 
 ### 👥 Team-Struktur
 
@@ -663,7 +731,7 @@ graph TD
 
 ---
 
-## 10. Selbstreflektion (Retrospektive)
+## 11. Selbstreflektion (Retrospektive)
 
 ### ✅ Was gut funktioniert hat
 
@@ -717,6 +785,23 @@ graph TD
    - GitHub Actions für automatische Tests
    - Deployment-Pipeline für Staging/Production
    - **Lerne**: Automatisierung reduziert manuelle Fehler
+
+### 🧪 Verworfene Ansätze (Begründung & Erfahrungen)
+
+1. **RAG/ReAct mit Vector Store**
+   - **Warum verworfen**: Instabile Ergebnisse, hoher Infrastrukturaufwand (ChromaDB, LangChain), unnötig für Single-DB-Scope.
+   - **Wie es funktionierte**: Embeddings der Tabellenbeschreibungen wurden genutzt, um Kontext zu fetchen; LLM generierte SQL mit ReAct-Schritten.
+   - **Lesson Learned**: Für kleine, stabile Schemas ist explizite Regelmodellierung robuster als Retrieval.
+
+2. **Hybrid-Ansatz (RAG + BSL)**
+   - **Warum verworfen**: Kombiniert die Komplexitäten beider Welten ohne klare Vorteile für die Credit-DB.
+   - **Wie es funktionierte**: Retrieval für Kontext, BSL für kritische Regeln; führte zu inkonsistenten Prompt-Längen und Debugging-Aufwand.
+   - **Lesson Learned**: Ein klarer, einfacher Architekturpfad schlägt “Best-of-both-worlds” in engen Scopes.
+
+3. **Reines Prompt-Engineering ohne BSL**
+   - **Warum verworfen**: Fehlende Auditierbarkeit und wiederkehrende Fehler bei Identifiers und JOINs.
+   - **Wie es funktionierte**: System-Prompt mit Schema und Guidelines, ohne modulare Regeln.
+   - **Lesson Learned**: Domain-Regeln müssen explizit modelliert sein, nicht implizit im Prompt.
 
 ### 🎓 Lessons Learned
 
