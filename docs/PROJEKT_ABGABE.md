@@ -752,12 +752,6 @@ graph TD
 
 ## 📞 Kontakt & Demo
 
-**Projekt-Repository**: https://github.com/YourTeam/ChatWithYourData  
-**Live Demo**: [Link zur Live-Demo]  
-**Team-Kontakt**: [E-Mail-Adresse]  
-
-**Status**: Production-ready für Credit-DB Scope  
-**Version**: 3.0.0 (BSL-first mit modularen Regeln)  
 **Letztes Update**: Januar 2026
 
 ---
