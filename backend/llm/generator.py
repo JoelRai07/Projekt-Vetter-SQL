@@ -135,6 +135,77 @@ class OpenAIGenerator:
             re.search(r"(\?(\d+)?|:[a-zA-Z_]\w*|@[a-zA-Z_]\w*|\$[a-zA-Z_]\w*)", stripped)
         )
 
+    def _fix_union_order_by(self, sql: str) -> str:
+        """
+        Fix UNION ALL with ORDER BY issue in SQLite.
+        SQLite requires wrapping the UNION result in a subquery before applying ORDER BY.
+        """
+        if not sql:
+            return sql
+
+        sql_upper = sql.upper()
+
+        # Check if SQL contains UNION (ALL) and ORDER BY at the top level
+        if "UNION" not in sql_upper:
+            return sql
+
+        # Check if ORDER BY comes after the last UNION (indicating top-level ORDER BY)
+        last_union_pos = max(
+            sql_upper.rfind("UNION ALL"),
+            sql_upper.rfind("UNION ")
+        )
+        order_by_pos = sql_upper.rfind("ORDER BY")
+
+        if last_union_pos == -1 or order_by_pos == -1:
+            return sql
+
+        # ORDER BY should come after UNION for this to be an issue
+        if order_by_pos < last_union_pos:
+            return sql
+
+        # Check if it's already wrapped with outer SELECT FROM subquery
+        stripped = sql.strip()
+        if re.match(r"(?i)SELECT\s+\*\s+FROM\s*\(", stripped):
+            return sql
+
+        # Extract the ORDER BY clause
+        order_by_clause = sql[order_by_pos:].strip()
+        sql_without_order = sql[:order_by_pos].strip()
+
+        # Remove trailing semicolon from sql_without_order if present
+        if sql_without_order.endswith(";"):
+            sql_without_order = sql_without_order[:-1].strip()
+
+        # Remove trailing semicolon from order_by_clause if present
+        if order_by_clause.endswith(";"):
+            order_by_clause = order_by_clause[:-1].strip()
+
+        # Check if SQL already starts with WITH (has CTEs)
+        # In that case, we need to append our wrapper CTE to the existing CTEs
+        if re.match(r"(?i)^\s*WITH\s+", sql_without_order):
+            # SQL already has CTEs - we need to add our wrapper as the last CTE
+            # Find the final SELECT statement to wrap
+            # Use a unique CTE name that won't conflict
+            wrapper_cte_name = "_union_order_wrapper"
+
+            # The structure is: WITH existing_ctes SELECT ... UNION ...
+            # We need to wrap the whole thing
+            fixed_sql = f"""WITH {wrapper_cte_name} AS (
+{sql_without_order}
+)
+SELECT * FROM {wrapper_cte_name}
+{order_by_clause};"""
+        else:
+            # No existing CTEs - simple wrap
+            wrapper_cte_name = "_union_order_wrapper"
+            fixed_sql = f"""WITH {wrapper_cte_name} AS (
+{sql_without_order}
+)
+SELECT * FROM {wrapper_cte_name}
+{order_by_clause};"""
+
+        return fixed_sql
+
     def _is_property_leverage_question(self, question: str) -> bool:
         q = question.lower()
         if any(k in q for k in ["property leverage", "mortgage ratio", "loan-to-value", "ltv"]):
@@ -223,13 +294,12 @@ class OpenAIGenerator:
 
         if self._is_property_leverage_question(question):
             property_issues = []
-            if "join" in sql_lower or "core_record" in sql_lower or "employment_and_income" in sql_lower:
+            # Property leverage data comes from propfinancialdata, customer_id must be coreregistry (CS format)
+            if "coreregistry" not in sql_lower:
                 property_issues.append(
-                    "Read directly from expenses_and_assets only (no joins) when property leverage "
-                    "metrics come from propfinancialdata."
+                    "Join to core_record and use core_record.coreregistry as customer_id (CS format). "
+                    "Join path: expenses_and_assets -> employment_and_income -> core_record."
                 )
-            if "expemplref" not in sql_lower:
-                property_issues.append("Use expenses_and_assets.expemplref as customer_id.")
             if "order by" not in sql_lower:
                 property_issues.append("Order by the leverage ratio descending.")
             if property_issues:
@@ -387,6 +457,10 @@ WICHTIG: Befolge die BSL-Regeln strikt:
                         previous_sql=result["sql"],
                     )
 
+            # Fix UNION ALL + ORDER BY issue for SQLite
+            if result.get("sql"):
+                result["sql"] = self._fix_union_order_by(result["sql"])
+
             return result
         except json.JSONDecodeError as e:
             return {
@@ -507,13 +581,15 @@ Korrigiere die SQL-Query basierend auf den Fehlern.
                     sql_result = self._ensure_generation_fields(self._parse_json_response(response))
                     if sql_result.get("sql"):
                         sql_result["sql"] = sql_result["sql"].replace("```sql", "").replace("```", "").strip()
+                        # Fix UNION ALL + ORDER BY issue for SQLite
+                        sql_result["sql"] = self._fix_union_order_by(sql_result["sql"])
                 except Exception as e:
                     print(f"⚠️  SQL-Korrektur fehlgeschlagen: {str(e)}")
                     break
-            
+
             if not sql_result or not sql_result.get("sql"):
                 break
-            
+
             # Validate
             validation_result = self.validate_sql(sql_result["sql"], schema)
             

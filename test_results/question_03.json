@@ -2,285 +2,287 @@
   "question": "Can you identify all customers focused on investments in our database? I need to see their IDs, investment amounts and total assets.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "„Customers focused on investments“ ist nicht eindeutig definiert. Im Domain-Wissen gibt es zwar eine Definition für „Investment Focused“, diese hängt aber von JSON-Feldern (chaninvdatablock.invcluster.*) und einem Schwellenwert (investamt > 0.3 × totassets) ab. Die Frage nennt diese Kriterien nicht explizit und sagt auch nicht, ob genau diese Definition verwendet werden soll. Außerdem ist „customer ID“ mehrdeutig, da es sowohl clientref (Kunden-ID) als auch coreregistry (Record-ID) gibt.",
+    "reason": "Der Begriff „customers focused on investments“ ist nicht eindeutig definiert. Im Domain-Wissen existiert zwar eine Definition für „Investment Focused“, diese erfordert jedoch JSON-Felder (invcluster.investport, invcluster.investexp) und eine Bedingung investamt > 0.3 × totassets. Die Frage sagt nicht, ob genau diese Definition verwendet werden soll oder ob eine andere/vereinfachte Regel (z. B. investamt > 0) gemeint ist. Außerdem ist „customer IDs“ mehrdeutig, da es sowohl core_record.clientref (Customer-ID) als auch coreregistry (Record-ID) gibt; die Join-Kette liefert primär coreregistry als Schlüssel, aber die gewünschte ID ist nicht spezifiziert.",
     "questions": [
-      "Soll „focused on investments“ exakt nach der Domain-Regel „Investment Focused“ bestimmt werden (Moderate/Aggressive Portfolio, Extensive Experience, und investamt > 0.3 × totassets), oder nach einem anderen Kriterium?",
-      "Welche ID soll ausgegeben werden: clientref (Customer ID) oder coreregistry (Core Record ID)?"
+      "Soll „investment focused“ exakt nach der Domain-Regel „Investment Focused“ gefiltert werden (invcluster.investport in {Moderate, Aggressive} AND invcluster.investexp = Extensive AND investamt > 0.3 * totassets), oder gilt eine andere Definition/Schwelle?",
+      "Welche ID soll ausgegeben werden: core_record.clientref (Customer-ID) oder core_record.coreregistry (Core-Record-ID)?"
     ]
   },
-  "generated_sql": "SELECT\n  cr.clientref AS customer_id,\n  ea.investamt AS investment_amount,\n  ea.totassets AS total_assets\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE\n  json_extract(bt.chaninvdatablock, '$.invcluster.investport') IN ('Moderate', 'Aggressive')\n  AND json_extract(bt.chaninvdatablock, '$.invcluster.investexp') = 'Extensive'\n  AND ea.investamt > 0.3 * ea.totassets",
+  "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  ea.investamt AS investment_amount,\n  ea.totassets AS total_assets\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE\n  json_extract(bt.chaninvdatablock, '$.invcluster.investport') IN ('Moderate', 'Aggressive')\n  AND json_extract(bt.chaninvdatablock, '$.invcluster.investexp') = 'Extensive'\n  AND ea.investamt > 0.3 * ea.totassets",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: Add NULL-safety for JSON filters, e.g. `json_extract(bt.chaninvdatablock,'$.invcluster.investport') IS NOT NULL` to avoid excluding rows with missing JSON keys unintentionally.",
-      "Optional: Guard against NULL `ea.totassets` in the ratio filter, e.g. `ea.totassets IS NOT NULL AND ea.investamt > 0.3 * ea.totassets`.",
-      "Style: The JOIN chain is correct but some joins are redundant for the selected columns/filters (cc, cah) unless you intend to enforce existence of related records; otherwise remove them to avoid dropping rows."
+      "Query is syntactically valid SQLite and uses only SELECT (safe).",
+      "JOINs follow the declared FK chain correctly: core_record.coreregistry -> employment_and_income.emplcoreref -> expenses_and_assets.expemplref -> bank_and_transactions.bankexpref -> credit_and_compliance.compbankref -> credit_accounts_and_history.histcompref.",
+      "JSON extraction is from the correct column (bank_and_transactions.chaninvdatablock). Paths '$.invcluster.investport' and '$.invcluster.investexp' match the provided example structure.",
+      "Logical check: the filter json_extract(...,'$.invcluster.investexp') = 'Extensive' may return no rows if the data only contains values like 'Moderate' (as in the example). If intended, keep; otherwise adjust to existing categories.",
+      "Optional robustness: wrap json_extract with COALESCE to avoid NULL comparisons, e.g. COALESCE(json_extract(...), '') = 'Extensive'."
     ]
   },
   "results": [
     {
-      "customer_id": "CU510437",
+      "customer_id": "CS450025",
       "investment_amount": 795900.0,
       "total_assets": 194996.0
     },
     {
-      "customer_id": "CU590052",
+      "customer_id": "CS354471",
       "investment_amount": 708061.0,
       "total_assets": 934678.0
     },
     {
-      "customer_id": "CU876471",
+      "customer_id": "CS956134",
       "investment_amount": 462864.0,
       "total_assets": 1073011.0
     },
     {
-      "customer_id": "CU906564",
+      "customer_id": "CS809921",
       "investment_amount": 589529.0,
       "total_assets": 1887143.0
     },
     {
-      "customer_id": "CU205099",
+      "customer_id": "CS706475",
       "investment_amount": 291820.0,
       "total_assets": 586082.0
     },
     {
-      "customer_id": "CU805853",
+      "customer_id": "CS486939",
       "investment_amount": 783620.0,
       "total_assets": 4474.0
     },
     {
-      "customer_id": "CU979203",
+      "customer_id": "CS176768",
       "investment_amount": 302362.0,
       "total_assets": 304027.0
     },
     {
-      "customer_id": "CU933465",
+      "customer_id": "CS619946",
       "investment_amount": 148415.0,
       "total_assets": 335865.0
     },
     {
-      "customer_id": "CU152246",
+      "customer_id": "CS620188",
       "investment_amount": 884380.0,
       "total_assets": 122019.0
     },
     {
-      "customer_id": "CU485747",
+      "customer_id": "CS686880",
       "investment_amount": 360202.0,
       "total_assets": 955663.0
     },
     {
-      "customer_id": "CU367158",
+      "customer_id": "CS705250",
       "investment_amount": 285443.0,
       "total_assets": 888087.0
     },
     {
-      "customer_id": "CU772323",
+      "customer_id": "CS173839",
       "investment_amount": 602116.0,
       "total_assets": 445419.0
     },
     {
-      "customer_id": "CU510937",
+      "customer_id": "CS970648",
       "investment_amount": 648606.0,
       "total_assets": 808018.0
     },
     {
-      "customer_id": "CU221557",
+      "customer_id": "CS746373",
       "investment_amount": 661040.0,
       "total_assets": 1433499.0
     },
     {
-      "customer_id": "CU536200",
+      "customer_id": "CS567745",
       "investment_amount": 305263.0,
       "total_assets": 777763.0
     },
     {
-      "customer_id": "CU857784",
+      "customer_id": "CS966807",
       "investment_amount": 905742.0,
       "total_assets": 1935526.0
     },
     {
-      "customer_id": "CU299135",
+      "customer_id": "CS638440",
       "investment_amount": 686760.0,
       "total_assets": 430677.0
     },
     {
-      "customer_id": "CU850967",
+      "customer_id": "CS104621",
       "investment_amount": 631427.0,
       "total_assets": 1910484.0
     },
     {
-      "customer_id": "CU586098",
+      "customer_id": "CS988114",
       "investment_amount": 737733.0,
       "total_assets": 1413670.0
     },
     {
-      "customer_id": "CU795375",
+      "customer_id": "CS524879",
       "investment_amount": 703597.0,
       "total_assets": 353346.0
     },
     {
-      "customer_id": "CU145752",
+      "customer_id": "CS614957",
       "investment_amount": 405358.0,
       "total_assets": 309841.0
     },
     {
-      "customer_id": "CU566777",
+      "customer_id": "CS108094",
       "investment_amount": 639693.0,
       "total_assets": 482323.0
     },
     {
-      "customer_id": "CU660850",
+      "customer_id": "CS620222",
       "investment_amount": 716230.0,
       "total_assets": 1161485.0
     },
     {
-      "customer_id": "CU467816",
+      "customer_id": "CS964207",
       "investment_amount": 959322.0,
       "total_assets": 70796.0
     },
     {
-      "customer_id": "CU474384",
+      "customer_id": "CS468729",
       "investment_amount": 710281.0,
       "total_assets": 774932.0
     },
     {
-      "customer_id": "CU576359",
+      "customer_id": "CS270723",
       "investment_amount": 815014.0,
       "total_assets": 1261144.0
     },
     {
-      "customer_id": "CU179700",
+      "customer_id": "CS582908",
       "investment_amount": 122953.0,
       "total_assets": 31283.0
     },
     {
-      "customer_id": "CU566504",
+      "customer_id": "CS392396",
       "investment_amount": 49289.0,
       "total_assets": 76121.0
     },
     {
-      "customer_id": "CU854993",
+      "customer_id": "CS952544",
       "investment_amount": 659300.0,
       "total_assets": 1007432.0
     },
     {
-      "customer_id": "CU523128",
+      "customer_id": "CS650398",
       "investment_amount": 609511.0,
       "total_assets": 271847.0
     },
     {
-      "customer_id": "CU895068",
+      "customer_id": "CS220359",
       "investment_amount": 906923.0,
       "total_assets": 988022.0
     },
     {
-      "customer_id": "CU352386",
+      "customer_id": "CS382901",
       "investment_amount": 352761.0,
       "total_assets": 240369.0
     },
     {
-      "customer_id": "CU629031",
+      "customer_id": "CS580015",
       "investment_amount": 727240.0,
       "total_assets": 1121571.0
     },
     {
-      "customer_id": "CU557882",
+      "customer_id": "CS326787",
       "investment_amount": 438063.0,
       "total_assets": 688337.0
     },
     {
-      "customer_id": "CU322817",
+      "customer_id": "CS468323",
       "investment_amount": 215107.0,
       "total_assets": 503329.0
     },
     {
-      "customer_id": "CU561367",
+      "customer_id": "CS469162",
       "investment_amount": 858477.0,
       "total_assets": 788838.0
     },
     {
-      "customer_id": "CU702212",
+      "customer_id": "CS803863",
       "investment_amount": 518392.0,
       "total_assets": 860229.0
     },
     {
-      "customer_id": "CU459906",
+      "customer_id": "CS348867",
       "investment_amount": 893188.0,
       "total_assets": 957980.0
     },
     {
-      "customer_id": "CU397888",
+      "customer_id": "CS916728",
       "investment_amount": 776657.0,
       "total_assets": 1630529.0
     },
     {
-      "customer_id": "CU807412",
+      "customer_id": "CS486306",
       "investment_amount": 691519.0,
       "total_assets": 1179182.0
     },
     {
-      "customer_id": "CU320296",
+      "customer_id": "CS888307",
       "investment_amount": 531856.0,
       "total_assets": 1011677.0
     },
     {
-      "customer_id": "CU157244",
+      "customer_id": "CS234231",
       "investment_amount": 585866.0,
       "total_assets": 1603898.0
     },
     {
-      "customer_id": "CU929125",
+      "customer_id": "CS492643",
       "investment_amount": 368520.0,
       "total_assets": 1025269.0
     },
     {
-      "customer_id": "CU158159",
+      "customer_id": "CS957512",
       "investment_amount": 814909.0,
       "total_assets": 148363.0
     },
     {
-      "customer_id": "CU176011",
+      "customer_id": "CS590036",
       "investment_amount": 729524.0,
       "total_assets": 1415145.0
     },
     {
-      "customer_id": "CU635750",
+      "customer_id": "CS247361",
       "investment_amount": 286240.0,
       "total_assets": 744165.0
     },
     {
-      "customer_id": "CU358701",
+      "customer_id": "CS548052",
       "investment_amount": 599552.0,
       "total_assets": 1463068.0
     },
     {
-      "customer_id": "CU625221",
+      "customer_id": "CS189697",
       "investment_amount": 506229.0,
       "total_assets": 369310.0
     },
     {
-      "customer_id": "CU183051",
+      "customer_id": "CS373393",
       "investment_amount": 808298.0,
       "total_assets": 1492879.0
     },
     {
-      "customer_id": "CU572655",
+      "customer_id": "CS914075",
       "investment_amount": 346273.0,
       "total_assets": 1126459.0
     }
   ],
   "row_count": 50,
-  "query_id": "f2a4aeda67f3457c9d5d10220ef2ccf2",
+  "query_id": "85706ca8e5854c0698f03636f7f9fb89",
   "page": 1,
   "page_size": 50,
   "total_pages": 2,
   "total_rows": 95,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 2 (50 von 95 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Customers focused on investments“ ist nicht eindeutig definiert. Im Domain-Wissen gibt es zwar eine Definition für „Investment Focused“, diese hängt aber von JSON-Feldern (chaninvdatablock.invcluster.*) und einem Schwellenwert (investamt > 0.3 × totassets) ab. Die Frage nennt diese Kriterien nicht explizit und sagt auch nicht, ob genau diese Definition verwendet werden soll. Außerdem ist „customer ID“ mehrdeutig, da es sowohl clientref (Kunden-ID) als auch coreregistry (Record-ID) gibt.. Klärungsfragen: Soll „focused on investments“ exakt nach der Domain-Regel „Investment Focused“ bestimmt werden (Moderate/Aggressive Portfolio, Extensive Experience, und investamt > 0.3 × totassets), oder nach einem anderen Kriterium?, Welche ID soll ausgegeben werden: clientref (Customer ID) oder coreregistry (Core Record ID)?",
-  "summary": "Die Abfrage identifiziert 95 Kunden (Seite 1 zeigt 50), die ein „Moderate“ oder „Aggressive“ Investment-Portfolio sowie „Extensive“ Investment-Erfahrung haben und deren Investmentbetrag mehr als 30% der Gesamtvermögenswerte ausmacht. In den ersten Ergebnissen fallen CU510437 (Investment 795.900 bei Total Assets 194.996), CU590052 (708.061 bei 934.678) und CU876471 (462.864 bei 1.073.011) auf; insbesondere CU510437 wirkt aufgrund des sehr hohen Investmentbetrags im Verhältnis zu den ausgewiesenen Gesamtassets ungewöhnlich und sollte ggf. auf Datenqualität/Definitionen geprüft werden.",
-  "explanation": "Lists all customers (CU IDs) who meet the BSL 'Investment Focused' definition, returning their customer_id, investment amount (investamt), and total assets (totassets). Uses the required full join chain and qualified JSON extraction for investment cluster attributes.",
+  "notice": "Seite 1 von 2 (50 von 95 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Der Begriff „customers focused on investments“ ist nicht eindeutig definiert. Im Domain-Wissen existiert zwar eine Definition für „Investment Focused“, diese erfordert jedoch JSON-Felder (invcluster.investport, invcluster.investexp) und eine Bedingung investamt > 0.3 × totassets. Die Frage sagt nicht, ob genau diese Definition verwendet werden soll oder ob eine andere/vereinfachte Regel (z. B. investamt > 0) gemeint ist. Außerdem ist „customer IDs“ mehrdeutig, da es sowohl core_record.clientref (Customer-ID) als auch coreregistry (Record-ID) gibt; die Join-Kette liefert primär coreregistry als Schlüssel, aber die gewünschte ID ist nicht spezifiziert.. Klärungsfragen: Soll „investment focused“ exakt nach der Domain-Regel „Investment Focused“ gefiltert werden (invcluster.investport in {Moderate, Aggressive} AND invcluster.investexp = Extensive AND investamt > 0.3 * totassets), oder gilt eine andere Definition/Schwelle?, Welche ID soll ausgegeben werden: core_record.clientref (Customer-ID) oder core_record.coreregistry (Core-Record-ID)?",
+  "summary": "Die Abfrage identifiziert 95 Kunden mit „Moderate“ oder „Aggressive“ Investment-Portfolio und „Extensive“ Investment-Erfahrung, deren Investmentbetrag zudem über 30% der Gesamtassets liegt; auf Seite 1 werden 50 dieser Kunden angezeigt. Auffällig sind u. a. CS450025 (Investment 795.900 bei Total Assets 194.996), CS354471 (708.061 bei 934.678) und CS956134 (462.864 bei 1.073.011), wobei CS450025 besonders heraussticht, da der Investmentbetrag die ausgewiesenen Gesamtassets deutlich übersteigt.",
+  "explanation": "Lists all customers who meet the BSL 'Investment Focused' definition, returning their Customer ID (CS/coreregistry), investment amount, and total assets. The filter uses qualified JSON paths from bank_and_transactions.chaninvdatablock and the investamt-to-totassets threshold from expenses_and_assets.",
   "error": null
 }

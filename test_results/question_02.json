@@ -2,186 +2,185 @@
   "question": "Please find all the customer IDs who are highly digital.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "„Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Kriterium definiert. Es gibt zwar eine Definition für „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Regel gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung reicht. Außerdem ist unklar, aus welcher Tabelle/Beziehung die „customer IDs“ (core_record.clientref) mit den Digital-Attributen (bank_and_transactions.chaninvdatablock) verknüpft werden sollen, da kein direkter FK von bank_and_transactions zu core_record existiert (nur eine Kette über mehrere Tabellen).",
+    "reason": "„Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Kriterium definiert. Es gibt zwar die Definition „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Definition gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung ausreicht. Außerdem ist nicht eindeutig, aus welcher Tabelle/Schlüssel die „customer IDs“ kommen sollen (core_record.clientref vs. die Record-IDs wie coreregistry/bankexpref), auch wenn clientref naheliegt.",
     "questions": [
-      "Soll „highly digital“ exakt nach der Domain-Regel „Digital First Customer“ definiert werden (onlineuse oder mobileuse = 'High' UND autopay = 'Yes')?",
-      "Welche ID soll ausgegeben werden: core_record.clientref (Customer ID) oder der Datensatz-Schlüssel coreregistry/bankexpref?",
-      "Soll die Verknüpfung über die vollständige FK-Kette core_record → employment_and_income → expenses_and_assets → bank_and_transactions erfolgen, um die Digital-Attribute zu den Customer IDs zuzuordnen?"
+      "Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ bestimmt werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?",
+      "Welche ID soll ausgegeben werden: core_record.clientref (Customer ID) oder die internen Referenzen wie coreregistry/bankexpref?"
     ]
   },
-  "generated_sql": "SELECT\n  cr.clientref AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
+  "generated_sql": "SELECT DISTINCT\n  cr.coreregistry AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: DISTINCT hinzufügen, falls pro Kunde mehrere Zeilen über die Join-Kette entstehen können (z.B. mehrere bank_and_transactions pro expemplref): SELECT DISTINCT cr.clientref ...",
-      "Optional: NULL-sicher filtern, falls chaninvdatablock NULL oder ungültiges JSON enthalten kann: bt.chaninvdatablock IS NOT NULL AND json_valid(bt.chaninvdatablock) AND ...",
-      "Optional: Wenn nur Kunden mit vorhandenen Bankdaten gewünscht sind, ist JOIN korrekt; falls Kunden ohne Bankdaten trotzdem erscheinen sollen, LEFT JOIN verwenden und Filter entsprechend anpassen."
+      "Optional: DISTINCT ist hier wahrscheinlich redundant, da die JOIN-Kette über PK/FK (1:1) läuft und pro coreregistry typischerweise nur eine Zeile entsteht.",
+      "Optional: Wenn chaninvdatablock ungültiges JSON oder NULL enthalten kann, kann json_extract NULL liefern; ggf. mit json_valid(bt.chaninvdatablock) = 1 absichern.",
+      "Optional: Für Performance: Indexe auf den FK-Spalten (employment_and_income.emplcoreref, expenses_and_assets.expemplref, bank_and_transactions.bankexpref, credit_and_compliance.compbankref, credit_accounts_and_history.histcompref) prüfen."
     ]
   },
   "results": [
     {
-      "customer_id": "CU572395"
+      "customer_id": "CS100596"
     },
     {
-      "customer_id": "CU466756"
+      "customer_id": "CS101678"
     },
     {
-      "customer_id": "CU993201"
+      "customer_id": "CS104169"
     },
     {
-      "customer_id": "CU572551"
+      "customer_id": "CS108094"
     },
     {
-      "customer_id": "CU496685"
+      "customer_id": "CS115119"
     },
     {
-      "customer_id": "CU590052"
+      "customer_id": "CS117909"
     },
     {
-      "customer_id": "CU628920"
+      "customer_id": "CS118849"
     },
     {
-      "customer_id": "CU459105"
+      "customer_id": "CS119313"
     },
     {
-      "customer_id": "CU689896"
+      "customer_id": "CS127497"
     },
     {
-      "customer_id": "CU170558"
+      "customer_id": "CS127904"
     },
     {
-      "customer_id": "CU427485"
+      "customer_id": "CS128627"
     },
     {
-      "customer_id": "CU363871"
+      "customer_id": "CS135936"
     },
     {
-      "customer_id": "CU788298"
+      "customer_id": "CS138232"
     },
     {
-      "customer_id": "CU324804"
+      "customer_id": "CS141088"
     },
     {
-      "customer_id": "CU893047"
+      "customer_id": "CS141623"
     },
     {
-      "customer_id": "CU906583"
+      "customer_id": "CS143502"
     },
     {
-      "customer_id": "CU925927"
+      "customer_id": "CS145015"
     },
     {
-      "customer_id": "CU351564"
+      "customer_id": "CS147604"
     },
     {
-      "customer_id": "CU747975"
+      "customer_id": "CS149186"
     },
     {
-      "customer_id": "CU677308"
+      "customer_id": "CS154166"
     },
     {
-      "customer_id": "CU906564"
+      "customer_id": "CS155730"
     },
     {
-      "customer_id": "CU159634"
+      "customer_id": "CS156236"
     },
     {
-      "customer_id": "CU215767"
+      "customer_id": "CS162913"
     },
     {
-      "customer_id": "CU205099"
+      "customer_id": "CS163897"
     },
     {
-      "customer_id": "CU723708"
+      "customer_id": "CS164181"
     },
     {
-      "customer_id": "CU982924"
+      "customer_id": "CS170086"
     },
     {
-      "customer_id": "CU308190"
+      "customer_id": "CS170278"
     },
     {
-      "customer_id": "CU169517"
+      "customer_id": "CS171286"
     },
     {
-      "customer_id": "CU360562"
+      "customer_id": "CS171476"
     },
     {
-      "customer_id": "CU960443"
+      "customer_id": "CS173839"
     },
     {
-      "customer_id": "CU485747"
+      "customer_id": "CS180245"
     },
     {
-      "customer_id": "CU430068"
+      "customer_id": "CS181772"
     },
     {
-      "customer_id": "CU367158"
+      "customer_id": "CS182853"
     },
     {
-      "customer_id": "CU812251"
+      "customer_id": "CS185238"
     },
     {
-      "customer_id": "CU318546"
+      "customer_id": "CS185319"
     },
     {
-      "customer_id": "CU772323"
+      "customer_id": "CS190658"
     },
     {
-      "customer_id": "CU489538"
+      "customer_id": "CS191875"
     },
     {
-      "customer_id": "CU517606"
+      "customer_id": "CS195353"
     },
     {
-      "customer_id": "CU221557"
+      "customer_id": "CS196993"
     },
     {
-      "customer_id": "CU408274"
+      "customer_id": "CS197925"
     },
     {
-      "customer_id": "CU452899"
+      "customer_id": "CS203072"
     },
     {
-      "customer_id": "CU586421"
+      "customer_id": "CS211729"
     },
     {
-      "customer_id": "CU143993"
+      "customer_id": "CS213855"
     },
     {
-      "customer_id": "CU536200"
+      "customer_id": "CS215184"
     },
     {
-      "customer_id": "CU697174"
+      "customer_id": "CS218315"
     },
     {
-      "customer_id": "CU760386"
+      "customer_id": "CS218700"
     },
     {
-      "customer_id": "CU878767"
+      "customer_id": "CS218961"
     },
     {
-      "customer_id": "CU149495"
+      "customer_id": "CS220359"
     },
     {
-      "customer_id": "CU978629"
+      "customer_id": "CS222072"
     },
     {
-      "customer_id": "CU186883"
+      "customer_id": "CS230095"
     }
   ],
   "row_count": 50,
-  "query_id": "7f5641ea81624dfe840d26da2f171eb2",
+  "query_id": "9f774bb89f084bf9b9b2abbf4a5b05d2",
   "page": 1,
   "page_size": 50,
   "total_pages": 6,
   "total_rows": 285,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Kriterium definiert. Es gibt zwar eine Definition für „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Regel gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung reicht. Außerdem ist unklar, aus welcher Tabelle/Beziehung die „customer IDs“ (core_record.clientref) mit den Digital-Attributen (bank_and_transactions.chaninvdatablock) verknüpft werden sollen, da kein direkter FK von bank_and_transactions zu core_record existiert (nur eine Kette über mehrere Tabellen).. Klärungsfragen: Soll „highly digital“ exakt nach der Domain-Regel „Digital First Customer“ definiert werden (onlineuse oder mobileuse = 'High' UND autopay = 'Yes')?, Welche ID soll ausgegeben werden: core_record.clientref (Customer ID) oder der Datensatz-Schlüssel coreregistry/bankexpref?, Soll die Verknüpfung über die vollständige FK-Kette core_record → employment_and_income → expenses_and_assets → bank_and_transactions erfolgen, um die Digital-Attribute zu den Customer IDs zuzuordnen?",
-  "summary": "Die Abfrage identifiziert 285 Kunden-IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden 50 von 285 Treffern angezeigt. Beispiele aus den ersten Ergebnissen sind die Kunden CU572395, CU466756 und CU993201. Wenn du die Liste weiter eingrenzen möchtest, könntest du zusätzlich verlangen, dass sowohl Online- als auch Mobile-Nutzung „High“ sind (statt nur eines von beiden).",
-  "explanation": "Returns all customer IDs (CU format) for customers who meet the BSL Digital First (digital native) criteria based on digital channel usage and autopay status stored in bank_and_transactions.chaninvdatablock.",
+  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Kriterium definiert. Es gibt zwar die Definition „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Definition gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung ausreicht. Außerdem ist nicht eindeutig, aus welcher Tabelle/Schlüssel die „customer IDs“ kommen sollen (core_record.clientref vs. die Record-IDs wie coreregistry/bankexpref), auch wenn clientref naheliegt.. Klärungsfragen: Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ bestimmt werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?, Welche ID soll ausgegeben werden: core_record.clientref (Customer ID) oder die internen Referenzen wie coreregistry/bankexpref?",
+  "summary": "Die Abfrage identifiziert insgesamt 285 eindeutige Customer IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden 50 von 285 Treffern angezeigt. Beispiele aus den ersten Ergebnissen sind die Customer IDs CS100596, CS101678 und CS104169. Wenn du die Liste weiter eingrenzen willst, wäre ein nächster Schritt, Onlineuse und Mobileuse gleichzeitig auf „High“ zu setzen oder zusätzliche Kriterien (z. B. Transaktionshäufigkeit) zu ergänzen.",
+  "explanation": "Returns the list of unique customer IDs (CS format) for customers who meet the BSL 'Digital First Customer' criteria (high online or mobile usage AND autopay enabled), using the required customer join chain and JSON extraction from bank_and_transactions.chaninvdatablock.",
   "error": null
 }

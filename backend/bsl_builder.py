@@ -4,602 +4,496 @@ Business Semantics Layer (BSL) Builder
 Converts implicit knowledge from KB/schema into explicit, LLM-friendly rules.
 This ensures Text2SQL systems understand business logic, not just schema.
 
-Usage:
-    python bsl_builder.py --db credit --output bsl_credit.txt
+Default usage (always Credit DB):
+    python bsl_builder.py
+
+Custom output:
+    python bsl_builder.py --output bsl_credit.txt
+
+Advanced usage (custom paths):
+    python bsl_builder.py --kb <kb.jsonl> --meanings <meanings.json> --schema <schema.sql|schema.sqlite> --output <out.txt>
 """
 
 import json
 import argparse
+import re
+import sqlite3
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional, Tuple
 
+
+# ---------------------------
+# Path helpers (robust)
+# ---------------------------
+
+def find_repo_root(start: Path) -> Path:
+    """
+    Walk upwards until we find a folder containing 'mini-interact'.
+    Falls back to start if not found.
+    """
+    start = start.resolve()
+    for p in [start] + list(start.parents):
+        if (p / "mini-interact").is_dir():
+            return p
+    return start
+
+
+def default_credit_paths() -> Tuple[str, str, str]:
+    """
+    Always credit DB. Automatically picks a schema source:
+    - prefer credit_schema.sql if exists
+    - else prefer credit.sqlite / credit.db if exists
+    - else fall back to credit_schema.sql (even if missing; builder will just show unknown types)
+    """
+    here = Path(__file__).resolve().parent
+    root = find_repo_root(here)
+
+    base = root / "mini-interact" / "credit"
+    kb = base / "credit_kb.jsonl"
+    meanings = base / "credit_column_meaning_base.json"
+
+    # schema candidates (ordered)
+    candidates = [
+        base / "credit_schema.sql",
+        base / "credit_schema.sqlite",
+        base / "credit.sqlite",
+        base / "credit.db",
+    ]
+    schema = next((c for c in candidates if c.exists()), candidates[0])
+
+    return str(kb), str(meanings), str(schema)
+
+
+# ---------------------------
+# Builder
+# ---------------------------
 
 class BSLBuilder:
-    """Builds a Business Semantics Layer from KB and Schema"""
-    
+    """
+    Builds a Business Semantics Layer from KB and Schema.
+
+    IMPORTANT DESIGN:
+    - Part A is the "true BSL": business terms, definitions, rules.
+      It is technology-agnostic and should remain stable even if schema changes.
+    - Part B is "Semantic-to-Schema Mapping": how concepts map to tables/columns.
+    - Part C is "SQL Generation Policy" (annex): dialect / query-building patterns.
+    """
+
     def __init__(self, kb_path: str, meanings_path: str, schema_path: str):
         self.kb_path = kb_path
         self.meanings_path = meanings_path
         self.schema_path = schema_path
-        
+        self.schema_types = self._load_schema_types(schema_path)
+
+    # ---------------------------
+    # Loaders
+    # ---------------------------
+
     def load_kb(self) -> List[Dict[str, Any]]:
-        """Load Knowledge Base entries"""
-        entries = []
-        with open(self.kb_path, 'r', encoding='utf-8') as f:
+        entries: List[Dict[str, Any]] = []
+        with open(self.kb_path, "r", encoding="utf-8") as f:
             for line in f:
+                line = line.strip()
+                if not line:
+                    continue
                 entries.append(json.loads(line))
         return entries
-    
+
     def load_meanings(self) -> Dict[str, Any]:
-        """Load column meanings"""
-        with open(self.meanings_path, 'r', encoding='utf-8') as f:
+        with open(self.meanings_path, "r", encoding="utf-8") as f:
             return json.load(f)
-    
-    def extract_identity_rules(self, meanings: Dict) -> List[str]:
-        """Extract rules about identifiers (CU vs CS)"""
-        rules = [
-            "# IDENTITY SYSTEM RULES (CRITICAL)",
-            "",
-            "## ⚠️ CRITICAL: Dual Identifier System",
-            "This database uses TWO DIFFERENT identifiers per customer:",
-            "",
-            "### CU Format (Customer ID)",
-            "- Format: CU followed by digits (e.g., CU456680, CU582141)",
-            "- Source: `core_record.clientref`",
-            "- Purpose: Business identifier, used in output/reports",
-            "- When to use: Question asks for 'customer ID', 'customer identifier', or 'show customer'",
-            "",
-            "### CS Format (Core Registry ID)",
-            "- Format: CS followed by digits (e.g., CS239090, CS206405)",
-            "- Source: `core_record.coreregistry` (PRIMARY KEY)",
-            "- Purpose: Technical identifier, used for JOINs and internal references",
-            "- When to use: Joining tables, filtering by registry, or technical lookups",
-            "",
-            "## ⚠️ RULE 1: SAME PERSON, DIFFERENT IDs",
-            "Both refer to the SAME person but are INCOMPATIBLE in queries:",
-            "- DO NOT SELECT clientref AND coreregistry from same row expecting them to match",
-            "- DO NOT use CU format for WHERE clauses on coreregistry",
-            "- DO NOT use CS format in output when question asks for 'customer ID'",
-            "",
-            "## ⚠️ RULE 2: Identifier Selection in SELECT",
-            "The SELECT clause determines your output identifier:",
-            "",
-            "**WRONG Examples (Common Mistakes):**",
-            "```sql",
-            "SELECT coreregistry FROM core_record;  -- Returns CS format, not CU",
-            "SELECT clientref AS customer_id FROM core_record;  -- ✓ Correct, returns CU",
-            "```",
-            "",
-            "**Example: 'Show top N customers by a metric'**",
-            "- Output should be: CU format (e.g., CU456680)",
-            "- Example SELECT: cr.clientref AS customer_id, <metric>",
-            "- WRONG: SELECT cr.coreregistry AS customer_id (returns CS format)",
-            "",
-            "## ⚠️ RULE 3: Identifier Usage in JOINs",
-            "ALL joins use CS format (coreregistry):",
-            "```sql",
-            "FROM core_record cr",
-            "JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref  -- Use CS",
-            "JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref      -- Use CS chain",
-            "```",
-            "",
-            "## ⚠️ RULE 4: Output vs Internal Logic",
-            "When SELECT clause has:",
-            "- `cr.clientref` → Output will be CU format ✓",
-            "- `cr.coreregistry` → Output will be CS format (usually wrong for 'customer ID')",
-            "- `ei.emplcoreref` → This is CS format (for joining, NOT output)",
-            "",
-            "## ⚠️ RULE 5: Question-Specific Identifier Requirements",
-            "",
-            "### Question Type: Ranking/Listing (Top N, Highest, Best)",
-            "Example: 'Top N customers by a metric'",
-            "- Output identifier: clientref (CU format)",
-            "- Example SELECT: cr.clientref, <metric>",
-            "- Common Error: Selecting coreregistry (returns CS format)",
-            "",
-            "### Question Type: Segmentation/Cohort Analysis",
-            "Example: 'Analyze by a cohort time bucket'",
-            "- Output identifier: clientref (CU format)",
-            "- Additional logic: May need to determine cohort_quarter from scoredate",
-            "- Correct SELECT: cr.clientref, cohort_quarter, COUNT(*)",
-            "- Common Error: Not extracting quarter correctly, wrong identifier",
-            "",
-            "### Question Type: Risk/Condition Filtering",
-            "Example: 'High-risk customers (High risk level, delinquencies, negative net worth)'",
-            "- Output identifier: clientref (CU format)",
-            "- Additional columns: Risk indicators (delinqcount, risklev, net_worth)",
-            "- Correct SELECT: cr.clientref, cc.risklev, cc.delinqcount, net_worth",
-            "- Common Error: Using CS format, missing filters, wrong join chain",
-            "",
-            "## ⚠️ VALIDATION CHECKLIST",
-            "Before returning SQL, verify:",
-            "1. ☐ Is question asking for 'customer ID'? → SELECT cr.clientref",
-            "2. ☐ Are all JOINs using coreregistry (CS)? → Check ON conditions",
-            "3. ☐ Does output identifier match question type? → CU for customer queries",
-            "4. ☐ If using coreregistry in SELECT, is it intentional? → Usually wrong",
-            "5. ☐ Are there different customers in results than reference? → Check identifier type",
-            ""
-        ]
-        return rules
-    
-    def extract_aggregation_patterns(self, kb_entries: List[Dict]) -> List[str]:
-        """Extract aggregation patterns from KB"""
-        rules = [
-            "# AGGREGATION DETECTION RULES",
-            "",
-            "## ⚠️ CRITICAL: Aggregation vs Detail Queries",
-            "",
-            "### Aggregation Queries (Must use GROUP BY)",
-            "Keywords that REQUIRE GROUP BY:",
-            "- 'by category', 'by segment', 'for each', 'breakdown', 'summary'",
-            "- 'analyze ... by', 'group into', 'cohorts'",
-            "- 'how many', 'count', 'average', 'total'",
-            "",
-            "Exception:",
-            "- If question asks for categories AND customer details, return row-level records with category (no GROUP BY).",
-            "",
-            "Example: 'Analyze credit scores by risk level' -> GROUP BY risklev",
-            "",
-            "### Detail/Ranking Queries (No GROUP BY, use ORDER + LIMIT)",
-            "Keywords that require RANKING (ORDER BY + LIMIT):",
-            "- 'top N', 'highest', 'lowest', 'best', 'worst'",
-            "- 'list top', 'show best', 'find worst'",
-            "",
-            "Example: 'Top N customers by a metric' -> ORDER BY <metric> DESC LIMIT N",
-            "⚠️ NOT GROUP BY (each customer appears once, not aggregated)",
-            "",
-            "### Detail Queries (Row-level, no aggregation)",
-            "Keywords that require ROW-LEVEL output:",
-            "- 'show all', 'list each', 'find customers where', 'identify'",
-            "- 'display', 'retrieve', 'find' (without aggregation keywords)",
-            "",
-            "Example: 'Find all customers matching a segment definition' -> SELECT WHERE (no GROUP BY)",
-            "⚠️ Do NOT GROUP BY unless question explicitly asks for breakdown",
-            "",
-            "## ⚠️ CRITICAL: Cohort Questions (Special Case)",
-            "When question asks 'by cohort quarter' AND an explicit time range is given:",
-            "- This is a GROUPING operation",
-            "- Must create cohort_quarter variable from scoredate",
-            "- Formula: Extract quarter from scoredate (or tenure-based cohort)",
-            "- MUST include GROUP BY cohort_quarter",
-            "- Each row shows: customer (or cohort indicator), metrics",
-            "If no explicit years/quarters are given, do NOT include cohort_quarter in output.",
-            "",
-            "## ⚠️ CRITICAL: Multi-Level Grouping (Advanced)",
-            "When question asks 'group by X AND ALSO Y':",
-            "Example: 'Show a metric by cohort AND by segment flag'",
-            "- GROUP BY cohort_quarter, segment_flag",
-            "- Each row is a unique (cohort, segment) combination",
-            "- Use aggregate functions: COUNT(*), AVG(), SUM()",
-            "",
-            "### Percentage Calculations in Grouped Data",
-            "When question asks 'percentage of the cohort above a threshold':",
-            "",
-            "**WRONG (mixing aggregation levels):**",
-            "```sql",
-            "SELECT cohort_quarter,",
-            "  SUM(CASE WHEN metric_value > threshold THEN 1 ELSE 0 END) AS high_count,",
-            "  COUNT(*) AS total",
-            "FROM base_data",
-            "GROUP BY cohort_quarter;",
-            "-- Then calculate 100 * high_count / total in application",
-            "```",
-            "",
-            "**CORRECT (in SQL):**",
-            "```sql",
-            "SELECT cohort_quarter,",
-            "  COUNT(*) AS cohort_size,",
-            "  CAST(SUM(CASE WHEN metric_value > threshold THEN 1 ELSE 0 END) AS REAL) / COUNT(*) AS pct_above_threshold",
-            "FROM base_data",
-            "GROUP BY cohort_quarter;",
-            "```",
-            "",
-            "### Multiple Grouping with Percentages",
-            "When question asks for percentages at MULTIPLE aggregation levels:",
-            "Example: 'percentage of a cohort for a metric' + 'percentage broken down by a segment'",
-            "",
-            "**This requires:**",
-            "1. First GROUP BY: cohort_quarter → compute overall cohort %",
-            "2. Second GROUP BY: cohort_quarter + segment_flag -> compute per-group %",
-            "3. Relate them: use JOIN or window functions",
-            "",
-            "**Template:**",
-            "```sql",
-            "WITH base AS (",
-            "  SELECT cohort_quarter, segment_flag, metric_value",
-            "  FROM ... WHERE ...",
-            "),",
-            "cohort_totals AS (",
-            "  SELECT cohort_quarter, COUNT(*) AS total_cohort_size",
-            "  FROM base",
-            "  GROUP BY cohort_quarter",
-            "),",
-            "grouped AS (",
-            "  SELECT",
-            "    cohort_quarter,",
-            "    segment_flag,",
-            "    COUNT(*) AS segment_size,",
-            "    AVG(metric_value) AS avg_metric,",
-            "    CAST(SUM(CASE WHEN metric_value > threshold THEN 1 ELSE 0 END) AS REAL) / COUNT(*) AS pct_above_in_segment",
-            "  FROM base",
-            "  GROUP BY cohort_quarter, segment_flag",
-            ")",
-            "SELECT",
-            "  g.cohort_quarter,",
-            "  g.segment_flag,",
-            "  g.segment_size,",
-            "  g.avg_metric,",
-            "  ct.pct_above_overall,  -- Percentage in entire cohort",
-            "  g.pct_above_in_segment  -- Percentage within this segment",
-            "FROM grouped g",
-            "JOIN cohort_totals ct ON g.cohort_quarter = ct.cohort_quarter;",
-            "```",
-            "",
-            "## Special Case: Grand Total",
-            "If question asks for 'total' AND segment breakdown:",
-            "→ Use UNION ALL with aggregated segments + total row",
-            ""
-        ]
-        
-        # Add calculated metrics that require aggregation
-        calc_metrics = [m for m in kb_entries if m.get('type') == 'calculation_knowledge']
-        if calc_metrics:
-            rules.append("## Calculated Metrics (may require aggregation):")
-            for metric in calc_metrics[:5]:  # Top 5 examples
-                rules.append(f"- {metric['knowledge']}: {metric['definition'][:100]}...")
-            rules.append("")
-        
-        return rules
-    
-    def extract_complex_query_templates(self) -> List[str]:
-        """Extract rules for complex multi-level aggregation queries"""
-        rules = [
-            "# MULTI-LEVEL AGGREGATION PATTERNS",
-            "",
-            "## Pattern: Questions with Nested Grouping & Multiple Percentages",
-            "",
-            "### Recognition: When Question Asks for TWO Different % Metrics",
-            "Question patterns:",
-            "- 'percentage of the cohort' (overall) + 'broken down by [dimension]' (segment-specific)",
-            "- 'overall %' + 'per-group %'",
-            "- 'total rate' + '[subgroup] rate'",
-            "",
-            "**This ALWAYS requires:**",
-            "1. GROUP BY dimension1 (e.g., cohort_quarter)",
-            "2. GROUP BY dimension1, dimension2 (e.g., cohort_quarter + segment_flag)",
-            "3. Relate both aggregations to show overall + segment metrics",
-            "",
-            "### Key Decision: CTE or JOIN Approach?",
-            "",
-            "**Use CTEs when:**",
-            "- You need multiple different GROUP BY clauses",
-            "- Calculations are complex and reused",
-            "- You want to compute 'total' metrics separately",
-            "",
-            "**Structure:**",
-            "```",
-            "CTE 1: Base calculations (row-level)",
-            "CTE 2: Level-1 grouping (dimension1 only)",
-            "CTE 3+: Level-2 grouping (dimension1 + dimension2)",
-            "Final SELECT: JOIN CTEs to combine metrics",
-            "```",
-            "",
-            "### Percentage Calculation Rule",
-            "When dividing for percentages:",
-            "```sql",
-            "-- ALWAYS cast numerator to REAL to avoid integer division",
-            "CAST(SUM(CASE WHEN condition THEN 1 ELSE 0 END) AS REAL) / COUNT(*)",
-            "",
-            "-- Or equivalently:",
-            "SUM(CASE WHEN condition THEN 1.0 ELSE 0.0 END) / COUNT(*)",
-            "```",
-            "",
-            "### NULL Handling for Segment Percentages",
-            "When segment may be empty (e.g., no members):",
-            "```sql",
-            "-- DON'T return division by zero; return NULL instead",
-            "CAST(...sum... AS REAL)",
-            "/ CASE WHEN denominator = 0 THEN NULL ELSE denominator END",
-            "```",
-            "",
-            "### Example Pattern Recognition",
-            "**Question:** 'Show cohort quarter, a segment flag, and both overall and segment % for a metric'",
-            "",
-            "**Decompose into:**",
-            "1. What's the base row unit? → Customer (one row per customer)",
-            "2. What are the dimensions? → cohort_quarter + segment_flag",
-            "3. What metric? -> metric flag (binary) + score (continuous)",
-            "4. What % requested?",
-            "   - Overall: (metric_above_threshold_count in cohort) / (total customers in cohort)",
-            "   - Segment: (metric_above_threshold_count in segment) / (total customers in segment)",
-            "",
-            "**Architecture:**",
-            "- CTE 1: Select all customers with calculated metrics",
-            "- CTE 2: GROUP BY cohort_quarter ONLY → pct_overall",
-            "- CTE 3: GROUP BY cohort_quarter + segment_flag → pct_segment",
-            "- Final: JOIN CTE2 + CTE3 to show both %s together",
-            "",
-            "## Pattern: Calculated Metrics with Multiple Dependencies",
-            "When metric requires columns from different tables:",
-            "",
-            "**Example:** CES = 0.4*produsescore + 0.3*chanusescore + 0.2*bankrelscore + 0.1*(custservint/10)",
-            "- produsescore, chanusescore, custservint → from credit_accounts_and_history",
-            "- bankrelscore → from bank_and_transactions",
-            "- Requires: JOIN both tables",
-            "",
-            "**Rule:** Calculate once in base CTE, reference in aggregations",
-            "```sql",
-            "WITH base AS (",
-            "  SELECT",
-            "    ..., ",
-            "    0.4*t1.metric1 + 0.3*t1.metric2 + 0.2*t2.metric3 + ... AS calculated_metric",
-            "  FROM table1 t1",
-            "  JOIN table2 t2 ON ...",
-            "),",
-            "aggregated AS (",
-            "  SELECT",
-            "    group_col,",
-            "    COUNT(*) AS count,",
-            "    AVG(calculated_metric) AS avg_metric",
-            "  FROM base",
-            "  GROUP BY group_col",
-            ")",
-            "SELECT ... FROM aggregated;",
-            "```",
-            ""
-        ]
-        return rules
 
-    def load_bsl_overrides(self) -> List[str]:
-        """Return optional manual BSL overrides for known databases."""
-        kb_path = Path(self.kb_path)
-        db_prefix = kb_path.stem
-        if db_prefix.endswith("_kb"):
-            db_prefix = db_prefix[:-3]
+    def _load_schema_types(self, schema_path: str) -> Dict[Tuple[str, str], str]:
+        """
+        Loads declared column types either from:
+        - SQL schema file (CREATE TABLE ...)
+        - SQLite database file (PRAGMA table_info)
+        """
+        p = Path(schema_path)
+        if not p.exists():
+            return {}
 
-        overrides: dict[str, list[str]] = {
-            "credit": [
-                "Terminology:",
-                "- \"digital native\" refers to the BSL definition of a Digital First Customer.",
-                "- \"credit classification\" refers to the credit score category ranges (credscore bands).",
-                "",
-                "Core metric definitions:",
-                "- Net worth = totassets - totliabs (computed).",
-                "- Property leverage / LTV = mortgage balance / property value from expenses_and_assets.propfinancialdata.",
-                "",
-                "Engagement and cohort definitions:",
-                "- Engagement score refers to CES (Customer Engagement Score).",
-                "- High engagement means CES > 0.7.",
-                "- Cohort quarter refers to the tenure-adjusted scoredate aligned to calendar quarters.",
-                "",
-                "Defaults for vague thresholds:",
-                "- Do not use SQL parameter placeholders (?,?,:name,@name,$name). Use explicit numeric literals.",
-                "- If a question says \"few customers\" without a threshold, default to HAVING COUNT(*) >= 10.",
-            ]
-        }
+        ext = p.suffix.lower()
+        if ext in {".sqlite", ".db"}:
+            return self._load_schema_types_from_sqlite(p)
+        else:
+            return self._load_schema_types_from_sql(p)
 
-        return overrides.get(db_prefix, [])
-    
-    def extract_business_rules(self, kb_entries: List[Dict]) -> List[str]:
-        """Extract business logic rules"""
-        rules = [
-            "# BUSINESS LOGIC RULES",
-            ""
-        ]
-        
-        # Domain knowledge (filters and conditions)
-        domain_rules = [m for m in kb_entries if m.get('type') == 'domain_knowledge']
-        
-        if domain_rules:
-            rules.append("## Customer Segmentation Rules:")
-            for rule in domain_rules:
-                name = rule['knowledge']
-                definition = rule['definition']
-                rules.append(f"### {name}")
-                rules.append(f"{definition}")
-                rules.append("")
-        
-        # Value illustrations (thresholds)
-        value_rules = [m for m in kb_entries if m.get('type') == 'value_illustration']
-        if value_rules:
-            rules.append("## Value Interpretation Guidelines:")
-            for rule in value_rules[:5]:  # Top 5
-                rules.append(f"- {rule['knowledge']}: {rule['definition'][:150]}...")
-            rules.append("")
-        
-        return rules
-    
-    def extract_json_field_rules(self, meanings: Dict) -> List[str]:
-        """Extract rules for JSON column handling"""
-        rules = [
-            "# JSON FIELD EXTRACTION RULES",
-            "",
-            "## Important: JSON columns must be qualified with table name",
-            ""
-        ]
-        
-        # Find JSON columns
-        json_cols = {k: v for k, v in meanings.items() 
-                     if isinstance(v, dict) and 'fields_meaning' in v}
-        
-        for key, value in json_cols.items():
-            db, table, column = key.split('|')
-            rules.append(f"### {table}.{column} (JSONB)")
-            rules.append(f"{value.get('column_meaning', '')}")
-            rules.append("")
-            rules.append("**Fields:**")
-            
-            fields = value.get('fields_meaning', {})
-            for field, desc in fields.items():
-                if isinstance(desc, dict):
-                    rules.append(f"- `{field}` (nested):")
-                    for subfield, subdesc in desc.items():
-                        rules.append(f"  - `{subfield}`: {subdesc}")
-                else:
-                    rules.append(f"- `{field}`: {desc}")
-            
-            rules.append("")
-            rules.append(f"**Example extraction:**")
-            rules.append(f"```sql")
-            rules.append(f"json_extract({table}.{column}, '$.{list(fields.keys())[0]}')")
-            rules.append(f"```")
-            rules.append("")
-        
-        return rules
-    
-    def extract_join_chain_rules(self) -> List[str]:
-        """Extract FK chain rules from schema"""
-        rules = [
-            "# JOIN CHAIN RULES (CRITICAL)",
-            "",
-            "## ⚠️ RULE: Foreign Key Chain is STRICT",
-            "The data model enforces a rigid chain. NEVER skip or reorder:",
-            "",
-            "```",
-            "core_record (coreregistry PRIMARY KEY)",
-            "  ↓ FK: coreregistry = emplcoreref",
-            "employment_and_income (emplcoreref PRIMARY KEY)",
-            "  ↓ FK: emplcoreref = expemplref",
-            "expenses_and_assets (expemplref PRIMARY KEY)",
-            "  ↓ FK: expemplref = bankexpref",
-            "bank_and_transactions (bankexpref PRIMARY KEY)",
-            "  ↓ FK: bankexpref = compbankref",
-            "credit_and_compliance (compbankref PRIMARY KEY)",
-            "  ↓ FK: compbankref = histcompref",
-            "credit_accounts_and_history (histcompref PRIMARY KEY)",
-            "```",
-            "",
-            "## ⚠️ RULE: NEVER skip tables in the chain",
-            "If you need columns from Table A and Table C:",
-            "- You MUST include ALL intermediate tables (A → B → C)",
-            "- Skipping breaks the FK relationships",
-            "",
-            "Example: Need `core_record.clientref` AND `credit_accounts_and_history.custlifeval`",
-            "→ MUST include ALL 5 intermediate JOINs",
-            "",
-            "## ⚠️ RULE: Join Direction is Always Left-to-Right",
-            "```sql",
-            "FROM core_record cr",
-            "JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref",
-            "JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref",
-            "JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref",
-            "JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref",
-            "JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref",
-            "```",
-            "",
-            "## ⚠️ RULE: Common Mistakes",
-            "**WRONG:** `ON cc.compbankref = ei.emplcoreref` (skips ea, bt)",
-            "**WRONG:** `ON cr.coreregistry = cc.compbankref` (skips all intermediate)",
-            "**CORRECT:** Follow the chain exactly as shown above",
-            "",
-            "## ✓ When You Can Stop the Chain",
-            "You can stop at an intermediate table if you don't need downstream data:",
-            "- Need core_record + employment_and_income? → Join to employment_and_income, stop",
-            "- Need core_record + expenses_and_assets? → Join through employment_and_income",
-            "",
-            "But if you jump across the chain (e.g., core → credit_compliance), it fails.",
-            ""
-        ]
-        return rules
-    
-    def build_bsl(self, output_path: str):
-        """Build complete BSL document"""
-        print("🔨 Building Business Semantics Layer...")
-        
-        # Load data
-        kb_entries = self.load_kb()
-        meanings = self.load_meanings()
-        
-        # Build sections
-        bsl_content = [
+    def _load_schema_types_from_sqlite(self, db_path: Path) -> Dict[Tuple[str, str], str]:
+        types: Dict[Tuple[str, str], str] = {}
+        try:
+            con = sqlite3.connect(str(db_path))
+            cur = con.cursor()
+
+            # list tables
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [r[0] for r in cur.fetchall()]
+
+            for t in tables:
+                # PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
+                cur.execute(f"PRAGMA table_info('{t}')")
+                for _, col, ctype, *_ in cur.fetchall():
+                    if col:
+                        types[(t, col)] = ctype or ""
+            con.close()
+        except Exception:
+            # If schema parsing fails, just return empty -> "unknown" types in output
+            return {}
+        return types
+
+    def _load_schema_types_from_sql(self, sql_path: Path) -> Dict[Tuple[str, str], str]:
+        """
+        Lightweight SQL parser for CREATE TABLE blocks.
+        """
+        types: Dict[Tuple[str, str], str] = {}
+        sql = sql_path.read_text(encoding="utf-8", errors="ignore")
+
+        create_table_re = re.compile(
+            r'CREATE\s+TABLE\s+"?([A-Za-z0-9_]+)"?\s*\((.*?)\)\s*;',
+            re.IGNORECASE | re.DOTALL,
+        )
+
+        col_re = re.compile(
+            r'^\s*"?(?P<col>[A-Za-z0-9_]+)"?\s+(?P<type>[A-Za-z0-9_]+(?:\([^)]+\))?)',
+            re.IGNORECASE,
+        )
+
+        for m in create_table_re.finditer(sql):
+            table = m.group(1)
+            body = m.group(2)
+            for line in body.splitlines():
+                line = line.strip().rstrip(",")
+                if not line or line.upper().startswith(("PRIMARY KEY", "FOREIGN KEY", "CONSTRAINT")):
+                    continue
+                cm = col_re.match(line)
+                if not cm:
+                    continue
+                col = cm.group("col")
+                ctype = cm.group("type")
+                types[(table, col)] = ctype
+        return types
+
+    # ---------------------------
+    # Helpers
+    # ---------------------------
+
+    @staticmethod
+    def _shorten(text: str, n: int = 220) -> str:
+        text = (text or "").strip()
+        if len(text) <= n:
+            return text
+        return text[: n - 3].rstrip() + "..."
+
+    def _col_type(self, table: str, column: str) -> Optional[str]:
+        return self.schema_types.get((table, column))
+
+    # ---------------------------
+    # PART A: True BSL (business)
+    # ---------------------------
+
+    def build_intro(self) -> List[str]:
+        return [
             "# BUSINESS SEMANTICS LAYER (BSL)",
-            "# Credit Database - Text2SQL Knowledge Base",
             "",
-            "This document contains explicit business rules and patterns for generating correct SQL.",
-            "It was auto-generated from the knowledge base and schema.",
+            "## Purpose",
+            "This BSL defines **business meaning** (terms, metrics, segments, and interpretation rules) for the Credit domain.",
+            "It is written to be **LLM-friendly** and to support consistent analytics across tools (Text2SQL, BI, reporting).",
             "",
-            "---",
-            ""
+            "## Scope",
+            "- Business concepts (e.g., *customer*, *net worth*, *high engagement*, *investment focused*).",
+            "- Business rules and thresholds used to interpret data.",
+            "- Metric definitions (formulas) at the conceptual level.",
+            "",
+            "## Non-goals (out of scope for the BSL itself)",
+            "- SQL dialect details (casting, placeholder syntax, JSON functions).",
+            "- Query optimization, join order tuning, engine limitations.",
+            "",
+            "> Note: Implementation specifics appear in **Annex C: SQL Generation Policy** and are **not part of the BSL**.",
         ]
-        
-        # Add metric formulas section
+
+    def extract_glossary(self, kb_entries: List[Dict[str, Any]]) -> List[str]:
+        glossary = [
+            "## Glossary (Canonical Business Terms)",
+            "",
+            "- **Customer**: A person/entity represented by one record across the domain tables.",
+            "- **Customer ID (business)**: The identifier used in outputs and reports (see Mapping section for source).",
+            "- **Registry ID (technical)**: The internal identifier used to relate records across tables (see Mapping section).",
+            "",
+        ]
+
+        calc = [m for m in kb_entries if m.get("type") == "calculation_knowledge"]
+        if calc:
+            glossary.append("### Metrics (Canonical Names)")
+            for m in calc:
+                name = m.get("knowledge", "").strip()
+                desc = self._shorten(m.get("description", ""), 160)
+                if name:
+                    glossary.append(f"- **{name}**: {desc}")
+            glossary.append("")
+
+        domain = [m for m in kb_entries if m.get("type") == "domain_knowledge"]
+        if domain:
+            glossary.append("### Segments / Classifications")
+            for m in domain:
+                name = m.get("knowledge", "").strip()
+                if name:
+                    glossary.append(f"- **{name}**: Segment defined by business rules (see section below).")
+            glossary.append("")
+
+        return glossary
+
+    def extract_business_logic_rules(self, kb_entries: List[Dict[str, Any]]) -> List[str]:
+        rules: List[str] = [
+            "## Business Rules",
+            "",
+            "### Customer Segmentation",
+            "Segments are defined **by business conditions** on metrics and attributes. They must be interpreted consistently.",
+            "",
+        ]
+
+        domain_rules = [m for m in kb_entries if m.get("type") == "domain_knowledge"]
+        for rule in domain_rules:
+            name = rule.get("knowledge", "").strip()
+            definition = (rule.get("definition") or "").strip()
+            if name and definition:
+                rules.extend([f"#### {name}", definition, ""])
+
+        value_rules = [m for m in kb_entries if m.get("type") == "value_illustration"]
+        if value_rules:
+            rules.append("### Value Interpretation Guidelines")
+            for rule in value_rules:
+                name = rule.get("knowledge", "").strip()
+                definition = self._shorten(rule.get("definition", ""), 280)
+                if name and definition:
+                    rules.append(f"- **{name}**: {definition}")
+            rules.append("")
+
+        return rules
+
+    def extract_metric_definitions(self, kb_entries: List[Dict[str, Any]]) -> List[str]:
         metric_section = [
-            "# METRIC CALCULATION FORMULAS",
+            "## Metric Definitions (Conceptual)",
             "",
-            "When a question asks for a calculated metric, use these exact formulas:",
+            "When a question references a metric name, interpret it using these definitions.",
+            "Formulas are expressed conceptually; implementation details may vary by SQL dialect.",
             ""
         ]
-        
-        calc_metrics = [m for m in kb_entries if m.get('type') == 'calculation_knowledge']
+
+        calc_metrics = [m for m in kb_entries if m.get("type") == "calculation_knowledge"]
         for metric in calc_metrics:
-            metric_section.append(f"## {metric['knowledge']}")
-            metric_section.append(f"**Definition:** {metric['description']}")
-            metric_section.append(f"**Formula:** {metric['definition']}")
+            name = (metric.get("knowledge") or "").strip()
+            desc = (metric.get("description") or "").strip()
+            formula = (metric.get("definition") or "").strip()
+            if not name:
+                continue
+            metric_section.append(f"### {name}")
+            if desc:
+                metric_section.append(f"- **Meaning:** {desc}")
+            if formula:
+                metric_section.append(f"- **Definition / Formula:** {formula}")
             metric_section.append("")
 
-        sections = [
-            self.extract_identity_rules(meanings),
-            self.extract_aggregation_patterns(kb_entries),
-            self.extract_business_rules(kb_entries),
-            self.extract_json_field_rules(meanings),
-            self.extract_join_chain_rules(),
-            metric_section,
-            self.extract_complex_query_templates(),
+        return metric_section
+
+    # ---------------------------
+    # PART B: Semantic-to-Schema Mapping
+    # ---------------------------
+
+    def extract_identity_mapping(self) -> List[str]:
+        return [
+            "# SEMANTIC-TO-SCHEMA MAPPING (NOT PART OF THE BSL)",
+            "",
+            "## Identifier Mapping (Critical)",
+            "",
+            "This domain uses **two identifiers for the same customer**:",
+            "",
+            "### Customer ID (business output identifier)",
+            "- **Semantic meaning:** what business users mean by \"customer id\" in reports",
+            "- **Source column:** `core_record.coreregistry`",
+            "- **Format:** `CS` + digits (e.g., `CS206405`)",
+            "",
+            "### Client Reference (alternative identifier)",
+            "- **Semantic meaning:** alternative client reference number",
+            "- **Source column:** `core_record.clientref`",
+            "- **Format:** `CU` + digits (e.g., `CU338528`)",
+            "",
+            "### Invariants (must always hold)",
+            "- A single customer has **both** identifiers, but they are **not equal** and must never be compared for equality.",
+            "- **CRITICAL: Business outputs MUST ALWAYS use Customer ID (CS format) from core_record.coreregistry as the customer_id.**",
+            "- Use Client Reference (CU format) ONLY when the question explicitly asks for \"client reference\" or \"clientref\".",
+            "- Data relationships across tables are expressed using the **Registry ID chain** (see relationship chain below).",
+            ""
         ]
 
-        for idx, section in enumerate(sections):
-            if idx > 0:
-                bsl_content.extend(["", "---", ""])
-            bsl_content.extend(section)
+    def extract_relationship_chain(self) -> List[str]:
+        return [
+            "## Entity Relationship Chain (Conceptual)",
+            "",
+            "The data model forms a strict customer-centric chain:",
+            "",
+            "- **Core Record** → **Employment & Income** → **Expenses & Assets** → **Bank & Transactions** → **Credit & Compliance** → **Credit Accounts & History**",
+            "",
+            "### Why this matters",
+            "- Many business questions combine metrics from multiple domain areas.",
+            "- Correct answers require respecting the relationship chain; skipping intermediate entities can break meaning and integrity.",
+            ""
+        ]
 
-        # Optional manual overrides (if present)
-        overrides = self.load_bsl_overrides()
-        if overrides:
-            bsl_content.extend([
-                "",
-                "---",
-                "",
-                "# BSL OVERRIDES (MANUAL)",
-                ""
-            ])
-            bsl_content.extend(overrides)
-        
-        # Write to file
+    def extract_json_field_paths(self, meanings: Dict[str, Any]) -> List[str]:
+        rules: List[str] = [
+            "## Semi-Structured Fields (JSON stored in a column)",
+            "",
+            "Some columns contain JSON documents (often stored as TEXT in the schema).",
+            "Interpret these fields using the paths below.",
+            ""
+        ]
+
+        json_cols = {k: v for k, v in meanings.items()
+                    if isinstance(v, dict) and "fields_meaning" in v}
+
+        if not json_cols:
+            rules.append("_No JSON-like columns detected from meanings._")
+            rules.append("")
+            return rules
+
+        for key, value in json_cols.items():
+            parts = key.split("|")
+            if len(parts) != 3:
+                continue
+            _, table, column = parts
+            col_type = self._col_type(table, column)
+            storage_note = f"(declared type: `{col_type}`)" if col_type else "(declared type: unknown)"
+            column_meaning = (value.get("column_meaning") or "").strip()
+
+            rules.append(f"### {table}.{column} {storage_note}")
+            if column_meaning:
+                rules.append(column_meaning)
+
+            fields = value.get("fields_meaning", {})
+            rules.append("")
+            rules.append("**Paths:**")
+            for field, desc in fields.items():
+                if isinstance(desc, dict):
+                    rules.append(f"- `{field}` (object):")
+                    for subfield, subdesc in desc.items():
+                        rules.append(f"  - `{field}.{subfield}`: {subdesc}")
+                else:
+                    rules.append(f"- `{field}`: {desc}")
+            rules.append("")
+        return rules
+
+    # ---------------------------
+    # PART C: SQL Generation Policy (Annex)
+    # ---------------------------
+
+    def extract_policy_annex(self, kb_entries: List[Dict[str, Any]]) -> List[str]:
+        rules = [
+            "# ANNEX C: SQL GENERATION POLICY (IMPLEMENTATION NOTES)",
+            "",
+            "## Aggregation vs Detail Decision Rules",
+            "",
+            "### Aggregation questions (GROUP BY)",
+            "Trigger words: 'by category', 'by segment', 'for each', 'breakdown', 'summary', 'cohorts', 'how many', 'count', 'average', 'total'.",
+            "",
+            "### Ranking/listing (ORDER BY + LIMIT)",
+            "Trigger words: 'top N', 'highest', 'lowest', 'best', 'worst'.",
+            "",
+            "### Row-level detail (no aggregation)",
+            "Trigger words: 'show all', 'list each', 'identify', 'find customers where'.",
+            "",
+            "### Policy Overrides (Credit DB)",
+            "- “digital native” → treat as **Digital First Customer** segment.",
+            "- “credit classification” → treat as **credit score categories** (credscore bands).",
+            "- If a question says “few customers” without a threshold: default to `HAVING COUNT(*) >= 10` (policy choice).",
+            ""
+        ]
+
+        calc = [m for m in kb_entries if m.get("type") == "calculation_knowledge"]
+        if calc:
+            rules.append("## Reminder: Frequently Used Metrics")
+            for m in calc[:8]:
+                rules.append(f"- {m.get('knowledge')}: {self._shorten(m.get('definition',''), 120)}")
+            rules.append("")
+
+        return rules
+
+    # ---------------------------
+    # Build document
+    # ---------------------------
+
+    def build_bsl(self, output_path: str):
+        print("Building Business Semantics Layer (BSL)...")
+
+        kb_entries = self.load_kb()
+        meanings = self.load_meanings()
+
+        part_a: List[str] = []
+        part_a.extend(self.build_intro())
+        part_a.append("")
+        part_a.extend(self.extract_glossary(kb_entries))
+        part_a.append("")
+        part_a.extend(self.extract_business_logic_rules(kb_entries))
+        part_a.append("")
+        part_a.extend(self.extract_metric_definitions(kb_entries))
+
+        part_b: List[str] = []
+        part_b.extend(self.extract_identity_mapping())
+        part_b.append("")
+        part_b.extend(self.extract_relationship_chain())
+        part_b.append("")
+        part_b.extend(self.extract_json_field_paths(meanings))
+
+        part_c: List[str] = []
+        part_c.extend(self.extract_policy_annex(kb_entries))
+
+        content: List[str] = []
+        content.extend(part_a)
+        content.extend(["", "---", ""])
+        content.extend(part_b)
+        content.extend(["", "---", ""])
+        content.extend(part_c)
+
         output_file = Path(output_path)
         output_file.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(bsl_content))
-        
-        print(f"✅ BSL saved to: {output_path}")
-        print(f"📊 Sections generated:")
-        print(f"   - Identity Rules")
-        print(f"   - Aggregation Patterns")
-        print(f"   - Business Logic Rules")
-        print(f"   - JSON Field Rules")
-        print(f"   - Join Chain Rules")
-        print(f"   - {len(calc_metrics)} Metric Formulas")
+        output_file.write_text("\n".join(content), encoding="utf-8")
+
+        print(f"BSL saved to: {output_path}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Build Business Semantics Layer')
-    parser.add_argument('--kb', required=True, help='Path to KB JSONL file')
-    parser.add_argument('--meanings', required=True, help='Path to meanings JSON file')
-    parser.add_argument('--schema', required=True, help='Path to schema SQL file')
-    parser.add_argument('--output', required=True, help='Output BSL file path')
-    
+    parser = argparse.ArgumentParser(description="Build Business Semantics Layer (Credit DB only)")
+
+    parser.add_argument("--kb", default=None, help="Path to KB JSONL file (optional)")
+    parser.add_argument("--meanings", default=None, help="Path to meanings JSON file (optional)")
+    parser.add_argument("--schema", default=None, help="Path to schema SQL/SQLite file (optional)")
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output BSL file path (default: mini-interact/credit/credit_bsl.txt)",
+    )
+
     args = parser.parse_args()
-    
-    builder = BSLBuilder(args.kb, args.meanings, args.schema)
+
+    # defaults for Credit DB
+    kb_path, meanings_path, schema_path = default_credit_paths()
+
+    if args.kb:
+        kb_path = args.kb
+    if args.meanings:
+        meanings_path = args.meanings
+    if args.schema:
+        schema_path = args.schema
+
+    if args.output is None:
+        # default output next to credit assets
+        # (resolved relative to repo root, not cwd)
+        here = Path(__file__).resolve().parent
+        root = find_repo_root(here)
+        args.output = str(root / "mini-interact" / "credit" / "credit_bsl.txt")
+
+    builder = BSLBuilder(kb_path=kb_path, meanings_path=meanings_path, schema_path=schema_path)
     builder.build_bsl(args.output)
 
 
-if __name__ == '__main__':
-    # Example usage without CLI
-    builder = BSLBuilder(
-        kb_path='mini-interact/credit/credit_kb.jsonl',
-        meanings_path='mini-interact/credit/credit_column_meaning_base.json',
-        schema_path='mini-interact/credit/credit_schema.sql'
-    )
-    builder.build_bsl('mini-interact/credit/credit_bsl.txt')
-
+if __name__ == "__main__":
+    main()
