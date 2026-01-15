@@ -259,8 +259,7 @@ This domain uses **two identifiers for the same customer**:
 ### Invariants (must always hold)
 - A single customer has **both** identifiers, but they are **not equal** and must never be compared for equality.
 - **CRITICAL: Business outputs MUST ALWAYS use Customer ID (CS format) from core_record.coreregistry as the customer_id.**
-- **EXCEPTION: For financial hardship, vulnerability, or financially vulnerable customer queries, use Client Reference (CU format) from core_record.clientref as customer_id.** This applies when the question mentions "financial hardship", "vulnerability score", "financially vulnerable", or "facing financial" situations.
-- Use Client Reference (CU format) ONLY when the question explicitly asks for "client reference" or "clientref", OR when the query is about financial hardship/vulnerability.
+- Use Client Reference (CU format) ONLY when the question explicitly asks for "client reference" or "clientref".
 - Data relationships across tables are expressed using the **Registry ID chain** (see relationship chain below).
 
 
