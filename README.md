@@ -30,11 +30,12 @@ Mit diesem Projekt helfen wir Unternehmen dabei, **data-driven** zu werden, inde
 
 ## 🛠️ Technologie-Stack
 
-### Backend
+-### Backend
 - **Python 3.11+** mit FastAPI
 - **OpenAI API** GPT-5.2
 - **SQLite** für Datenbankabfragen
 - **BSL (Business Semantics Layer)** für explizite Business Rules
+  - `backend/bsl_builder.py` erzeugt strukturierte Sektionen (Identity, Aggregation, Business Logic, JSON, Join Chain, Formeln) mit neutralen Beispielen und dokumentierten Definitionen aus KB + Meanings.
 - **Pydantic** für Request/Response Validierung
 
 ### Frontend

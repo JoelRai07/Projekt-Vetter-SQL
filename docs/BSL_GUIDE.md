@@ -45,8 +45,8 @@ BIRD/mini-interact enthält explizit *Knowledge-Based Ambiguity*: Ohne eine expl
   Domain-Knowledge (Definitionen, Formeln, Interpretationen).
 - `backend/mini-interact/credit/credit_column_meaning_base.json`  
   Spaltenbedeutungen inkl. JSON-Felder.
-- `backend/bsl_builder.py`  
-  Generator: baut aus KB + Meanings ein **Regelwerk** (Plain-Text) und ergänzt gezielte Overrides.
+ - `backend/bsl_builder.py`
+   Generator: baut aus KB + Meanings ein **regelbasiertes Artefakt** (strukturierte Abschnitte, neutral formulierte Beispiele, klar dokumentierte Overrides) und erzeugt damit das BSL.
 - `backend/mini-interact/credit/credit_bsl.txt`  
   Generiertes BSL-Regelwerk (wird geladen und im Prompt genutzt).
 - `backend/utils/context_loader.py`  
@@ -61,6 +61,8 @@ BIRD/mini-interact enthält explizit *Knowledge-Based Ambiguity*: Ohne eine expl
 4. **Validation** (SQL Guard + LLM Validation): Safety + Schema-/Join-/Semantikprüfung.
 5. **Execution + Paging**: SQL wird deterministisch ausgeführt (Session via `query_id`).
 6. **Summarization**: optional.
+
+> Hinweis: Wir setzen `temperature=0` im Generation-Prompt, damit gleiche Frage + identische BSL- und Kontext-Dateien zu reproduzierbaren SQLs führen (keine zufälligen Schwankungen).
 
 ---
 
