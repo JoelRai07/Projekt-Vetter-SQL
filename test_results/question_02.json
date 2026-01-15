@@ -2,10 +2,10 @@
   "question": "Please find all the customer IDs who are highly digital.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "„Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Kriterium definiert. Es gibt zwar die Definition „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Definition gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung ausreicht. Außerdem ist nicht eindeutig, aus welcher Tabelle/Schlüssel die „customer IDs“ kommen sollen (core_record.clientref vs. die Record-IDs wie coreregistry/bankexpref), auch wenn clientref naheliegt.",
+    "reason": "„Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Kriterium definiert. Es gibt zwar die Definition „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage verwendet einen anderen Begriff und nennt keine Schwellen/Regel (z. B. nur online/mobile, auch depostat, oder ein Score). Ohne klare Definition ist nicht sicher, welche Kunden-IDs zurückgegeben werden sollen.",
     "questions": [
-      "Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ bestimmt werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?",
-      "Welche ID soll ausgegeben werden: core_record.clientref (Customer ID) oder die internen Referenzen wie coreregistry/bankexpref?"
+      "Soll „highly digital“ genau der Domain-Regel „Digital First Customer“ entsprechen (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?",
+      "Falls nein: Welche konkreten Kriterien/Schwellen sollen gelten (z. B. onlineuse='High' UND mobileuse='High', autopay erforderlich ja/nein, depostat berücksichtigen ja/nein)?"
     ]
   },
   "generated_sql": "SELECT DISTINCT\n  cr.coreregistry AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
@@ -14,9 +14,9 @@
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: DISTINCT ist hier wahrscheinlich redundant, da die JOIN-Kette über PK/FK (1:1) läuft und pro coreregistry typischerweise nur eine Zeile entsteht.",
-      "Optional: Wenn chaninvdatablock ungültiges JSON oder NULL enthalten kann, kann json_extract NULL liefern; ggf. mit json_valid(bt.chaninvdatablock) = 1 absichern.",
-      "Optional: Für Performance: Indexe auf den FK-Spalten (employment_and_income.emplcoreref, expenses_and_assets.expemplref, bank_and_transactions.bankexpref, credit_and_compliance.compbankref, credit_accounts_and_history.histcompref) prüfen."
+      "JOIN-Kette ist korrekt, aber redundant: Da alle FK-Referenzen auf denselben Schlüsselwert (coreregistry/emplcoreref/expemplref/bankexpref/compbankref/histcompref) hinauslaufen, könnten die JOIN-Bedingungen auch jeweils als `... ON <left>.id = <right>.id` formuliert werden; funktional ist die Query aber bereits korrekt.",
+      "Für Performance/Robustheit: `chaninvdatablock` ist TEXT mit JSON. Falls ungültiges JSON vorkommen kann, ergänze `AND json_valid(bt.chaninvdatablock)` um `json_extract`-Fehler/NULLs zu vermeiden.",
+      "Optional: `SELECT DISTINCT` ist hier nur nötig, falls es in den gejointen Tabellen Mehrfachzeilen pro Schlüssel geben kann. Wenn die 1:1-Beziehung durch PK/FK garantiert ist, kann `DISTINCT` entfallen."
     ]
   },
   "results": [
@@ -172,15 +172,15 @@
     }
   ],
   "row_count": 50,
-  "query_id": "9f774bb89f084bf9b9b2abbf4a5b05d2",
+  "query_id": "4358abbbadd448c8b7cc6969609bc717",
   "page": 1,
   "page_size": 50,
   "total_pages": 6,
   "total_rows": 285,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Kriterium definiert. Es gibt zwar die Definition „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Definition gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung ausreicht. Außerdem ist nicht eindeutig, aus welcher Tabelle/Schlüssel die „customer IDs“ kommen sollen (core_record.clientref vs. die Record-IDs wie coreregistry/bankexpref), auch wenn clientref naheliegt.. Klärungsfragen: Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ bestimmt werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?, Welche ID soll ausgegeben werden: core_record.clientref (Customer ID) oder die internen Referenzen wie coreregistry/bankexpref?",
-  "summary": "Die Abfrage identifiziert insgesamt 285 eindeutige Customer IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden 50 von 285 Treffern angezeigt. Beispiele aus den ersten Ergebnissen sind die Customer IDs CS100596, CS101678 und CS104169. Wenn du die Liste weiter eingrenzen willst, wäre ein nächster Schritt, Onlineuse und Mobileuse gleichzeitig auf „High“ zu setzen oder zusätzliche Kriterien (z. B. Transaktionshäufigkeit) zu ergänzen.",
-  "explanation": "Returns the list of unique customer IDs (CS format) for customers who meet the BSL 'Digital First Customer' criteria (high online or mobile usage AND autopay enabled), using the required customer join chain and JSON extraction from bank_and_transactions.chaninvdatablock.",
+  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Kriterium definiert. Es gibt zwar die Definition „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage verwendet einen anderen Begriff und nennt keine Schwellen/Regel (z. B. nur online/mobile, auch depostat, oder ein Score). Ohne klare Definition ist nicht sicher, welche Kunden-IDs zurückgegeben werden sollen.. Klärungsfragen: Soll „highly digital“ genau der Domain-Regel „Digital First Customer“ entsprechen (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?, Falls nein: Welche konkreten Kriterien/Schwellen sollen gelten (z. B. onlineuse='High' UND mobileuse='High', autopay erforderlich ja/nein, depostat berücksichtigen ja/nein)?",
+  "summary": "Die Abfrage identifiziert 285 eindeutige Customer IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden 50 von 285 Treffern angezeigt. Beispiele aus den ersten Ergebnissen sind die Kunden CS100596, CS101678 und CS104169. Wenn du die Liste weiter eingrenzen willst, wäre ein nächster Schritt, Onlineuse und Mobileuse gleichzeitig auf „High“ zu filtern oder zusätzliche Kriterien (z. B. Transaktionshäufigkeit) aufzunehmen.",
+  "explanation": "Returns the list of unique Customer IDs (CS format) for customers who meet the BSL 'Digital First Customer' criteria: high online or mobile usage and autopay enabled, using the required full join chain and JSON extraction from bank_and_transactions.chaninvdatablock.",
   "error": null
 }

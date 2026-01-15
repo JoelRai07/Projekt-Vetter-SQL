@@ -2,36 +2,83 @@
   "question": "I need to analyze debt burden across different customer segments. Can you provide a summary for each segment with relevant debt metrics? Also add a grant total row. Exclude any customer segment with few customers and order the results.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "Wesentliche Spezifikationen fehlen, um eine korrekte und sichere SQL-Abfrage zu erstellen: (1) „debt burden“ ist nicht eindeutig, da mehrere mögliche Kennzahlen existieren (DTI, totliabs, totloanamt, credutil, delinq/latepay etc.) und nicht klar ist, welche „relevanten debt metrics“ in die Segment-Zusammenfassung sollen. (2) „customer segment“ ist zwar als core_record.clientseg naheliegend, aber es ist nicht definiert, ob Segmentierung nach aktuellem Score/Record (scoredate) oder über alle Records erfolgen soll. (3) „few customers“ benötigt einen konkreten Schwellenwert (z. B. < 10 Kunden) und ob nach Kunden (clientref) oder nach Records (coreregistry) gezählt wird. (4) „grant total row“ ist unklar (gemeint vermutlich „grand total“), und es ist nicht spezifiziert, ob es ein Gesamt-Row über alle Segmente mit denselben Metriken sein soll. (5) „order the results“ ist unklar, nach welcher Kennzahl (z. B. höchster durchschnittlicher DTI) und ob auf- oder absteigend. (6) Es fehlt ggf. ein Zeitbezug/Filter (z. B. scoredate Zeitraum), falls mehrere Zeitpunkte pro Kunde existieren.",
+    "reason": "Wesentliche Spezifikationen fehlen, um eine korrekte und sichere SQL-Abfrage zu formulieren: (1) „debt burden“ ist nicht eindeutig, da mehrere mögliche Kennzahlen existieren (DTI, totliabs, totloanamt, CUR/credutil, Over-Extended-Flag etc.). (2) Es ist unklar, welche „relevanten debt metrics“ genau in die Segment-Zusammenfassung sollen (Durchschnitt, Median, Summe, Perzentile, Anteile über Schwellen). (3) „few customers“ benötigt einen konkreten Schwellenwert (z. B. < 10 Kunden) oder eine Regel (z. B. unteres Quantil). (4) „order the results“ ist unklar (nach Segmentname, Kundenzahl, DTI, etc., auf-/absteigend). (5) „grand total row“: unklar, ob als zusätzliche Zeile via ROLLUP/GROUPING SETS und welche Aggregationen dort gelten. (6) Unklar, ob ein Zeitfilter (scoredate/decidedate) erforderlich ist oder alle Daten verwendet werden sollen.",
     "questions": [
-      "Welche Kennzahlen sollen die „debt burden / relevanten debt metrics“ genau umfassen (z. B. durchschnittlicher DTI=debincratio, Summe/Ø totliabs, Summe/Ø totloanamt, Ø credutil, Delinquencies/late payments etc.)?",
-      "Was bedeutet „few customers“ konkret: welcher Mindestumfang pro Segment (z. B. mindestens 10), und sollen „customers“ über clientref (distinct Kunden) oder über coreregistry (Records) gezählt werden?"
+      "Welche Kennzahl(en) definieren für dich „debt burden“: DTI (debincratio), Gesamtverbindlichkeiten (totliabs), Gesamtkredit-/Darlehensbetrag (totloanamt), Credit Utilization (credutil) oder eine Kombination?",
+      "Welche „relevanten debt metrics“ sollen pro Segment ausgegeben werden (z. B. customer_count, avg/median DTI, avg totliabs, avg totloanamt, Anteil DTI>0.43, Anteil CUR>0.8)?",
+      "Was bedeutet „few customers“ konkret: welcher Mindestwert für Kunden pro Segment (z. B. mindestens 30)?",
+      "Nach welcher Spalte soll sortiert werden und in welcher Richtung (z. B. nach avg DTI absteigend oder nach customer_count absteigend)?",
+      "Soll ein Zeitraum gefiltert werden (z. B. scoredate in den letzten 12 Monaten) oder sollen alle Records berücksichtigt werden?",
+      "Wie soll die „grand total“-Zeile berechnet werden: über alle Kunden (gewichtete Aggregation) und soll sie oben oder unten stehen?"
     ]
   },
-  "generated_sql": "WITH combined_result AS (\nWITH segment_summary AS (\n  SELECT\n    cr.clientseg AS segment,\n    COUNT(*) AS customer_count,\n    AVG(ei.debincratio) AS avg_dti,\n    AVG(ea.totliabs) AS avg_total_liabilities,\n    AVG(ea.totassets - ea.totliabs) AS avg_net_worth,\n    AVG(cah.credutil) AS avg_credit_utilization,\n    AVG(CASE WHEN cc.delinqcount > 0 THEN 1.0 ELSE 0.0 END) AS delinquency_rate,\n    AVG(CASE WHEN cc.latepaycount > 0 THEN 1.0 ELSE 0.0 END) AS late_payment_rate\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\n  JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\n  JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\n  GROUP BY cr.clientseg\n  HAVING COUNT(*) >= 10\n),\ncombined_result AS (\n  SELECT\n    segment,\n    customer_count,\n    avg_dti,\n    avg_total_liabilities,\n    avg_net_worth,\n    avg_credit_utilization,\n    delinquency_rate,\n    late_payment_rate\n  FROM segment_summary\n\n  UNION ALL\n\n  SELECT\n    'Grand Total' AS segment,\n    COUNT(*) AS customer_count,\n    AVG(ei.debincratio) AS avg_dti,\n    AVG(ea.totliabs) AS avg_total_liabilities,\n    AVG(ea.totassets - ea.totliabs) AS avg_net_worth,\n    AVG(cah.credutil) AS avg_credit_utilization,\n    AVG(CASE WHEN cc.delinqcount > 0 THEN 1.0 ELSE 0.0 END) AS delinquency_rate,\n    AVG(CASE WHEN cc.latepaycount > 0 THEN 1.0 ELSE 0.0 END) AS late_payment_rate\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\n  JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\n  JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\n)\nSELECT *\nFROM combined_result\n)\nSELECT * FROM combined_result\nORDER BY\n  CASE WHEN segment = 'Grand Total' THEN 1 ELSE 0 END,\n  avg_dti DESC,\n  customer_count DESC;",
+  "generated_sql": "WITH _union_order_wrapper AS (\nWITH segment_summary AS (\n  SELECT\n    cr.clientseg AS customer_segment,\n    COUNT(*) AS customer_count,\n    AVG(ei.debincratio) AS avg_dti,\n    AVG(ea.totliabs) AS avg_total_liabilities,\n    AVG(ea.totassets) AS avg_total_assets,\n    AVG(ea.totassets - ea.totliabs) AS avg_net_worth,\n    AVG(cah.credutil) AS avg_credit_utilization,\n    AVG(cc.delinqcount) AS avg_delinquency_count,\n    AVG(cc.latepaycount) AS avg_late_payment_count\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\n  JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\n  JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\n  GROUP BY cr.clientseg\n  HAVING COUNT(*) >= 10\n)\nSELECT\n  customer_segment,\n  customer_count,\n  avg_dti,\n  avg_total_liabilities,\n  avg_total_assets,\n  avg_net_worth,\n  avg_credit_utilization,\n  avg_delinquency_count,\n  avg_late_payment_count\nFROM segment_summary\n\nUNION ALL\n\nSELECT\n  'GRAND TOTAL' AS customer_segment,\n  SUM(customer_count) AS customer_count,\n  SUM(avg_dti * customer_count) / SUM(customer_count) AS avg_dti,\n  SUM(avg_total_liabilities * customer_count) / SUM(customer_count) AS avg_total_liabilities,\n  SUM(avg_total_assets * customer_count) / SUM(customer_count) AS avg_total_assets,\n  SUM(avg_net_worth * customer_count) / SUM(customer_count) AS avg_net_worth,\n  SUM(avg_credit_utilization * customer_count) / SUM(customer_count) AS avg_credit_utilization,\n  SUM(avg_delinquency_count * customer_count) / SUM(customer_count) AS avg_delinquency_count,\n  SUM(avg_late_payment_count * customer_count) / SUM(customer_count) AS avg_late_payment_count\nFROM segment_summary\n)\nSELECT * FROM _union_order_wrapper\nORDER BY\n  CASE WHEN customer_segment = 'GRAND TOTAL' THEN 1 ELSE 0 END,\n  customer_count DESC;",
   "validation": {
-    "is_valid": false,
-    "errors": [
-      "CTE 'combined_result' is defined twice (outer WITH combined_result AS (...) and inner WITH ... combined_result AS (...)).",
-      "Nested WITH inside a CTE body is not valid SQLite syntax in this form; the outer CTE body starts with another WITH, causing a syntax error."
-    ],
-    "severity": "high",
+    "is_valid": true,
+    "errors": [],
+    "severity": "low",
     "suggestions": [
-      "Use a single top-level WITH and define CTEs once, e.g. WITH segment_summary AS (...), combined_result AS (...) SELECT ... FROM combined_result ORDER BY ...",
-      "Remove the outer 'WITH combined_result AS ( ... )' wrapper and keep only 'WITH segment_summary AS (...), combined_result AS (...)' at the top level."
+      "Optional: In der ORDER BY-Logik ggf. CASE umdrehen, wenn 'GRAND TOTAL' am Ende stehen soll (THEN 1 ELSE 0 sortiert 'GRAND TOTAL' nach hinten bei ASC; aktuell steht es bereits hinten, passt also).",
+      "Optional: Schutz gegen Division durch 0 im Grand-Total-Teil (z.B. NULLIF(SUM(customer_count),0)), falls HAVING/Filter später geändert werden und segment_summary leer werden könnte.",
+      "Optional: Die doppelte WITH-Klammerung ist gültig, aber stilistisch unnötig. Man könnte segment_summary und die UNION direkt in einem einzigen WITH definieren."
     ]
   },
-  "results": [],
-  "row_count": 0,
-  "query_id": null,
+  "results": [
+    {
+      "customer_segment": "Basic",
+      "customer_count": 346,
+      "avg_dti": 0.3013526011560694,
+      "avg_total_liabilities": 499857.6329479769,
+      "avg_total_assets": 1051656.1040462428,
+      "avg_net_worth": 551798.4710982658,
+      "avg_credit_utilization": 0.508,
+      "avg_delinquency_count": 4.878612716763006,
+      "avg_late_payment_count": 9.976878612716764
+    },
+    {
+      "customer_segment": "Standard",
+      "customer_count": 340,
+      "avg_dti": 0.29964411764705884,
+      "avg_total_liabilities": 488187.4794117647,
+      "avg_total_assets": 1040977.1794117647,
+      "avg_net_worth": 552789.7,
+      "avg_credit_utilization": 0.5194323529411765,
+      "avg_delinquency_count": 5.202941176470588,
+      "avg_late_payment_count": 10.035294117647059
+    },
+    {
+      "customer_segment": "Premium",
+      "customer_count": 314,
+      "avg_dti": 0.2982484076433121,
+      "avg_total_liabilities": 475622.2675159236,
+      "avg_total_assets": 1036613.5350318472,
+      "avg_net_worth": 560991.2675159236,
+      "avg_credit_utilization": 0.49786305732484076,
+      "avg_delinquency_count": 4.929936305732484,
+      "avg_late_payment_count": 10.05732484076433
+    },
+    {
+      "customer_segment": "GRAND TOTAL",
+      "customer_count": 1000,
+      "avg_dti": 0.29979700000000004,
+      "avg_total_liabilities": 488279.876,
+      "avg_total_assets": 1043301.903,
+      "avg_net_worth": 555022.027,
+      "avg_credit_utilization": 0.508704,
+      "avg_delinquency_count": 5.005,
+      "avg_late_payment_count": 10.022
+    }
+  ],
+  "row_count": 4,
+  "query_id": "8e7ecc1172484ada973dd4a8bbc88360",
   "page": 1,
-  "page_size": 100,
-  "total_pages": null,
-  "total_rows": null,
+  "page_size": 50,
+  "total_pages": 1,
+  "total_rows": 4,
   "has_next_page": false,
   "has_previous_page": false,
-  "notice": null,
-  "summary": null,
-  "explanation": "Builds a per-segment debt burden summary (DTI, liabilities, net worth, credit utilization, delinquency/late-payment rates) using the full customer join chain. Segments with fewer than 10 customers are excluded. Adds a 'Grand Total' row across all customers and orders results with the total row last, then by highest average DTI and customer count.",
-  "error": "SQL Validation fehlgeschlagen nach Korrektur: CTE 'combined_result' is defined twice (outer WITH combined_result AS (...) and inner WITH ... combined_result AS (...))., Nested WITH inside a CTE body is not valid SQLite syntax in this form; the outer CTE body starts with another WITH, causing a syntax error."
+  "notice": " Hinweis: Ambiguity: Wesentliche Spezifikationen fehlen, um eine korrekte und sichere SQL-Abfrage zu formulieren: (1) „debt burden“ ist nicht eindeutig, da mehrere mögliche Kennzahlen existieren (DTI, totliabs, totloanamt, CUR/credutil, Over-Extended-Flag etc.). (2) Es ist unklar, welche „relevanten debt metrics“ genau in die Segment-Zusammenfassung sollen (Durchschnitt, Median, Summe, Perzentile, Anteile über Schwellen). (3) „few customers“ benötigt einen konkreten Schwellenwert (z. B. < 10 Kunden) oder eine Regel (z. B. unteres Quantil). (4) „order the results“ ist unklar (nach Segmentname, Kundenzahl, DTI, etc., auf-/absteigend). (5) „grand total row“: unklar, ob als zusätzliche Zeile via ROLLUP/GROUPING SETS und welche Aggregationen dort gelten. (6) Unklar, ob ein Zeitfilter (scoredate/decidedate) erforderlich ist oder alle Daten verwendet werden sollen.. Klärungsfragen: Welche Kennzahl(en) definieren für dich „debt burden“: DTI (debincratio), Gesamtverbindlichkeiten (totliabs), Gesamtkredit-/Darlehensbetrag (totloanamt), Credit Utilization (credutil) oder eine Kombination?, Welche „relevanten debt metrics“ sollen pro Segment ausgegeben werden (z. B. customer_count, avg/median DTI, avg totliabs, avg totloanamt, Anteil DTI>0.43, Anteil CUR>0.8)?, Was bedeutet „few customers“ konkret: welcher Mindestwert für Kunden pro Segment (z. B. mindestens 30)?, Nach welcher Spalte soll sortiert werden und in welcher Richtung (z. B. nach avg DTI absteigend oder nach customer_count absteigend)?, Soll ein Zeitraum gefiltert werden (z. B. scoredate in den letzten 12 Monaten) oder sollen alle Records berücksichtigt werden?, Wie soll die „grand total“-Zeile berechnet werden: über alle Kunden (gewichtete Aggregation) und soll sie oben oder unten stehen?",
+  "summary": "Über die Segmente mit mindestens 10 Kunden hinweg sind Basic (346), Standard (340) und Premium (314) sehr ähnlich in der durchschnittlichen Debt-to-Income-Ratio (ca. 0,298–0,301) und im Vermögensbild: Ø-Verbindlichkeiten sinken von Basic (≈499,9k) über Standard (≈488,2k) zu Premium (≈475,6k), während Ø-Assets in allen Segmenten um ≈1,04–1,05 Mio. liegen und der Ø-Net-Worth bei rund ≈552k–561k (Premium am höchsten). Beim Kreditverhalten hat Standard die höchste Ø-Kreditauslastung (≈0,519) sowie die höchste Ø-Delinquency-Count (≈5,20), während Premium die niedrigste Ø-Kreditauslastung (≈0,498) zeigt; die Ø-Late-Payment-Counts sind in allen Segmenten nahezu identisch (≈10). Die GRAND-TOTAL-Zeile fasst diese Kennzahlen als kundenanzahl-gewichtete Durchschnitte über alle berücksichtigten Segmente zusammen und steht (wie gewünscht) am Ende der sortierten Ergebnisliste.",
+  "explanation": "Builds a per-customer-segment (core_record.clientseg) debt-burden summary using DTI (debincratio), liabilities (totliabs), and computed net worth (totassets - totliabs), plus supporting credit stress indicators (credit utilization, delinquencies, late payments). Segments with fewer than 10 customers are excluded. A GRAND TOTAL row is appended using a customer-count-weighted average of the segment averages, and results are ordered with segments first (largest to smallest) and the grand total last.",
+  "error": null
 }

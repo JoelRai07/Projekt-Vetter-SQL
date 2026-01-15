@@ -187,10 +187,10 @@ npm start
 ```json
 {
   "question": "Welche Kunden haben eine Schuldenlast über 50%?",
-  "generated_sql": "SELECT cr.clientref, ei.debincratio FROM core_record cr JOIN ... WHERE ei.debincratio > 0.5 ORDER BY ei.debincratio DESC",
+  "generated_sql": "SELECT cr.coreregistry AS customer_id, ei.debincratio FROM core_record cr JOIN ... WHERE ei.debincratio > 0.5 ORDER BY ei.debincratio DESC",
   "results": [
-    {"clientref": "001", "debincratio": 0.65},
-    {"clientref": "002", "debincratio": 0.58}
+    {"customer_id": "CS001", "debincratio": 0.65},
+    {"customer_id": "CS002", "debincratio": 0.58}
   ],
   "row_count": 247,
   "page": 1,

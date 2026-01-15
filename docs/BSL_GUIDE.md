@@ -126,35 +126,36 @@ um:
 
 ---
 
-## 5) CU vs CS: Warum du „immer CU statt CS“ bekommst – und warum es 2 IDs sind
+## 5) CU vs CS: Zwei IDs – und welche als customer_id ausgegeben wird
 
 ### Problem: Dual Identifier System
 In der Credit-DB referenzieren zwei Identifier **dieselbe Person**, sind aber **nicht austauschbar**:
-- **CU** = Business-ID (für Ausgabe/Reports)  
-  - Quelle: `core_record.clientref` (z.B. `CU456680`)
-- **CS** = technische Registry-ID (Primär-/Join-Key)  
+- **CS** = Customer ID (Output-ID)  
   - Quelle: `core_record.coreregistry` (z.B. `CS206405`)
+- **CU** = Client Reference (alternative ID, nur bei expliziter Anfrage)  
+  - Quelle: `core_record.clientref` (z.B. `CU456680`)
 
 Beide IDs gehören zur selben Person, aber:
 - **JOINs** müssen die technische Schlüssel-Kette nutzen (CS-basierte Keys).
-- **Output** soll meistens die Business-ID zeigen (CU), weil Fragen „customer ID“ meinen.
+- **Output** zeigt standardmäßig die Customer ID in CS-Format; CU nur wenn explizit nach „client reference/clientref“ gefragt wird.
 
 ### Warum das ohne BSL oft schiefgeht
-LLMs sehen „PRIMARY KEY“ und wählen dann oft `coreregistry` als „customer id“ → Ausgabe zeigt CS statt CU, obwohl der User „customer ID“ meint.
+LLMs verwechseln `clientref` und `coreregistry` oder mischen sie (z.B. CU im Output, CS in JOINs), was zu falschen Ergebnissen führt.
 
 ### Wie BSL das korrigiert
 BSL hat explizite Regelpriorität:
-- **Output identifier**: wenn Frage nach „customer ID / IDs“ fragt → `SELECT cr.clientref AS customer_id`
+- **Output identifier**: wenn Frage nach „customer ID / IDs“ fragt → `SELECT cr.coreregistry AS customer_id`
+- **Client reference**: nur wenn explizit nach „client reference/clientref“ gefragt → `SELECT cr.clientref AS clientref`
 - **Join identifier**: immer `cr.coreregistry` (CS) in JOINs verwenden.
 
 ### Beispiel (Konzept)
 - **Falsch** (typischer Fehler):  
-  `SELECT cr.coreregistry AS customer_id ...`  → liefert CS
+  `SELECT cr.clientref AS customer_id ...`  → liefert CU
 - **Richtig** (BSL-konform):  
-  `SELECT cr.clientref AS customer_id ...` und JOINs über `cr.coreregistry = ei.emplcoreref` etc.
+  `SELECT cr.coreregistry AS customer_id ...` und JOINs über `cr.coreregistry = ei.emplcoreref` etc.
 
 > Verteidigungsformulierung:  
-> „Wir haben im BSL das **Identity Mapping** formalisiert: Output = CU, Join Keys = CS.  
+> „Wir haben im BSL das **Identity Mapping** formalisiert: Output = CS (coreregistry), Clientref nur bei expliziter Anfrage, Join Keys = CS.  
 > Das löst eine häufige Failure-Mode-Klasse in Text2SQL (Identifier Confusion).“
 
 ---
@@ -246,7 +247,7 @@ Was du als Ausblick sagst:
 ### Minimaler “Runtime-BSL”-Schritt (falls du unbedingt was zeigen willst)
 Wenn du doch *klein* etwas “Runtime” zeigen willst, ohne alles umzubauen:
 - Implementiere **BSL-Policy Checks** als deterministischen Checker vor DB-Execution (zusätzlich zu SQL Guard), z.B.:
-  - Verbot: Output `coreregistry` wenn Frage nach “customer id” fragt
+  - Verbot: Output `clientref` wenn Frage nach “customer id” fragt (außer explizit clientref)
   - Pflicht: `HAVING COUNT(*) >= 10` wenn “few customers” vorkommt
   - Pflicht: Join-Chain nicht überspringen, falls mehrere Tabellen aus der Kette benutzt werden
 Das ist bereits eine “Mini-Policy Engine” und sehr gut verteidigbar.
@@ -272,8 +273,8 @@ Das ist üblich in produktionsnahen Text2SQL-Systemen: reine ‘End-to-End’-Ge
 **A:** „RAG reduziert Tokens, erhöht aber Variabilität und Failure Points. Für unsere Projektphase war Stabilität & Nachvollziehbarkeit wichtiger. BSL ist auditierbar und deterministischer. RAG kann später optional ergänzt werden.“
 
 ### Q5: „Warum ist CU vs CS so wichtig?“
-**A:** „Weil es zwei IDs für dieselbe Person gibt. CU ist die Business-ID fürs Reporting, CS ist der technische Join-Key.  
-Ohne explizite Regel wählt das LLM häufig den falschen Identifier, was zu falschen Outputs führt.“
+**A:** „Weil es zwei IDs für dieselbe Person gibt. In unserem System ist CS die Customer-ID im Output, CU ist die Client Reference (nur auf Nachfrage).  
+Ohne explizite Regel wählt das LLM häufig den falschen Identifier oder mischt CU/CS, was zu falschen Outputs führt.“
 
 ### Q6: „Wie stellt ihr sicher, dass die BSL-Regeln wirklich eingehalten werden?“
 **A:** „Über mehrere Layer:  
@@ -354,7 +355,7 @@ Genau so solltest du es im Gespräch auch formulieren.
 
 | Frage | Typ | Erwartetes Verhalten | Ergebnis | Status | BSL-Regeln angewendet |
 |-------|------|---------------------|----------|--------|----------------------|
-| Q1 | Finanzielle Kennzahlen | CU Format, korrekte JOINs | Bestanden | 100% | Identity, Join Chain |
+| Q1 | Finanzielle Kennzahlen | CS Format, korrekte JOINs | Bestanden | 100% | Identity, Join Chain |
 | Q2 | Engagement nach Kohorte | Zeitbasierte Aggregation | Bestanden | 100% | Aggregation, Time Logic |
 | Q3 | Schuldenlast nach Segment | GROUP BY, Business Rules | Bestanden | 100% | Aggregation, Business Logic |
 | Q4 | Top 10 Kunden | ORDER BY + LIMIT | Bestanden | 100% | Aggregation Patterns |

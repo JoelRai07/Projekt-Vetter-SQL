@@ -344,7 +344,7 @@ Chosen option: **Mehrstufige Consistency Validation**, because:
   Business Logic)
 
 **BSL-Inhalt** (generiert aus KB + Meanings):
-- **Identity System Rules**: CU (clientref) vs CS (coreregistry) - das haeufigste Problem
+- **Identity System Rules**: Customer ID = CS (coreregistry), clientref (CU) nur bei expliziter Anfrage
 - **Aggregation Detection**: Wann GROUP BY, wann ORDER BY + LIMIT
 - **Business Logic Rules**: Financially Vulnerable, High-Risk, Digital Native, etc.
 - **JSON Field Rules**: Korrekte Tabellen-Qualifizierung fuer JSON-Extraktion
@@ -382,7 +382,7 @@ Die aktuelle Architektur ist das Ergebnis der oben dokumentierten Entscheidungen
 
 1. **IdentityRules** (`bsl/rules/identity_rules.py`)
    - CU vs CS Identifier System
-   - Output- vs Join-Identifier Logik
+   - Customer-ID vs Client-Reference Logik
 
 2. **AggregationPatterns** (`bsl/rules/aggregation_patterns.py`)
    - GROUP BY vs ORDER BY + LIMIT Erkennung
@@ -446,7 +446,7 @@ und enthaelt die wichtigsten Business Rules.
 
 **BSL-Inhalt** (generiert durch `bsl_builder.py`):
 1. **Identity System Rules** (kritisch!)
-   - CU (clientref) vs CS (coreregistry)
+   - Customer ID (CS/coreregistry) vs Client Reference (CU/clientref)
    - Wann welcher Identifier verwendet wird
    - Das haeufigste Problem im System
 2. **Aggregation Detection Rules**
@@ -554,7 +554,7 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
 
 | Frage | Typ | Erwartetes Verhalten | Ergebnis | Status | BSL-Regeln angewendet |
 |-------|------|---------------------|----------|--------|----------------------|
-| Q1 | Finanzielle Kennzahlen | CU Format, korrekte JOINs | ✅ Bestanden | 100% | Identity, Join Chain |
+| Q1 | Finanzielle Kennzahlen | CS Format, korrekte JOINs | ✅ Bestanden | 100% | Identity, Join Chain |
 | Q2 | Engagement nach Kohorte | Zeitbasierte Aggregation | ✅ Bestanden | 100% | Aggregation, Time Logic |
 | Q3 | Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ Bestanden | 100% | Aggregation, Business Logic |
 | Q4 | Top 10 Kunden | ORDER BY + LIMIT | ✅ Bestanden | 100% | Aggregation Patterns |

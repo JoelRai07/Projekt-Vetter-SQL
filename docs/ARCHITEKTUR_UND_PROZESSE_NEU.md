@@ -262,7 +262,7 @@ GenericQuestionClassifier analysiert:
 - group_by: ["clientseg"]
 - sql_hints: {
     "requires_group_by": true,
-    "identifier_type": "CU",
+    "identifier_type": "CS",
     "business_rules": ["Financially Vulnerable"]
 }
 ```
@@ -305,8 +305,8 @@ bsl_content = bsl_builder.build_bsl(
 ```
 # IDENTITY SYSTEM RULES
 ## ⚠️ CRITICAL: Dual Identifier System
-- CU Format: clientref (for customer_id output)
-- CS Format: coreregistry (for JOINs)
+- CS Format: coreregistry (for customer_id output and JOINs)
+- CU Format: clientref (only when explicitly requested as client reference)
 
 # AGGREGATION PATTERNS
 ## Aggregation vs Detail Queries
@@ -380,7 +380,7 @@ validation_result = consistency_checker.validate_sql_against_bsl(
 ```sql
 -- Generierte SQL
 SELECT 
-    cr.clientref AS customer_id,
+    cr.coreregistry AS customer_id,
     cr.clientseg,
     AVG(ei.debincratio) AS avg_debt_ratio,
     COUNT(*) AS customer_count
@@ -665,7 +665,7 @@ Content-Type: application/json
     "entities": ["Schuldenlast", "Segment"],
     "sql_hints": {
       "requires_group_by": true,
-      "identifier_type": "CU"
+      "identifier_type": "CS"
     }
   },
   
@@ -742,8 +742,8 @@ erDiagram
 ```
 # IDENTITY SYSTEM RULES
 ## ⚠️ CRITICAL: Dual Identifier System
-- CU Format: clientref (for customer_id output)
-- CS Format: coreregistry (for JOINs)
+- CS Format: coreregistry (for customer_id output and JOINs)
+- CU Format: clientref (only when explicitly requested as client reference)
 
 # AGGREGATION PATTERNS
 ## Aggregation vs Detail Queries
@@ -816,7 +816,7 @@ erDiagram
 
 | Frage | Typ | Erwartetes Verhalten | Ergebnis | Status | BSL-Regeln angewendet |
 |-------|------|---------------------|----------|--------|----------------------|
-| Q1 | Finanzielle Kennzahlen | CU Format, korrekte JOINs | ✅ Bestanden | 100% | Identity, Join Chain |
+| Q1 | Finanzielle Kennzahlen | CS Format, korrekte JOINs | ✅ Bestanden | 100% | Identity, Join Chain |
 | Q2 | Engagement nach Kohorte | Zeitbasierte Aggregation | ✅ Bestanden | 100% | Aggregation, Time Logic |
 | Q3 | Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ Bestanden | 100% | Aggregation, Business Logic |
 | Q4 | Top 10 Kunden | ORDER BY + LIMIT | ✅ Bestanden | 100% | Aggregation Patterns |

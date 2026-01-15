@@ -56,7 +56,7 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 
 | Frage | Typ | Status | BSL-Regeln |
 |-------|------|--------|------------|
-| Q1: Finanzielle Kennzahlen | CU Format, JOINs | ✅ 100% | Identity, Join Chain |
+| Q1: Finanzielle Kennzahlen | CS Format, JOINs | ✅ 100% | Identity, Join Chain |
 | Q2: Engagement nach Kohorte | Zeitbasierte Aggregation | ✅ 100% | Aggregation, Time Logic |
 | Q3: Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ 100% | Aggregation, Business Logic |
 | Q4: Top 10 Kunden | ORDER BY + LIMIT | ✅ 100% | Aggregation Patterns |
@@ -106,7 +106,7 @@ Mit BSL: Korrekte JSON-Extraktion → 247 Ergebnisse
 ```
 BSL enthält:
 - "Digital First Customer: chaninvdatablock.onlineuse = 'High'"
-- "CU Format: clientref für Output"
+- "CS Format: coreregistry für Output"
 - "JOIN Chain: core_record → employment_and_income → ..."
 ```
 
@@ -296,8 +296,8 @@ erDiagram
 ```
 # IDENTITY SYSTEM RULES
 ## ⚠️ CRITICAL: Dual Identifier System
-- CU Format: clientref (for customer_id output)
-- CS Format: coreregistry (for JOINs)
+- CS Format: coreregistry (for customer_id output and JOINs)
+- CU Format: clientref (only when explicitly requested as client reference)
 
 # AGGREGATION PATTERNS
 ## Aggregation vs Detail Queries
@@ -374,7 +374,7 @@ erDiagram
 
 | Testfall | Beschreibung | Erwartet | Ergebnis | Status |
 |-----------|--------------|------------|-----------|---------|
-| Frage 1 | Finanzielle Kennzahlen pro Kunde | CU Format, korrekte JOINs | ✅ Bestanden |
+| Frage 1 | Finanzielle Kennzahlen pro Kunde | CS Format, korrekte JOINs | ✅ Bestanden |
 | Frage 2 | Engagement nach Kohorte | Zeitbasierte Aggregation | ✅ Bestanden |
 | Frage 3 | Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ Bestanden |
 | Frage 4 | Top 10 Kunden | ORDER BY + LIMIT | ✅ Bestanden |

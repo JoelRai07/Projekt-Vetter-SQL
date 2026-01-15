@@ -43,7 +43,7 @@ Mit BSL: Korrekte JSON-Extraktion → 247 Ergebnisse
 ```
 BSL enthält explizite Regeln:
 - "Digital First Customer: chaninvdatablock.onlineuse = 'High'"
-- "CU Format: clientref für Output"
+- "CS Format: coreregistry für Output"
 - "JOIN Chain: core_record → employment_and_income → ..."
 ```
 
@@ -279,8 +279,8 @@ erDiagram
 
 #### Wichtige Business Rules
 1. **Dual Identifier System**: 
-   - `clientref` (CU) für Business-Output
-   - `coreregistry` (CS) für JOINs und interne Referenzen
+   - `coreregistry` (CS) für Business-Output (customer_id) und JOINs
+   - `clientref` (CU) nur wenn explizit nach client reference/clientref gefragt
 
 2. **Strikte FK-Kette**: JOINs müssen der Foreign-Key-Kette folgen
    ```
@@ -306,8 +306,8 @@ erDiagram
 ```
 # IDENTITY SYSTEM RULES
 ## ⚠️ CRITICAL: Dual Identifier System
-- CU Format: clientref (for customer_id output)
-- CS Format: coreregistry (for JOINs)
+- CS Format: coreregistry (for customer_id output and JOINs)
+- CU Format: clientref (only when explicitly requested as client reference)
 
 # AGGREGATION PATTERNS
 ## Aggregation vs Detail Queries
@@ -435,7 +435,7 @@ Chosen option: **Mehrstufige Consistency Validation**, because:
 
 | Frage | Typ | Erwartetes Verhalten | Ergebnis | Status | BSL-Regeln angewendet |
 |-------|------|---------------------|----------|--------|----------------------|
-| Q1 | Finanzielle Kennzahlen | CU Format, korrekte JOINs | ✅ Bestanden | 100% | Identity, Join Chain |
+| Q1 | Finanzielle Kennzahlen | CS Format, korrekte JOINs | ✅ Bestanden | 100% | Identity, Join Chain |
 | Q2 | Engagement nach Kohorte | Zeitbasierte Aggregation | ✅ Bestanden | 100% | Aggregation, Time Logic |
 | Q3 | Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ Bestanden | 100% | Aggregation, Business Logic |
 | Q4 | Top 10 Kunden | ORDER BY + LIMIT | ✅ Bestanden | 100% | Aggregation Patterns |
