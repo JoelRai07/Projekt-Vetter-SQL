@@ -3,7 +3,7 @@
 **Projekt**: ChatWithYourData - Text2SQL mit Business Semantics Layer  
 **Team**: 5 Studierende der DHBW Stuttgart  
 **Datum**: Januar 2026  
-**Version**: 3.0.0 (BSL-first)  
+**Version**: 9.0.0 (BSL-first)
 **Success Rate**: 95% (9.5/10 Fragen)
 
 ---
@@ -311,13 +311,18 @@ erDiagram
 
 ### 🧠 Business Semantics Layer (BSL)
 
-#### BSL-Module (6 Stück)
-1. **IdentityRules**: CU vs CS Identifier System
-2. **AggregationPatterns**: GROUP BY vs ORDER BY + LIMIT
-3. **BusinessLogicRules**: Financially Vulnerable, High-Risk, etc.
-4. **JoinChainRules**: Strikte Foreign-Key Chain
-5. **JSONFieldRules**: JSON-Extraktionsregeln
-6. **ComplexQueryTemplates**: Multi-Level Aggregation, CTEs
+#### BSL-Sektionen (in generierter `credit_bsl.txt`)
+
+Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in einer Textdatei** gespeichert:
+
+1. **Identity System Rules**: CU vs CS Identifier System
+2. **Aggregation Patterns**: GROUP BY vs ORDER BY + LIMIT
+3. **Business Logic Rules**: Financially Vulnerable, High-Risk, etc.
+4. **Join Chain Rules**: Strikte Foreign-Key Chain
+5. **JSON Field Rules**: JSON-Extraktionsregeln
+6. **Complex Query Templates**: Multi-Level Aggregation, CTEs
+
+> **Hinweis**: Diese sind Textblöcke im generierten BSL-File, keine separaten `.py`-Dateien.
 
 #### BSL-Inhalt (Beispiele)
 ```
@@ -340,160 +345,316 @@ erDiagram
 
 ## 6. Architecture Decision Records (ADRs)
 
-### ADR-0001: BSL-first als Zielarchitektur für Text2SQL
+> **Hinweis**: Die ADRs folgen dem MADR-Template (Markdown Architecture Decision Record) gemäß Aufgabenstellung.
 
-**[short title of solved problem and solution]**: BSL-first statt RAG/ReAct für stabile, erklärbare SQL-Generierung  
-**Status**: accepted  
-**Deciders**: Projektteam (Tim Kühne, Dominik Ruoff, Joel Martinez, Umut Polat, Sören Frank)  
-**Date**: 2025-01-14  
-**Technical Story**: Migration von RAG/ReAct zu BSL-first nach Review (Professor-Feedback)
+### ADR-001: Migration von RAG/ReAct zu BSL-first Architektur
 
-#### Context and Problem Statement
-Die initiale RAG/ReAct-Architektur lieferte uneinheitliche Ergebnisse und erhöhte die Komplexität durch zusätzliche Infrastruktur. Die zentrale Frage war: Wie erreichen wir reproduzierbare und auditierbare SQL-Generierung für die Credit-DB?
-
-#### Decision Drivers
-- Deterministische Ergebnisse für Evaluation
-- Nachvollziehbarkeit (auditierbare Regeln)
-- Reduzierte Systemkomplexität und Dependencies
-- Explizite Abbildung der Business-Logik
-- Feedback des Professors (Scope: Credit-DB)
-
-#### Considered Options
-- **Option 1**: RAG + ReAct beibehalten  
-- **Option 2**: Hybrid-Ansatz (RAG + BSL)  
-- **Option 3**: BSL-first (selected)
-
-#### Decision Outcome
-Chosen option: **"BSL-first"**, because it erfüllt Stabilität, Nachvollziehbarkeit und Wartbarkeit am besten und adressiert die Scope-Vorgaben direkt.
-
-#### Positive Consequences
-- Reproduzierbare SQL-Ergebnisse
-- Klare, prüfbare Business-Regeln (Audit-Readiness)
-- Weniger Abhängigkeiten (kein Vector Store nötig)
-
-#### Negative Consequences
-- Höherer Token-Verbrauch pro Prompt
-- Weniger skalierbar bei Multi-DB-Use-Cases
-
-#### Pros and Cons of the Options
-**Option 1: RAG + ReAct**  
-Good, because geringere Token-Kosten und moderne Retrieval-Methodik.  
-Bad, because variierende Ergebnisse, höhere Komplexität, schwer zu debuggen.
-
-**Option 2: Hybrid**  
-Good, because flexible Kombination aus Retrieval und Regeln.  
-Bad, because Komplexität bleibt hoch, Fehlersuche bleibt schwierig.
-
-**Option 3: BSL-first**  
-Good, because deterministisch, auditierbar, professor-konform.  
-Bad, because hoher Prompt-Overhead und enger Domain-Fit.
-
-#### Links
-- ADR-Verweise: Siehe ADR-002 bis ADR-004 (Modularisierung, Eliminierung von Hardcoding, Consistency Validation)
-
-### ADR-001: Von RAG/ReAct zu BSL-first Migration
-
-**Status**: Accepted  
-**Deciders**: Projektteam, Professor-Feedback  
-**Date**: 2025-01-14  
-**Supersedes**: ADR-001 (RAG/ReAct Architektur)
+**[short title of solved problem and solution]**: BSL-first statt RAG/ReAct für stabile, erklärbare SQL-Generierung
+**Status**: accepted
+**Deciders**: Tim Kühne, Dominik Ruoff, Joel Martinez, Umut Polat, Sören Frank
+**Date**: 2025-01-14
+**Technical Story**: Nach initialer RAG/ReAct-Implementierung (v6.0.0) zeigte sich bei Tests eine Success Rate von nur ~40% (4/10 Fragen). Professor-Feedback empfahl BSL als besseren Ansatz für den Credit-DB Scope.
 
 #### Context and Problem Statement
-Die initiale RAG/ReAct-Architektur zeigte kritische Probleme:
-- Nicht-deterministische Ergebnisse durch Embedding-Variabilität
-- Hohe Komplexität mit vielen Dependencies (ChromaDB, LangChain)
-- Scope-Mismatch: Projekt nutzt faktisch nur Credit-Datenbank
-- Professor-Feedback: "Es geht nur um die Credit-DB und BSL wäre ein besserer Ansatz"
+
+Die initiale Text2SQL-Architektur (Version 6.0.0-7.0.0) basierte auf RAG (Retrieval Augmented Generation) mit ReAct-Loop und ChromaDB als Vector Store. Bei der Evaluation mit 10 Testfragen zeigten sich kritische Probleme:
+
+1. **Identity Leakage**: CU und CS Identifier wurden inkonsistent verwendet (Q1-Q5, Q9)
+2. **Aggregation Failure**: GROUP BY fehlte bei Aggregationsfragen (Q4)
+3. **Semantic Drift**: Business Rules wurden falsch interpretiert (Q6, Q7)
+4. **Nicht-deterministische Ergebnisse**: Gleiche Fragen produzierten unterschiedliche SQL
+
+Die zentrale Frage war: Wie erreichen wir reproduzierbare und auditierbare SQL-Generierung für die Credit-DB?
 
 #### Decision Drivers
+
 1. **Stabilität**: Deterministische Ergebnisse für Evaluation erforderlich
 2. **Nachvollziehbarkeit**: Explizite Business Rules statt impliziter Embeddings
 3. **Wartbarkeit**: Weniger Dependencies und Moving Parts
-4. **Scope-Fit**: Projekt fokussiert auf Credit-Datenbank
-5. **Professor-Feedback**: BSL als "bester Ansatz" empfohlen
+4. **Scope-Fit**: Projekt fokussiert auf Credit-Datenbank (BIRD mini-interact Subset)
+5. **Professor-Feedback**: BSL als "bester Ansatz" explizit empfohlen
+6. **Academic Rigor**: Nachvollziehbare Architektur für Verteidigung
 
 #### Considered Options
-**Option 1: RAG + ReAct beibehalten**
-- Good: Token-Effizienz (~2KB vs 32KB), modern
-- Bad: Nicht-deterministisch, hohe Komplexität, schwer debugbar
 
-**Option 2: Hybrid-Ansatz (RAG + BSL)**
-- Good: Flexibilität für große Schemas
-- Bad: Komplexität bleibt, Fehlerquellen
-
-**Option 3: BSL-first (chosen)**
-- Good: Deterministisch, explizite Regeln, wartbar, professor-konform
-- Bad: Höherer Token-Verbrauch (~32KB), weniger "modern"
+**Option 1**: RAG + ReAct beibehalten (Status Quo)
+**Option 2**: Hybrid-Ansatz (RAG + BSL kombiniert)
+**Option 3**: BSL-first (vollständige Migration)
 
 #### Decision Outcome
-Chosen option: **BSL-first**, because:
-- Erfüllt alle kritischen Anforderungen (Stabilität, Nachvollziehbarkeit, Wartbarkeit)
-- Implementiert Professor-Feedback direkt
-- Reduziert Komplexität signifikant
-- Bessere Grundlage für akademische Verteidigung
+
+Chosen option: **"Option 3: BSL-first"**, because es erfüllt alle kritischen Anforderungen (Stabilität, Nachvollziehbarkeit, Wartbarkeit), implementiert Professor-Feedback direkt, reduziert Komplexität signifikant und bietet eine bessere Grundlage für akademische Verteidigung.
 
 #### Positive Consequences
-- Deterministische SQL-Generierung
-- Explizite, auditierbare Business Rules
-- Weniger Dependencies (kein ChromaDB, LangChain)
-- Einfachere Wartung und Debugging
-- Bessere akademische Argumentation
+
+- **Deterministische SQL-Generierung**: Gleiche Frage + gleicher BSL = gleiche SQL
+- **Explizite, auditierbare Business Rules**: BSL ist Plain-Text, Domain-Experten können prüfen
+- **Weniger Dependencies**: Kein ChromaDB, LangChain, Vector Store
+- **Einfachere Wartung und Debugging**: Klare Fehlerquellen, keine "Black Box"
+- **Bessere akademische Argumentation**: Nachvollziehbare Entscheidungen
+- **Success Rate von 40% auf 95% verbessert**
 
 #### Negative Consequences
-- Höhere Token-Kosten (~32KB vs ~2KB pro Prompt)
-- Weniger skalierbar für Multi-DB-Szenarien
-- Weniger "buzzword-compliant" (keine RAG/Vector Store)
+
+- **Höhere Token-Kosten**: ~32KB vs ~2KB pro Prompt
+- **Weniger skalierbar**: Multi-DB-Support erfordert pro-DB BSL
+- **Weniger "buzzword-compliant"**: Keine RAG/Vector Store (weniger "modern")
+
+#### Pros and Cons of the Options
+
+**Option 1: RAG + ReAct beibehalten**
+- Good, because geringere Token-Kosten (~2KB pro Prompt) und moderne Retrieval-Methodik
+- Good, because skalierbar für große Schemas (>50KB)
+- Bad, because nicht-deterministische Ergebnisse durch Embedding-Variabilität
+- Bad, because hohe Komplexität mit vielen Dependencies (ChromaDB, LangChain)
+- Bad, because schwer zu debuggen und zu auditieren
+
+**Option 2: Hybrid-Ansatz (RAG + BSL)**
+- Good, because flexible Kombination aus Retrieval und expliziten Regeln
+- Good, because Token-Effizienz für große Schemas
+- Bad, because Komplexität bleibt hoch, zwei Systeme zu warten
+- Bad, because Fehlerquellen in beiden Systemen möglich
+- Bad, because unklare Priorität (wann RAG, wann BSL?)
+
+**Option 3: BSL-first (chosen)**
+- Good, because deterministisch und reproduzierbar
+- Good, because explizite, auditierbare Regeln
+- Good, because professor-konform und wartbar
+- Good, because SOLID-Prinzipien und klare Architektur
+- Bad, because hoher Token-Verbrauch (~32KB pro Prompt)
+- Bad, because enger Domain-Fit (nur Credit-DB)
+
+#### Links
+
+- [TESTING.md](archiv/Probleme/TESTING.md) - Evaluation der RAG/ReAct Version
+- ADR-002: Modularisierung der BSL-Regeln
+- ADR-003: Dynamische Intent-Erkennung
+- ADR-004: Consistency Validation
 
 ---
 
-### ADR-002: Modularisierung der BSL-Regeln
+### ADR-002: Modularisierung der BSL-Regeln in 6 Sektionen
 
-**Status**: Accepted  
-**Deciders**: Projektteam  
+**[short title of solved problem and solution]**: Aufteilung monolithischer BSL-Generierung in 6 modulare Regel-Sektionen
+**Status**: accepted
+**Deciders**: Tim Kühne, Joel Martinez, Sören Frank
 **Date**: 2025-01-14
+**Technical Story**: Die initiale BSL-Implementierung war monolithisch (595 Zeilen). Wartung und Testing waren schwierig.
 
 #### Context and Problem Statement
-Die BSL-Generierung war monolithisch in einer 595-Zeilen-Datei implementiert. Dies erschwerte Wartung, Testing und Erweiterbarkeit.
+
+Nach der Entscheidung für BSL-first (ADR-001) wurde die BSL-Generierung zunächst monolithisch in `bsl_builder.py` implementiert. Die Datei wuchs auf 595 Zeilen mit vermischten Verantwortlichkeiten. Fragen:
+- Wie können wir BSL-Regeln unabhängig testen und warten?
+- Wie erreichen wir Separation of Concerns?
+
+#### Decision Drivers
+
+1. **Wartbarkeit**: Einzelne Regeln müssen isoliert änderbar sein
+2. **Testbarkeit**: Unit-Tests pro Regel-Kategorie
+3. **Lesbarkeit**: Klare Struktur für neue Teammitglieder
+4. **SOLID-Prinzipien**: Single Responsibility Principle
+
+#### Considered Options
+
+**Option 1**: Monolithisch beibehalten
+**Option 2**: Modularisierung in 6 Sektionen
+**Option 3**: Separate Python-Module pro Regel-Kategorie
 
 #### Decision Outcome
-Chosen option: **Modularisierung**, because:
-- Bessere Software-Engineering-Prinzipien
-- Unabhängige Tests und Wartung möglich
-- Klare Verantwortlichkeiten pro Modul
+
+Chosen option: **"Option 2: Modularisierung in 6 Sektionen"**, because es die Balance zwischen Wartbarkeit und Einfachheit bietet. Die Sektionen sind Textblöcke in der generierten `credit_bsl.txt`, keine separaten Python-Module.
+
+**Die 6 BSL-Sektionen:**
+1. **Identity System Rules** - CU vs CS Identifier System
+2. **Aggregation Patterns** - GROUP BY vs ORDER BY + LIMIT
+3. **Business Logic Rules** - Financially Vulnerable, High-Risk, Digital Native
+4. **Join Chain Rules** - Strikte Foreign-Key Chain
+5. **JSON Field Rules** - JSON-Extraktionsregeln
+6. **Complex Query Templates** - Multi-Level Aggregation, CTEs
+
+#### Positive Consequences
+
+- Klare Verantwortlichkeiten pro Sektion
+- Einfachere Fehlersuche (welche Sektion ist betroffen?)
+- Bessere Dokumentation (Sektion = dokumentierte Regel-Kategorie)
+
+#### Negative Consequences
+
+- Etwas mehr Overhead bei der BSL-Generierung
+- Sektionen müssen konsistent gehalten werden
+
+#### Pros and Cons of the Options
+
+**Option 1: Monolithisch beibehalten**
+- Good, because einfach zu implementieren
+- Bad, because schwer zu warten (595+ Zeilen)
+- Bad, because keine isolierten Tests möglich
+
+**Option 2: Modularisierung in 6 Sektionen (chosen)**
+- Good, because klare Struktur und Verantwortlichkeiten
+- Good, because Textblöcke sind einfach zu verstehen
+- Bad, because Sektionen müssen manuell synchronisiert werden
+
+**Option 3: Separate Python-Module**
+- Good, because maximale Modularität und Testbarkeit
+- Bad, because Over-Engineering für den aktuellen Scope
+- Bad, because komplexere Abhängigkeiten zwischen Modulen
 
 ---
 
-### ADR-003: Eliminierung von Hardcoding
+### ADR-003: Dynamische Intent-Erkennung mit BSL Compliance Triggern
 
-**Status**: Accepted  
-**Deciders**: Projektteam  
+**[short title of solved problem and solution]**: LLM-basierte Intent-Erkennung mit Keyword-Triggern für BSL-Regel-Verstärkung
+**Status**: accepted (vollständig umgesetzt)
+**Deciders**: Tim Kühne, Dominik Ruoff, Joel Martinez
 **Date**: 2025-01-14
+**Technical Story**: Für robuste Text2SQL musste das System auf Frage-Variationen generalisieren, ohne hardcodierte SQL-Antworten.
 
 #### Context and Problem Statement
-Die SQL-Generierung enthielt hartcodierte Methoden für spezifische Frage-Typen. Dies widersprach dem Generalisierungsziel.
+
+Für eine robuste Text2SQL-Pipeline war eine Strategie erforderlich, die:
+- Das LLM bei der korrekten Anwendung von BSL-Regeln unterstützt
+- Auf Variationen von Fragen generalisiert (z.B. "property leverage" → "mortgage ratio" → "LTV")
+- **Keine** fertigen SQL-Antworten pro Frage enthält (kein Hardcoding)
+
+Die Frage war: Wie können wir Edge Cases abfangen, ohne das Generalisierungsziel zu kompromittieren?
+
+#### Decision Drivers
+
+1. **Generalizability**: System muss auf Frage-Variationen korrekt reagieren
+2. **BSL Compliance**: LLM muss die richtigen BSL-Regeln anwenden
+3. **Maintainability**: Erweiterbar für neue Domänen-Konzepte
+4. **Robustness**: Edge Cases müssen abgefangen werden
+5. **Academic Rigor**: Kein Hardcoding von Frage-Antwort-Paaren
+
+#### Considered Options
+
+**Option 1**: Reines LLM ohne zusätzliche Unterstützung
+**Option 2**: Hardcodierte SQL pro Frage-Typ
+**Option 3**: LLM + Keyword-basierte BSL Compliance Trigger
 
 #### Decision Outcome
-Chosen option: **Dynamische Intent-basierte Erkennung**, because:
-- Kompatibel mit GenericQuestionClassifier
-- Keine spezifischen Frage-Typen hartcodiert
-- Automatische Anpassung an neue Intent-Typen
+
+Chosen option: **"Option 3: LLM + Keyword-basierte BSL Compliance Trigger"**, because es Generalisierung ermöglicht, während Edge Cases durch Regel-Verstärkung abgefangen werden.
+
+**Wichtige Klarstellung - Kein Hardcoding:**
+
+Die Methoden wie `_is_property_leverage_question()` in `llm/generator.py` sind **keine hardcodierten Antworten**:
+
+| Was sie NICHT tun | Was sie tun |
+|-------------------|-------------|
+| ❌ Fertige SQL-Queries zurückgeben | ✅ BSL-Regeln aktivieren/verstärken |
+| ❌ Frage-Antwort-Paare speichern | ✅ Dem LLM signalisieren, welche Regeln wichtig sind |
+| ❌ Das LLM umgehen | ✅ Das LLM mit zusätzlichem Kontext unterstützen |
+
+**Beweis für Generalisierung**: Das System reagiert korrekt auf Variationen wie:
+- "property leverage" → "mortgage ratio" → "loan-to-value" → "LTV"
+- "top wealthy customers" → "top 5 wealthy customers" → "wealthiest clients"
+
+#### Positive Consequences
+
+- LLM generiert SQL immer dynamisch basierend auf vollständigem BSL + Schema + Meanings Kontext
+- Edge Cases werden durch Regel-Verstärkung abgefangen
+- System generalisiert auf Frage-Variationen
+- Keine "Antwortentabelle" - nachvollziehbar und auditierbar
+
+#### Negative Consequences
+
+- Etwas komplexere Code-Struktur in `generator.py`
+- Trigger-Logik muss für neue Domänen erweitert werden
+
+#### Pros and Cons of the Options
+
+**Option 1: Reines LLM ohne Unterstützung**
+- Good, because maximale Einfachheit
+- Bad, because Edge Cases werden nicht zuverlässig erkannt
+- Bad, because BSL-Regeln könnten ignoriert werden
+
+**Option 2: Hardcodierte SQL pro Frage-Typ**
+- Good, because 100% deterministisch
+- Bad, because **keine Generalisierung** - nur exakte Fragen funktionieren
+- Bad, because **akademisch nicht vertretbar** - widerspricht Text2SQL-Ziel
+
+**Option 3: LLM + BSL Compliance Trigger (chosen)**
+- Good, because Generalisierung + Robustheit
+- Good, because nachvollziehbar und erweiterbar
+- Bad, because zusätzliche Trigger-Logik erforderlich
 
 ---
 
-### ADR-004: Implementierung von Consistency Validation
+### ADR-004: Implementierung von Mehrstufiger Consistency Validation
 
-**Status**: Accepted  
-**Deciders**: Projektteam  
+**[short title of solved problem and solution]**: 3-Ebenen Validierung (Safety + Semantik + BSL) für robuste SQL-Qualität
+**Status**: accepted
+**Deciders**: Tim Kühne, Joel Martinez, Sören Frank
 **Date**: 2025-01-14
+**Technical Story**: Nach BSL-Migration zeigte sich, dass LLMs trotz BSL-Regeln häufig Fehler machten.
 
 #### Context and Problem Statement
-Nach BSL-Migration zeigte sich, dass LLMs trotz BSL-Regeln häufig Fehler machten (Identifier, JOINs, Aggregation).
+
+Nach der BSL-Migration (ADR-001) verbesserte sich die Accuracy signifikant. Jedoch machte das LLM trotz BSL-Regeln weiterhin Fehler:
+- **Identifier-Verwechslungen** (CU vs CS) in 5% der Fälle
+- **JOIN-Chain-Verletzungen** (Tabellen übersprungen)
+- **Aggregationsfehler** (GROUP BY fehlend bei "by segment")
+- **JSON-Feld-Qualifizierungsprobleme** (falsche Tabelle.Spalte)
+
+Wie können wir diese Fehler systematisch erkennen und beheben?
+
+#### Decision Drivers
+
+1. **Quality Assurance**: Automatische Fehlererkennung vor Ausführung
+2. **BSL Consistency**: BSL-Regeln müssen durchgesetzt werden
+3. **Debugging**: Klare Fehlermeldungen für Entwickler
+4. **Defense in Depth**: Mehrere Validierungsebenen
+5. **Performance**: Validation muss schnell sein (<500ms)
+
+#### Considered Options
+
+**Option 1**: Nur LLM-basierte Validierung
+**Option 2**: Nur Rule-based Validierung (Regex)
+**Option 3**: Mehrstufige Validation (3 Ebenen)
 
 #### Decision Outcome
-Chosen option: **Mehrstufige Consistency Validation**, because:
-- Bietet umfassende Fehlererkennung
-- Enthält BSL-Compliance-Checks
-- Liefert klare Fehlermeldungen
+
+Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Depth bietet und verschiedene Fehlerklassen auf unterschiedlichen Ebenen erkennt.
+
+**Die 3 Validierungs-Ebenen:**
+
+| Ebene | Typ | Prüft | Geschwindigkeit |
+|-------|-----|-------|-----------------|
+| **Level 1** | SQL Guard (Regex) | Sicherheit (nur SELECT, keine Injection) | ~10ms |
+| **Level 2** | LLM Validation | Semantik, JOINs, Spalten-Existenz | ~1-2s |
+| **Level 3** | BSL Compliance | Identifier, Aggregation, BSL-Regeln | ~500ms |
+
+#### Positive Consequences
+
+- Umfassende Fehlererkennung (Sicherheit + Semantik + BSL)
+- Klare Fehlermeldungen mit Severity-Level
+- Defense in Depth - mehrere Schichten
+- BSL-Compliance wird durchgesetzt
+
+#### Negative Consequences
+
+- Zusätzliche Latenz (~2-3s für vollständige Validation)
+- Komplexere Architektur mit 3 Ebenen
+- Integriert in `llm/generator.py` (kein separates Modul)
+
+#### Pros and Cons of the Options
+
+**Option 1: Nur LLM-basierte Validierung**
+- Good, because versteht Semantik und Kontext
+- Bad, because langsam (~2s) für einfache Checks
+- Bad, because kann Sicherheitsprobleme übersehen
+
+**Option 2: Nur Rule-based Validierung**
+- Good, because schnell (~10ms) und deterministisch
+- Bad, because versteht keine Semantik
+- Bad, because kann BSL-Compliance nicht prüfen
+
+**Option 3: Mehrstufige Validation (chosen)**
+- Good, because beste Abdeckung aller Fehlerklassen
+- Good, because Defense in Depth
+- Bad, because komplexere Implementierung
 
 ---
 

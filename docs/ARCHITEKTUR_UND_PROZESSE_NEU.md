@@ -80,14 +80,18 @@ graph TB
 | **Consistency Checker** | Multi-Level Validation | BSL-Compliance, Fehlererkennung | **BSL Validation** |
 | **Database Manager** | SQLite | Query-Ausführung, Paging, Caching | - |
 
-### BSL-Module (Details)
+### BSL-Sektionen (in generierter `credit_bsl.txt`)
 
-1. **IdentityRules** - CU vs CS Identifier System
-2. **AggregationPatterns** - GROUP BY vs ORDER BY + LIMIT Erkennung
-3. **BusinessLogicRules** - Financially Vulnerable, High-Risk, Digital Native
-4. **JoinChainRules** - Strikte Foreign-Key Chain Validierung
-5. **JSONFieldRules** - JSON-Extraktionsregeln und Tabellen-Qualifizierung
-6. **ComplexQueryTemplates** - Multi-Level Aggregation und CTE-Templates
+Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in einer Textdatei** gespeichert - nicht als separate Python-Module:
+
+1. **Identity System Rules** - CU vs CS Identifier System
+2. **Aggregation Patterns** - GROUP BY vs ORDER BY + LIMIT Erkennung
+3. **Business Logic Rules** - Financially Vulnerable, High-Risk, Digital Native
+4. **Join Chain Rules** - Strikte Foreign-Key Chain Validierung
+5. **JSON Field Rules** - JSON-Extraktionsregeln und Tabellen-Qualifizierung
+6. **Complex Query Templates** - Multi-Level Aggregation und CTE-Templates
+
+> **Hinweis**: Diese sind Textblöcke im generierten BSL-File (`credit_bsl.txt`), keine separaten `.py`-Dateien.
 
 ---
 
@@ -493,29 +497,28 @@ graph LR
 
 **Module im Detail:**
 
-1. **Intent Handling (LLM)** (`llm/generator.py`)
-   - Intent-Erkennung und Ambiguity Detection (kein separater Classifier)
+1. **Intent Handling & SQL Generator** (`llm/generator.py`)
+   - Intent-Erkennung und Ambiguity Detection (integriert, kein separater Classifier)
    - SQL-Hints-Generierung (Heuristiken + BSL)
-
-2. **BSL Builder** (`bsl_builder.py`)
-   - Modulare BSL-Generierung aus 6 Regel-Modulen
-   - Dynamische Regel-Extraktion aus Knowledge Base
-   - Integration von Column Meanings
-
-3. **SQL Generator** (`llm/generator.py`)
    - BSL-first SQL-Generierung
    - Intent-basierte Identifier-Logik
-   - Consistency-Integration
+   - BSL Compliance Checks (integriert)
 
-4. **Consistency Checker** (`utils/consistency_checker.py`)
-   - IdentifierConsistencyChecker: CU vs CS Validierung
-   - BSLConsistencyChecker: Umfassende BSL-Compliance
-   - JOIN-Chain-Validierung
+2. **BSL Builder** (`bsl_builder.py`)
+   - Generiert BSL als Textdatei mit 6 Regel-Sektionen
+   - Dynamische Regel-Extraktion aus Knowledge Base + Column Meanings
+   - Output: `credit_bsl.txt`
 
-5. **Database Manager** (`database/manager.py`)
+3. **Database Manager** (`database/manager.py`)
    - Query-Ausführung mit SQLite
    - Paging-Logik (LIMIT/OFFSET)
    - Session-Management für konsistentes Paging
+
+4. **SQL Guard** (`utils/sql_guard.py`)
+   - Safety-Validierung (nur SELECT erlaubt)
+   - Injection-Prevention
+
+> **Hinweis**: Es gibt kein separates `consistency_checker.py` oder `question_classifier.py` - diese Funktionalität ist in `llm/generator.py` integriert.
 
 ---
 
@@ -825,15 +828,17 @@ erDiagram
 **Consistency Checker Results:**
 - **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q5)
 - **JOIN Chain Validation**: 100% Korrektheit
-- **Aggregation Logic**: 100% Korrektheit  
+- **Aggregation Logic**: 100% Korrektheit
 - **BSL Compliance**: 98% Korrektheit
 - **Overall Success Rate**: 95% (9.5/10 Fragen)
 
 **Performance-Metriken:**
-- **Durchschnittliche Antwortzeit**: 3.2 Sekunden
+- **Durchschnittliche Antwortzeit**: ~3.2 Sekunden
 - **Token-Verbrauch**: ~32KB pro Query
 - **Cache-Hit-Rate**: 87% (Schema), 72% (BSL)
 - **Validation-Time**: <500ms für Consistency Checks
+
+> **Hinweis**: Die Consistency-Prüfung ist in `llm/generator.py` integriert, nicht als separates Modul.
 
 ---
 
@@ -960,6 +965,6 @@ Dieses Text2SQL System demonstriert moderne Software-Architektur-Prinzipien:
 
 Die Architektur ist bereit für Produktivierung mit den identifizierten Erweiterungen und Optimierungen.
 
-**Status**: Produktion-ready für Credit-DB Scope  
-**Version**: 3.0.0 (BSL-first mit modularen Regeln)  
+**Status**: Produktion-ready für Credit-DB Scope
+**Version**: 9.0.0 (BSL-first)
 **Nächste Meilensteine**: Multi-DB-Support, Performance-Optimierung, Security Hardening

@@ -350,7 +350,7 @@ Backend: http://localhost:8000
 
 ## 📖 Dokumentation
 
-- **[Architecture](./docs/ARCHITEKTUR_UND_PROZESSE.md)** - Detaillierte Systemarchitektur
+- **[Architecture](./docs/ARCHITEKTUR_UND_PROZESSE_NEU.md)** - Detaillierte Systemarchitektur
 
 ## 🧑‍💼 Team
 

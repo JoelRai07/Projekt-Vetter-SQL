@@ -40,13 +40,15 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 5. **Consistency Validation** - 3-Level (Safety + Semantics + BSL)
 6. **Query Execution** - Mit Paging + Sessions
 
-### BSL-Module (6 Stück)
-1. **IdentityRules** - CU vs CS Identifier System
-2. **AggregationPatterns** - GROUP BY vs ORDER BY + LIMIT
-3. **BusinessLogicRules** - Financially Vulnerable, High-Risk, etc.
-4. **JoinChainRules** - Strikte Foreign-Key Chain
-5. **JSONFieldRules** - JSON-Extraktionsregeln
-6. **ComplexQueryTemplates** - Multi-Level Aggregation, CTEs
+### BSL-Sektionen (in generierter `credit_bsl.txt`)
+1. **Identity System Rules** - CU vs CS Identifier System
+2. **Aggregation Patterns** - GROUP BY vs ORDER BY + LIMIT
+3. **Business Logic Rules** - Financially Vulnerable, High-Risk, etc.
+4. **Join Chain Rules** - Strikte Foreign-Key Chain
+5. **JSON Field Rules** - JSON-Extraktionsregeln
+6. **Complex Query Templates** - Multi-Level Aggregation, CTEs
+
+> **Hinweis**: Diese sind Textblöcke im generierten BSL-File, keine separaten `.py`-Dateien.
 
 ---
 
@@ -211,19 +213,20 @@ Zeige wie query_id für Paging funktioniert
 |------------|-------------|------------------|
 | **Frontend** | React | Nutzer-Interface, Frage-Input, Ergebnisanzeige |
 | **Backend API** | FastAPI | Anfrage-Koordination, Pipeline-Orchestrierung |
-| **Question Classifier** | Python | Intent-Erkennung, SQL-Hints-Generierung |
 | **BSL Builder** | Python | Business Semantics Layer Generierung aus KB |
-| **SQL Generator** | OpenAI GPT-5.2 | SQL-Generierung mit BSL-Compliance |
-| **Consistency Checker** | Python | Identifier-Konsistenz, JOIN-Validierung |
+| **SQL Generator** | OpenAI GPT-5.2 | SQL-Generierung mit BSL-Compliance + Intent-Erkennung |
+| **SQL Guard** | Python | Safety-Validierung, Injection-Prevention |
 | **Database Manager** | SQLite | Query-Ausführung, Paging, Caching |
+
+> **Hinweis**: Intent-Erkennung und Consistency Checks sind in `llm/generator.py` integriert, nicht als separate Module.
 
 ### 6-Phasen Pipeline
 
 1. **Context Loading** - Schema, Knowledge Base, Meanings, BSL laden
-2. **Question Classification** - Intent-Erkennung mit GenericQuestionClassifier
-3. **BSL-Generierung** - 6 modulare Regel-Module
+2. **Intent-Erkennung** - Integriert im SQL-Generator (kein separater Classifier)
+3. **BSL-Generierung** - 6 Regel-Sektionen in generierter Textdatei
 4. **SQL-Generierung** - BSL-first mit Intent-Integration
-5. **Consistency Validation** - Identifier, JOIN, Aggregation Validierung
+5. **Consistency Validation** - Identifier, JOIN, Aggregation (integriert in Generator)
 6. **Query Execution** - Mit Paging und Session-Management
 
 ### Datenfluss
@@ -341,30 +344,27 @@ erDiagram
 
 **Module im Detail:**
 
-1. **Question Classifier** (`utils/question_classifier.py`)
-   - Intent-Erkennung mit GenericQuestionClassifier
-   - SQL-Hints-Generierung basierend auf Question Intent
-   - Ambiguity Detection
+1. **BSL Builder** (`bsl_builder.py`)
+   - Generiert BSL als Textdatei mit 6 Regel-Sektionen
+   - Dynamische Regel-Extraktion aus Knowledge Base + Column Meanings
+   - Output: `credit_bsl.txt`
 
-2. **BSL Builder** (`bsl_builder.py`)
-   - Modulare BSL-Generierung aus 6 Regel-Modulen
-   - Dynamische Regel-Extraktion aus Knowledge Base
-   - Integration von Column Meanings
-
-3. **SQL Generator** (`llm/generator.py`)
+2. **SQL Generator** (`llm/generator.py`)
    - BSL-first SQL-Generierung
+   - Integrierte Intent-Erkennung und Ambiguity Detection
+   - BSL Compliance Checks
    - Intent-basierte Identifier-Logik
-   - Consistency-Integration
 
-4. **Consistency Checker** (`utils/consistency_checker.py`)
-   - IdentifierConsistencyChecker: CU vs CS Validierung
-   - BSLConsistencyChecker: Umfassende BSL-Compliance
-   - JOIN-Chain-Validierung
+3. **SQL Guard** (`utils/sql_guard.py`)
+   - Safety-Validierung (nur SELECT erlaubt)
+   - Injection-Prevention
 
-5. **Database Manager** (`database/manager.py`)
+4. **Database Manager** (`database/manager.py`)
    - Query-Ausführung mit SQLite
    - Paging-Logik (LIMIT/OFFSET)
    - Session-Management für konsistentes Paging
+
+> **Hinweis**: Es gibt kein separates `question_classifier.py` oder `consistency_checker.py` - diese Funktionalität ist in `llm/generator.py` integriert.
 
 ---
 
