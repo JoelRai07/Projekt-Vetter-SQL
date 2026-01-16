@@ -265,8 +265,8 @@ core_record → employment_and_income → expenses_and_assets
 **Fehler**: Falsch interpretierte SQL
 **Lösung**: Ambiguity Detection aktiviert - System fragt nach
 
-### Problem 5: Token-Kosten
-**Issue**: Vollständiges Schema (~32 KB pro Request)
+### Problem 5: Inkosistenzen bei den Ausgaben
+**Issue**: Vollständiges Schema + Prompt = Oversaturated LLM
 **Lösung**: BSL-first Architektur (explizite Regeln, deterministisch)
 
 ## 🔒 Sicherheit
@@ -356,7 +356,7 @@ Backend: http://localhost:8000
 
 - **Tim Kühne** - Project Lead, Backend Architecture
 - **Dominik Ruoff** - LLM Integration, Database
-- **Joel Martinez** - Frontend, UX/UI, Backend
+- **Joel Martinez** - Frontend, UX/UI, Backend, LLM Integration
 - **Umut Polat** - Prompting, SQL Optimization
 - **Sören Frank** - DevOps, Testing, Documentation
 
@@ -383,6 +383,7 @@ Backend: http://localhost:8000
 - ⚠️ Migration von RAG/ReAct zu BSL-first (Architektur-Entscheidung)
 - ⚠️ BSL-Regeln müssen explizit dokumentiert werden
 - ⚠️ Kontinuierlicher Self-Correction-Loop
+- ⚠️ Korrupte Vector_Store - Datenbank
 
 
 ### Nächste Schritte
@@ -397,5 +398,5 @@ Backend: http://localhost:8000
 Dieses Projekt dient ausschließlich zu Studienzwecken an der DHBW Stuttgart.
 
 **Letztes Update**: January 2026  
-**Status**: In aktiver Entwicklung  
+**Status**: In aktiver Entwicklung (Voraussichtlicher Abschluss: 30.1.2026)  
 **Version**: X.0.0
