@@ -66,20 +66,18 @@ Mit diesem Projekt helfen wir Unternehmen dabei, **data-driven** zu werden, inde
 ```bash
 Python 3.11+
 pip / conda
-OpenAI API Key (oder Claude)
+node.js
+OpenAI API Key
 ```
 
 ### Installation
 
 ```bash
 # 1. Repository klonen
-git clone https://github.com/YourTeam/ChatWithYourData.git
-cd ChatWithYourData
+git clone 
 
 # 2. Backend Setup
 cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # 3. Environment Variables
@@ -93,11 +91,12 @@ npm install
 # 5. Starten
 # Terminal 1 (Backend)
 cd backend
-uvicorn main:app --reload --port 8000
+python bsl_builder.py
+python main.py
 
 # Terminal 2 (Frontend)
 cd frontend
-npm start
+npm dev run
 ```
 
 ### Test
@@ -126,10 +125,10 @@ npm start
 │                          │                             │
 │                          ↓                             │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │ 2. SQL Generation (BSL-first)                    │   │
-│  │    → Business Semantics Layer (BSL)              │   │
-│  │    → Vollständiges Schema + Meanings + BSL       │   │
-│  │    → Explizite Business Rules                    │   │
+│  │ 2. SQL Generation (BSL-first)                   │   │
+│  │    → Business Semantics Layer (BSL)             │   │
+│  │    → Vollständiges Schema + Meanings + BSL      │   │
+│  │    → Explizite Business Rules                   │   │
 │  │    → Temperature=0 für Determinismus            │   │
 │  └─────────────────────────────────────────────────┘   │
 │                          │                             │
@@ -357,7 +356,7 @@ Backend: http://localhost:8000
 
 - **Tim Kühne** - Project Lead, Backend Architecture
 - **Dominik Ruoff** - LLM Integration, Database
-- **Joel Martinez** - Frontend, UX/UI
+- **Joel Martinez** - Frontend, UX/UI, Backend
 - **Umut Polat** - Prompting, SQL Optimization
 - **Sören Frank** - DevOps, Testing, Documentation
 
@@ -399,4 +398,4 @@ Dieses Projekt dient ausschließlich zu Studienzwecken an der DHBW Stuttgart.
 
 **Letztes Update**: January 2026  
 **Status**: In aktiver Entwicklung  
-**Version**: 5.0.0
+**Version**: 9.0.0
