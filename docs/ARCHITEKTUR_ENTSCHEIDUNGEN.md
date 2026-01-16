@@ -195,7 +195,7 @@ Die SQL-Generierung enthielt hartcodierte Methoden für spezifische Frage-Typen 
 
 ### Decision Outcome
 Chosen option: **Dynamische Intent-basierte Erkennung**, because:
-- Kompatibel mit GenericQuestionClassifier
+- Kompatibel mit LLM-basierter Intent-Erkennung im SQL-Generator
 - Keine spezifischen Frage-Typen hartcodiert
 - Automatische Anpassung an neue Intent-Typen
 - Akademisch saubere Lösung
@@ -317,7 +317,7 @@ Die aktuelle Architektur ist das Ergebnis der oben dokumentierten Entscheidungen
 |------------|-------------|------------------|--------------|
 | **Frontend** | React 18+ | Nutzer-Interface, API-Kommunikation | - |
 | **Backend API** | FastAPI | Anfrage-Koordination, Pipeline-Orchestrierung | - |
-| **Question Classifier** | GenericQuestionClassifier | Intent-Erkennung, SQL-Hints-Generierung | ADR-004 |
+| **Intent Handling** | LLM (SQL Generator) | Intent-Erkennung, Ambiguity Detection, SQL-Hints | ADR-003 |
 | **BSL Builder** | Monolitisch | Business Semantics Layer Generierung | ADR-002 / ADR-005 |
 | **SQL Generator** | OpenAI GPT-5.2 | BSL-first SQL-Generierung | ADR-002 |
 | **Consistency Checker** | Multi-Level Validation | BSL-Compliance, Fehlererkennung | ADR-005 |
@@ -442,7 +442,7 @@ und enthaelt die wichtigsten Business Rules.
    - Klare Fehlerquellen bei Abweichungen
 
 3. **Wartbarkeit & Einfachheit**
-   - Modulare BSL-Architektur (6 separate Module)
+   - BSL-Architektur 
    - Weniger Dependencies (kein ChromaDB, LangChain)
    - Einfache Erweiterbarkeit um neue Regeln
 
@@ -635,7 +635,7 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
    - Entfernt: ChromaDB-Abhaengigkeiten
    - Entfernt: Vector Store Dateien (`vector_store/`)
 
-4. **Code-Aenderungen**
+4. **Code-Änderungen**
    - `main.py`: Routing-Logik entfernt, BSL wird geladen
    - `llm/generator.py`: `generate_sql()` verwendet BSL statt RAG
    - `llm/prompts.py`: SQL-Generation-Prompt verwendet BSL-first (Prompt vereinfacht)
@@ -647,7 +647,7 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
    - Neu: `backend/bsl_builder.py` (BSL-Generator)
    - Neu: `backend/mini-interact/credit/credit_bsl.txt` (generierte BSL)
    - Neu: BSL-Loading in `utils/context_loader.py`
-   - Neu: BSL im SQL-Generation-Prompt (hoechste Prioritaet)
+   - Neu: BSL im SQL-Generation-Prompt (hoechste Priorität)
 
 2. **Context Loading**
    - Änderung: BSL wird geladen (zusätzlich zu Schema, Meanings, KB)

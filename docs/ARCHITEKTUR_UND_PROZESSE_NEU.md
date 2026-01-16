@@ -40,7 +40,7 @@ graph TB
     end
     
     subgraph "Backend Layer"
-        API --> |Pipeline| QC[Question Classifier]
+        API --> |Pipeline| QC[Intent Handling (LLM)]
         API --> |Pipeline| BB[BSL Builder]
         API --> |Pipeline| SG[SQL Generator]
         API --> |Pipeline| CC[Consistency Checker]
@@ -74,7 +74,7 @@ graph TB
 |------------|-------------|------------------|------------------|
 | **Frontend** | React 18+ | Nutzer-Interface, Frage-Input, Ergebnisanzeige | - |
 | **Backend API** | FastAPI | Anfrage-Koordination, Pipeline-Orchestrierung | - |
-| **Question Classifier** | GenericQuestionClassifier | Intent-Erkennung, SQL-Hints-Generierung | Verwendet BSL für Intent-Mapping |
+| **Intent Handling** | LLM (SQL Generator) | Intent-Erkennung, SQL-Hints-Generierung, Ambiguity Detection | BSL-first Prompting |
 | **BSL Builder** | Modular (6 Module) | Business Semantics Layer Generierung | **Kernkomponente** |
 | **SQL Generator** | OpenAI GPT-5.2 | BSL-first SQL-Generierung | **BSL-first Prompting** |
 | **Consistency Checker** | Multi-Level Validation | BSL-Compliance, Fehlererkennung | **BSL Validation** |
@@ -176,7 +176,7 @@ Die SQL-Generierung enthielt hartcodierte Methoden für spezifische Frage-Typen.
 
 #### Decision Outcome
 Chosen option: **Dynamische Intent-basierte Erkennung**, because:
-- Kompatibel mit GenericQuestionClassifier
+- Kompatibel mit LLM-basierter Intent-Erkennung im SQL-Generator
 - Keine spezifischen Frage-Typen hartcodiert
 - Automatische Anpassung an neue Intent-Typen
 
@@ -249,22 +249,16 @@ Der Backend lädt vier Kontextdokumente parallel:
    - **Caching**: TTL-Cache (1 Stunde)
    - **Format**: Plain-Text (`credit_bsl.txt`)
 
-### Phase 2: Question Classification
+### Phase 2: Intent Handling (LLM)
 
-**Schritt 2.1: Intent-Erkennung**
+**Schritt 2.1: Intent-Erkennung (im SQL Generator)**
 ```
 Input: "Zeige mir Kunden mit hoher Schuldenlast nach Segment"
 
-GenericQuestionClassifier analysiert:
-- primary_intent: "aggregation"
-- entities: ["Schuldenlast", "Segment"]
-- metrics: ["debincratio"]
-- group_by: ["clientseg"]
-- sql_hints: {
-    "requires_group_by": true,
-    "identifier_type": "CS",
-    "business_rules": ["Financially Vulnerable"]
-}
+LLM (SQL Generator) nutzt BSL + Schema:
+- erkennt Aggregationsbedarf ("nach Segment")
+- erzeugt GROUP BY passend zur Segmentierung
+- wendet passende BSL-Regeln an
 ```
 
 **Schritt 2.2: Ambiguity Detection (parallel)**
@@ -473,7 +467,7 @@ graph LR
     end
     
     subgraph "Processing Pipeline"
-        CLASS[Question Classifier]
+        CLASS[Intent Handling (LLM)]
         BSL[BSL Builder]
         GEN[SQL Generator]
         VAL[Consistency Checker]
@@ -499,10 +493,9 @@ graph LR
 
 **Module im Detail:**
 
-1. **Question Classifier** (`utils/question_classifier.py`)
-   - Intent-Erkennung mit GenericQuestionClassifier
-   - SQL-Hints-Generierung basierend auf Question Intent
-   - Ambiguity Detection
+1. **Intent Handling (LLM)** (`llm/generator.py`)
+   - Intent-Erkennung und Ambiguity Detection (kein separater Classifier)
+   - SQL-Hints-Generierung (Heuristiken + BSL)
 
 2. **BSL Builder** (`bsl_builder.py`)
    - Modulare BSL-Generierung aus 6 Regel-Modulen
