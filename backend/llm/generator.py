@@ -14,10 +14,16 @@ from openai import (
 class OpenAIGenerator:
     """Handhabt alle LLM-Interaktionen mit OpenAI/ChatGPT"""
 
+    # ---------------------------
+    # Initialization
+    # ---------------------------
     def __init__(self, api_key: str, model_name: str):
         self.client = OpenAI(api_key=api_key)
         self.model_name = model_name
 
+    # ---------------------------
+    # OpenAI call wrapper
+    # ---------------------------
     def _call_openai(self, system_instruction: str, prompt: str) -> str:
         """Generischer OpenAI ChatCompletion Call"""
         try:
@@ -48,6 +54,9 @@ class OpenAIGenerator:
                 ) from e
             raise
 
+    # ---------------------------
+    # JSON parsing and result shaping
+    # ---------------------------
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
         """Parse JSON Response und entferne Markdown - sehr robust"""
         cleaned = response.replace("```json", "").replace("```", "").strip()
@@ -109,6 +118,26 @@ class OpenAIGenerator:
 
             raise
 
+    def _ensure_generation_fields(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Validiert, dass wichtige Felder in der SQL-Generierung vorhanden sind."""
+        ensured = result.copy()
+        ensured.setdefault("thought_process", "")
+        ensured.setdefault("explanation", "")
+
+        # confidence in Float casten, falls möglich
+        try:
+            ensured["confidence"] = float(ensured.get("confidence", 0.0))
+        except (TypeError, ValueError):
+            ensured["confidence"] = 0.0
+
+        if "sql" not in ensured:
+            ensured["sql"] = None
+
+        return ensured
+
+    # ---------------------------
+    # BSL helpers
+    # ---------------------------
     def _extract_bsl_overrides(self, bsl_text: str) -> str:
         """Extract manual BSL overrides section, if present."""
         marker = "# BSL OVERRIDES (MANUAL)"
@@ -116,15 +145,9 @@ class OpenAIGenerator:
             return ""
         return bsl_text.split(marker, 1)[1].strip()
 
-    def _has_explicit_time_range(self, question: str) -> bool:
-        """Detect explicit time ranges (years/quarters) in the question."""
-        q = question.lower()
-        if re.search(r"\b(19|20)\d{2}\b", q):
-            return True
-        if re.search(r"\bq[1-4]\b", q):
-            return True
-        return False
-
+    # ---------------------------
+    # SQL utilities
+    # ---------------------------
     def _contains_param_placeholders(self, sql: str) -> bool:
         """Detect SQL parameter placeholders which are not supported by execution."""
         if not sql:
@@ -206,6 +229,18 @@ SELECT * FROM {wrapper_cte_name}
 
         return fixed_sql
 
+    # ---------------------------
+    # Question pattern helpers
+    # ---------------------------
+    def _has_explicit_time_range(self, question: str) -> bool:
+        """Detect explicit time ranges (years/quarters) in the question."""
+        q = question.lower()
+        if re.search(r"\b(19|20)\d{2}\b", q):
+            return True
+        if re.search(r"\bq[1-4]\b", q):
+            return True
+        return False
+
     def _is_property_leverage_question(self, question: str) -> bool:
         q = question.lower()
         if any(k in q for k in ["property leverage", "mortgage ratio", "loan-to-value", "ltv"]):
@@ -217,18 +252,6 @@ SELECT * FROM {wrapper_cte_name}
     def _is_digital_engagement_cohort_question(self, question: str) -> bool:
         q = question.lower()
         return ("cohort" in q and "engagement" in q and "digital" in q)
-
-    def _is_credit_classification_details_question(self, question: str) -> bool:
-        q = question.lower()
-        if "credit" not in q:
-            return False
-        if "classification" not in q and "category" not in q:
-            return False
-        if "detail" not in q:
-            return False
-        if any(k in q for k in ["count", "average", "avg", "summary", "how many", "percentage"]):
-            return False
-        return True
 
     def _has_explicit_detail_fields(self, question: str) -> bool:
         q = question.lower()
@@ -248,6 +271,18 @@ SELECT * FROM {wrapper_cte_name}
         ]
         return any(k in q for k in explicit_fields)
 
+    def _is_credit_classification_details_question(self, question: str) -> bool:
+        q = question.lower()
+        if "credit" not in q:
+            return False
+        if "classification" not in q and "category" not in q:
+            return False
+        if "detail" not in q:
+            return False
+        if any(k in q for k in ["count", "average", "avg", "summary", "how many", "percentage"]):
+            return False
+        return True
+
     def _is_credit_classification_summary_question(self, question: str) -> bool:
         q = question.lower()
         if "credit" not in q:
@@ -257,6 +292,9 @@ SELECT * FROM {wrapper_cte_name}
         # Default to summary when details are not explicitly listed
         return not self._has_explicit_detail_fields(question)
 
+    # ---------------------------
+    # BSL compliance regeneration
+    # ---------------------------
     def _bsl_compliance_instruction(self, question: str, sql: str) -> str | None:
         sql_lower = sql.lower()
         instructions = []
@@ -357,23 +395,9 @@ Regenerate the SQL to comply with the BSL. Output JSON as required.
             result["explanation"] = "BSL compliance regeneration"
         return result
 
-    def _ensure_generation_fields(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """Validiert, dass wichtige Felder in der SQL-Generierung vorhanden sind."""
-        ensured = result.copy()
-        ensured.setdefault("thought_process", "")
-        ensured.setdefault("explanation", "")
-
-        # confidence in Float casten, falls möglich
-        try:
-            ensured["confidence"] = float(ensured.get("confidence", 0.0))
-        except (TypeError, ValueError):
-            ensured["confidence"] = 0.0
-
-        if "sql" not in ensured:
-            ensured["sql"] = None
-
-        return ensured
-
+    # ---------------------------
+    # Public API: ambiguity + SQL generation
+    # ---------------------------
     def check_ambiguity(self, question: str, schema: str, kb: str, meanings: str) -> Dict[str, Any]:
         """Prüft ob die Frage mehrdeutig ist"""
         prompt = f"""
@@ -499,39 +523,9 @@ Validiere die Query.
                 "suggestions": []
             }
 
-    def summarize_results(
-        self,
-        question: str,
-        generated_sql: str,
-        results: Any,
-        row_count: int,
-        notice: Optional[str] = None,
-    ) -> str:
-        """Erzeugt eine Kurz-Zusammenfassung der Abfrageergebnisse."""
-
-        sample_rows = results[:3] if isinstance(results, list) else []
-        prompt = f"""
-NUTZER-FRAGE:
-{question}
-
-GENERIERTE SQL:
-{generated_sql}
-
-ANZAHL ZEILEN: {row_count}
-HINWEIS: {notice or 'keiner'}
-
-ERSTE ZEILEN (JSON):
-{json.dumps(sample_rows, ensure_ascii=False)}
-
-Fasse die wichtigsten Erkenntnisse kurz zusammen.
-"""
-
-        try:
-            return self._call_openai(SystemPrompts.RESULT_SUMMARY, prompt)
-        except Exception as e:
-            print(f"⚠️  Zusammenfassung fehlgeschlagen: {str(e)}")
-            raise
-    
+    # ---------------------------
+    # Public API: correction loop
+    # ---------------------------
     def generate_sql_with_correction(
         self,
         question: str,
@@ -608,3 +602,40 @@ Korrigiere die SQL-Query basierend auf den Fehlern.
             "explanation": "SQL-Generierung nach mehreren Versuchen fehlgeschlagen.",
             "confidence": 0.0
         }
+
+    # ---------------------------
+    # Public API: result summarization
+    # ---------------------------
+    def summarize_results(
+        self,
+        question: str,
+        generated_sql: str,
+        results: Any,
+        row_count: int,
+        notice: Optional[str] = None,
+    ) -> str:
+        """Erzeugt eine Kurz-Zusammenfassung der Abfrageergebnisse."""
+
+        sample_rows = results[:3] if isinstance(results, list) else []
+        prompt = f"""
+NUTZER-FRAGE:
+{question}
+
+GENERIERTE SQL:
+{generated_sql}
+
+ANZAHL ZEILEN: {row_count}
+HINWEIS: {notice or 'keiner'}
+
+ERSTE ZEILEN (JSON):
+{json.dumps(sample_rows, ensure_ascii=False)}
+
+Fasse die wichtigsten Erkenntnisse kurz zusammen.
+"""
+
+        try:
+            return self._call_openai(SystemPrompts.RESULT_SUMMARY, prompt)
+        except Exception as e:
+            print(f"⚠️  Zusammenfassung fehlgeschlagen: {str(e)}")
+            raise
+    
