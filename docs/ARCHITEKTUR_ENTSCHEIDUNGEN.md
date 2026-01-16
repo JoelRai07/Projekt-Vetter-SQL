@@ -171,63 +171,8 @@ Chosen option: **BSL-first Single-Database**, because:
 
 ---
 
-## ADR-003: Modularisierung der BSL-Regeln
 
-**Status**: accepted  
-**Deciders**: Projektteam  
-**Date**: 2025-01-14  
-**Technical Story**: Refactoring für Wartbarkeit und Testbarkeit
-
-### Context and Problem Statement
-Die initiale BSL-Generierung war monolithisch in einer 595-Zeilen-Datei implementiert. Dies führte zu:
-- Schwer wartbarem Code mit gemischten Verantwortlichkeiten
-- Nicht testbaren Einzelkomponenten
-- Schwieriger Erweiterbarkeit um neue Regel-Typen
-- Verletzung von Single-Responsibility-Prinzip
-
-### Decision Drivers
-1. **Maintainability**: Klare Trennung von Verantwortlichkeiten
-2. **Testability**: Unabhängige Tests pro Regel-Typ
-3. **Extensibility**: Einfache Erweiterung um neue Regel-Typen
-4. **Code Quality**: SOLID-Prinzipien und Clean Code
-5. **Academic Standards**: Nachvollziehbare Software-Architektur
-
-### Considered Options
-**Option 1: Monolith beibehalten**
-- Good: Einfache Struktur, funktioniert
-- Bad: Schwer wartbar, nicht testbar, schlecht erweiterbar
-
-**Option 2: Modularisierung (chosen)**
-- Good: Klar getrennte Module, testbar, erweiterbar, SOLID-konform
-- Bad: Leicht höhere Komplexität durch Imports
-
-**Option 3: Plugin-Architektur**
-- Good: Maximale Flexibilität, dynamische Ladbarkeit
-- Bad: Over-engineering für aktuellen Scope
-
-### Decision Outcome
-Chosen option: **Modularisierung**, because:
-- Bessere Software-Engineering-Prinzipien
-- Unabhängige Tests und Wartung möglich
-- Klare Verantwortlichkeiten pro Modul
-- Akademisch verteidigbare Architektur
-- Ausreichend für aktuellen Scope
-
-### Positive Consequences
-- **6 separate Regel-Module**: Identity, Aggregation, Business Logic, Join Chain, JSON Fields, Complex Templates
-- **Unabhängige Tests**: Pro Modul isoliert testbar
-- **Einfache Erweiterbarkeit**: Neue Regel-Typen leicht hinzufügbar
-- **Bessere Code-Qualität**: SOLID-Prinzipien eingehalten
-- **Klare Dokumentation**: Pro Modul eigenständig dokumentiert
-
-### Negative Consequences
-- Leicht höhere Komplexität durch Import-Struktur
-- Mehr Dateien im Projekt
-- Initialer Refactoring-Aufwand
-
----
-
-## ADR-004: Eliminierung von Hardcoding in SQL-Generierung
+## ADR-003: Eliminierung von Hardcoding in SQL-Generierung
 
 **Status**: accepted  
 **Deciders**: Projektteam  
@@ -258,7 +203,7 @@ Chosen option: **Dynamische Intent-basierte Erkennung**, because:
 
 ---
 
-## ADR-005: Implementierung von Consistency Validation
+## ADR-004: Implementierung von Consistency Validation
 
 **Status**: accepted  
 **Deciders**: Projektteam  
@@ -288,7 +233,7 @@ Chosen option: **Mehrstufige Consistency Validation**, because:
 
 ---
 
-**BSL-Loesung**:
+**BSL-Lösung**:
 - **Explizite Regeln**: BSL macht fachliche Regeln explizit und auditierbar
 - **Reproduzierbar**: Gleiche Frage + gleicher BSL = gleiche SQL (deterministisch)
 - **Nachvollziehbar**: Regeln sind in Plain-Text dokumentiert, nicht in Embeddings
@@ -311,18 +256,18 @@ Chosen option: **Mehrstufige Consistency Validation**, because:
   - ReAct-Loop-Logik
   - Vector Store Management
   - Embedding-Generierung
-- **Fehlerquellen**: Mehr Komponenten = mehr Moeglichkeiten fuer Fehler
+- **Fehlerquellen**: Mehr Komponenten = mehr Möglichkeiten fuer Fehler
 
-**BSL-Loesung**:
+**BSL-Lösung**:
 - **Einfache Dateien**: BSL ist Plain-Text (`credit_bsl.txt`), leicht zu editieren
-- **Keine Dependencies**: Kein Vector Store, keine LangChain-Abhaengigkeiten
+- **Keine Dependencies**: Kein Vector Store, keine LangChain-Abhängigkeiten
 - **Direkter Flow**: Schema + Meanings + BSL → SQL (einfacher zu verstehen)
 - **Wartbarkeit**: BSL-Regeln koennen direkt editiert werden, keine Re-Indexierung
 
 **Architektur-Perspektive**:
 - **Simplicity**: Einfache Architekturen sind wartbarer
 - **Maintainability**: Weniger Komponenten = weniger Maintenance-Overhead
-- **Reliability**: Weniger Failure Points = hoehere Zuverlaessigkeit
+- **Reliability**: Weniger Failure Points = hoehere Zuverlässigkeit
 
 ### 4) BSL als besserer Ansatz
 
@@ -373,7 +318,7 @@ Die aktuelle Architektur ist das Ergebnis der oben dokumentierten Entscheidungen
 | **Frontend** | React 18+ | Nutzer-Interface, API-Kommunikation | - |
 | **Backend API** | FastAPI | Anfrage-Koordination, Pipeline-Orchestrierung | - |
 | **Question Classifier** | GenericQuestionClassifier | Intent-Erkennung, SQL-Hints-Generierung | ADR-004 |
-| **BSL Builder** | Modular (6 Module) | Business Semantics Layer Generierung | ADR-003 |
+| **BSL Builder** | Monolitisch | Business Semantics Layer Generierung | ADR-002 / ADR-005 |
 | **SQL Generator** | OpenAI GPT-5.2 | BSL-first SQL-Generierung | ADR-002 |
 | **Consistency Checker** | Multi-Level Validation | BSL-Compliance, Fehlererkennung | ADR-005 |
 | **Database Manager** | SQLite | Query-Ausführung, Paging, Sessions | - |
@@ -448,7 +393,7 @@ und enthaelt die wichtigsten Business Rules.
 1. **Identity System Rules** (kritisch!)
    - Customer ID (CS/coreregistry) vs Client Reference (CU/clientref)
    - Wann welcher Identifier verwendet wird
-   - Das haeufigste Problem im System
+   - Das häufigste Problem im System
 2. **Aggregation Detection Rules**
    - Wann GROUP BY (Aggregation)
    - Wann ORDER BY + LIMIT (Ranking)
@@ -472,7 +417,7 @@ und enthaelt die wichtigsten Business Rules.
 - Tool: `backend/bsl_builder.py`
 - Input: KB (JSONL) + Meanings (JSON) + Schema (optional)
 - Output: `backend/mini-interact/credit/credit_bsl.txt` (Plain-Text)
-- Manual Overrides: Eingebettet in `bsl_builder.py` (z.B. "digital native" Mapping)
+- Mapping: Eingebettet in `bsl_builder.py` (z.B. "digital native" Mapping)
 
 **BSL im Prompt**:
 - BSL wird **zuerst** im Prompt platziert (hoechste Prioritaet)
@@ -568,17 +513,17 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
 ### Validierungs-Performance
 
 **Consistency Checker Results:**
-- **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q5)
+- **Identifier Consistency**: 80% Korrektheit (Fehler bei Q5 und Q10)
 - **JOIN Chain Validation**: 100% Korrektheit
 - **Aggregation Logic**: 100% Korrektheit  
 - **BSL Compliance**: 98% Korrektheit
-- **Overall Success Rate**: 95% (9.5/10 Fragen)
+- **Overall Success Rate**: 80% 
 
 **Performance-Metriken:**
-- **Durchschnittliche Antwortzeit**: 3.2 Sekunden
-- **Token-Verbrauch**: ~32KB pro Query
+- **Durchschnittliche Antwortzeit**: 17 Sekunden
+- **Token-Verbrauch**: Muss noch berechnet werden
 - **Cache-Hit-Rate**: 87% (Schema), 72% (BSL)
-- **Validation-Time**: <500ms für Consistency Checks
+- **Validation-Time**: Muss noch berechnet werden
 
 ---
 
@@ -603,7 +548,6 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
    - Audit Logging für Compliance
 
 4. **Monitoring & Observability**
-   - Structured Logging (JSON)
    - Performance Metrics (Response Time, Token Usage)
    - Error Tracking und Alerting
 
@@ -640,17 +584,17 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
 
 ### Was gut funktioniert hat
 1. **Frühes Professor-Feedback**: BSL-Ansatz war entscheidend für Erfolg
-2. **Modulare Architektur**: BSL-Module machen Wartung und Testing einfach
-3. **Deterministische Ergebnisse**: Reproduzierbarkeit für Evaluation entscheidend
-4. **Explicit over Implicit**: BSL-Regeln sind besser als implizite Embeddings
-5. **Scope-Fit**: Single-DB-Fokus vermeidet Over-Engineering
+2. **Deterministische Ergebnisse**: Reproduzierbarkeit für Evaluation entscheidend
+3. **Explicit over Implicit**: BSL-Regeln sind besser als implizite Embeddings
+4. **Scope-Fit**: Single-DB-Fokus vermeidet Over-Engineering
 
 ### Was wir anders machen würden
 1. **Frühere Unit-Tests**: Pro BSL-Modul von Anfang an testen
 2. **Performance-Monitoring**: Token-Verbrauch und Response Times früher tracken
 3. **Error Handling**: Robustere Fehlerbehandlung von Anfang an
 4. **CI/CD Pipeline**: Automatisiertes Testing und Deployment
-5. **Dokumentation**: Kontinuierliche Dokumentation statt nachträglicher Aufarbeitung
+5. **Bessere Evaluation**: Evaluierung aller möglichen Ansätze von beginn an
+6. **Dokumentation**: Kontinuierliche Dokumentation statt nachträglicher Aufarbeitung
 
 ### Academic Takeaways
 1. **Architecture Decision Records**: MADR-Format für akademische Verteidigung
@@ -662,8 +606,8 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
 
 **Letztes Update**: Januar 2026  
 **Status**: Produktion-ready für Credit-DB Scope  
-**Version**: 3.0.0 (BSL-first mit modularen Regeln)  
-**Nächste Meilensteine**: Multi-DB-Support, Performance-Optimierung, Security Hardening
+**Version**: 9.0.0
+**Nächste Meilensteine**: Multi-DB-Support, Performance-Optimierung, Security Hardening, Rückfragen möglichkeit
 
 ---
 
@@ -693,7 +637,7 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
 4. **Code-Aenderungen**
    - `main.py`: Routing-Logik entfernt, BSL wird geladen
    - `llm/generator.py`: `generate_sql()` verwendet BSL statt RAG
-   - `llm/prompts.py`: SQL-Generation-Prompt verwendet BSL-first
+   - `llm/prompts.py`: SQL-Generation-Prompt verwendet BSL-first (Prompt vereinfacht)
    - `utils/context_loader.py`: BSL wird geladen (`load_context_files()`)
 
 ### Neue Komponenten
@@ -705,8 +649,8 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
    - Neu: BSL im SQL-Generation-Prompt (hoechste Prioritaet)
 
 2. **Context Loading**
-   - Aenderung: BSL wird geladen (zusätzlich zu Schema, Meanings, KB)
-   - Aenderung: KB wird nicht mehr in SQL-Prompts verwendet (nur Ambiguity Detection)
+   - Änderung: BSL wird geladen (zusätzlich zu Schema, Meanings, KB)
+   - Änderung: KB wird nicht mehr in SQL-Prompts verwendet (nur Ambiguity Detection)
 
 ### Code-Beispiele
 
@@ -756,7 +700,7 @@ sql = generate_sql(question, schema, meanings, bsl)  # Direkt, kein ReAct
 
 | Kriterium | Alte Architektur | Neue Architektur | Gewinner |
 |-----------|------------------|------------------|----------|
-| **Komplexitaet** | Hoch (Routing + ReAct + RAG) | Niedrig (BSL-first) | Neue |
+| **Komplexität** | Hoch (Routing + ReAct + RAG) | Niedrig (BSL-first) | Neue |
 | **Stabilitaet** | Niedrig (nicht-deterministisch) | Hoch (deterministisch) | Neue |
 | **Wartbarkeit** | Niedrig (viele Dependencies) | Hoch (einfache Dateien) | Neue |
 | **Token-Kosten** | Niedrig (~2 KB pro Prompt) | Hoch (~32 KB pro Prompt) | Alte |
@@ -766,40 +710,41 @@ sql = generate_sql(question, schema, meanings, bsl)  # Direkt, kein ReAct
 | **Professor-Feedback** | Nicht umgesetzt | Umgesetzt (BSL-Ansatz) | Neue |
 
 **Gesamtbewertung**: Neue Architektur gewinnt in 7 von 8 Kriterien.
-Token-Kosten sind akzeptabel fuer Credit-DB-Scope.
+Token-Kosten sind akzeptabel für Credit-DB-Scope.
 
 ---
 
-## Ausblick (falls spaeter noetig)
+## Ausblick (falls spaeter nötig)
 
-### Moegliche zukuenftige Erweiterungen
+### Mögliche zukuenftige Erweiterungen
 
 1. **Multi-DB-Support** (falls notwendig)
-   - RAG kann spaeter wieder eingefuehrt werden
+   - DB-Routing um auch andere DBs abzudecken
+   - RAG kann später wieder eingeführt werden
    - Retrieval-Adapter kann ueber klar definiertes Interface erfolgen
    - BSL bleibt als explizite Business-Rules-Schicht
 
 2. **BSL-Erweiterungen**
    - BSL kann um weitere Business Rules erweitert werden
-   - BSL kann auch fuer andere DBs generiert werden
-   - BSL-Versionierung moeglich
+   - BSL kann auch für andere DBs generiert werden
+   - BSL-Versionierung möglich
 
 3. **Hybrid-Ansatz** (falls Token-Kosten kritisch werden)
    - BSL-first (explizite Regeln)
-   - Optional: RAG fuer grosse Schemas (wenn Schema > 50 KB)
+   - Optional: RAG für große Schemas (wenn Schema > 50 KB)
    - BSL hat immer Vorrang vor RAG-Retrieval
 
 ### Lessons Learned
 
 1. **Scope-Fit ist kritisch**: Multi-DB-Support war Over-Engineering
-2. **Stabilitaet > Optimierung**: Deterministische Ergebnisse sind wichtiger als
+2. **Stabilität > Optimierung**: Deterministische Ergebnisse sind wichtiger als
    Token-Optimierung
 3. **Explicit > Implicit**: Explizite Regeln (BSL) sind besser als implizite (Embeddings)
-4. **Professor-Feedback beruecksichtigen**: BSL-Ansatz war der richtige Weg
-5. **KISS-Prinzip**: Einfache Loesungen sind oft besser als komplexe
+4. **Professor-Feedback berücksichtigen**: BSL-Ansatz war der richtige Weg
+5. **KISS-Prinzip**: Einfache Lösungen sind oft besser als komplexe
 
 ---
 
 **Letztes Update**: Aktuell (nach BSL-Migration)  
 **Status**: Dokumentation auf aktuellem Stand  
-**Version**: 2.1.0 (BSL-first Architektur)
+**Version**: 9.0.0 (BSL-first Architektur)
