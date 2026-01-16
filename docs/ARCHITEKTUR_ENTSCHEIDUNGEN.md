@@ -372,7 +372,7 @@ Die aktuelle Architektur ist das Ergebnis der oben dokumentierten Entscheidungen
 |------------|-------------|------------------|--------------|
 | **Frontend** | React 18+ | Nutzer-Interface, API-Kommunikation | - |
 | **Backend API** | FastAPI | Anfrage-Koordination, Pipeline-Orchestrierung | - |
-| **Question Classifier** | GenericQuestionClassifier | Intent-Erkennung, SQL-Hints-Generierung | ADR-004 |
+| **Frageklassifizierung** | Spezifische Methoden (z.B. _is_property_leverage_question) | Intent-Erkennung, SQL-Hints, Query-Typ-Analyse | ADR-004 |
 | **BSL Builder** | Modular (6 Module) | Business Semantics Layer Generierung | ADR-003 |
 | **SQL Generator** | OpenAI GPT-5.2 | BSL-first SQL-Generierung | ADR-002 |
 | **Consistency Checker** | Multi-Level Validation | BSL-Compliance, Fehlererkennung | ADR-005 |
@@ -412,10 +412,11 @@ Die aktuelle Architektur ist das Ergebnis der oben dokumentierten Entscheidungen
 - **BSL**: Business Semantics Layer (~10 KB) aus `credit_bsl.txt`
 - **KB**: Knowledge Base (nur für Ambiguity Detection)
 
-**Phase 2: Question Classification**
-- **Intent-Erkennung**: GenericQuestionClassifier
-- **SQL-Hints**: Automatische Generierung basierend auf Intent
+**Phase 2: Frageklassifizierung & Intent-Erkennung**
+- **Intent-Erkennung**: Durch spezialisierte Methoden wie `_is_property_leverage_question`, `_is_credit_classification_details_question` etc. im LLM-Generator
+- **SQL-Hints**: Automatische Generierung basierend auf erkannter Query-Art (z.B. Aggregation, Detail, Ranking)
 - **Ambiguity Detection**: Parallele Prüfung auf Mehrdeutigkeit
+- **Vorteil**: Flexible Erweiterbarkeit für neue Fragetypen durch Hinzufügen weiterer Methoden; keine starre Klassendefinition nötig
 
 **Phase 3: BSL-Generierung**
 - **Modulare Regel-Extraktion**: 6 separate Module
