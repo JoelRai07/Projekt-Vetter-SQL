@@ -59,7 +59,6 @@ Mit diesem Projekt helfen wir Unternehmen dabei, **data-driven** zu werden, inde
   - `credit_kb.jsonl` - Domain Knowledge Base
   - `credit_column_meaning_base.json` - Spalten-Definitionen
   - `credit_bsl.txt` - Business Semantics Layer (generiert aus KB + Meanings)
-  - `credit_metric_sql_templates.json` - SQL-Templates für Metriken
 
 ## 🚀 Schnelstart
 
