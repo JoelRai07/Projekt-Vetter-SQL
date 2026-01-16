@@ -3,7 +3,7 @@
 **Projekt**: ChatWithYourData - Text2SQL mit Business Semantics Layer  
 **Team**: 5 Studierende der DHBW Stuttgart  
 **Datum**: Januar 2026  
-**Version**: 9.0.0 (BSL-first)
+**Version**: X.0.0 (BSL-first)
 **Success Rate**: 95% (9.5/10 Fragen)
 
 ---
@@ -98,11 +98,10 @@ graph TB
     end
     
     subgraph "Backend Layer"
-        API --> |Pipeline| QC[Question Classifier]
         API --> |Pipeline| BB[BSL Builder]
         API --> |Pipeline| SG[SQL Generator]
-        API --> |Pipeline| CC[Consistency Checker]
         API --> |Pipeline| DM[Database Manager]
+        SG --> |integriert| INT[Intent & Validation]
     end
     
     subgraph "Data Layer"
@@ -118,12 +117,11 @@ graph TB
     end
     
     SG --> LLM
+    INT --> LLM
     BB --> KB
     BB --> SCHEMA
     BB --> MEANINGS
     DM --> CACHE
-    QC --> LLM
-    CC --> LLM
 ```
 
 ### 🔄 6-Phasen Pipeline
@@ -133,10 +131,8 @@ sequenceDiagram
     participant User
     participant Frontend
     participant API
-    participant Classifier
     participant BSL
     participant Generator
-    participant Validator
     participant DB
     participant LLM
     
@@ -149,21 +145,17 @@ sequenceDiagram
         API->>API: Load Column Meanings
     end
     
-    API->>Classifier: Classify Question
-    Classifier->>LLM: Intent Recognition
-    LLM-->>Classifier: Question Intent + SQL Hints
-    
     API->>BSL: Generate BSL Rules
     BSL->>BSL: Extract modular rules
     BSL-->>API: BSL Content
     
-    API->>Generator: Generate SQL
-    Generator->>LLM: BSL-first Generation
+    API->>Generator: Generate SQL (mit integrierter Intent-Erkennung)
+    Generator->>LLM: BSL-first Generation + Intent Detection
     LLM-->>Generator: SQL + Explanation
     
-    API->>Validator: Validate SQL
-    Validator->>Validator: Consistency Checks
-    Validator-->>API: Validation Result
+    API->>Generator: Validate SQL (integriert)
+    Generator->>LLM: SQL Validation Check
+    LLM-->>Generator: Validation Result
     
     API->>DB: Execute SQL with Paging
     DB-->>API: Results + Metadata
@@ -181,10 +173,8 @@ sequenceDiagram
 |------------|-------------------|------------|
 | **React Frontend** | UI, Frage-Input, Ergebnisanzeige | HTTP → Backend |
 | **FastAPI Backend** | Pipeline-Orchestrierung | Koordiniert 6 Phasen |
-| **Question Classifier** | Intent-Erkennung, SQL-Hints | LLM → Intent |
 | **BSL Builder** | Business Rules Generierung | KB + Meanings → BSL |
-| **SQL Generator** | BSL-first SQL-Generierung | BSL + Schema → SQL |
-| **Consistency Checker** | Validation, Fehlererkennung | SQL → Validated SQL |
+| **SQL Generator** | BSL-first SQL-Generierung, Intent-Erkennung (integriert), SQL-Validation (integriert) | BSL + Schema → SQL |
 | **Database Manager** | Query-Ausführung, Paging | SQL → Results |
 
 ---
@@ -227,12 +217,26 @@ flowchart TD
 
 1. **Frage-Eingabe**: User gibt natürliche Sprache ein
 2. **Kontext-Laden**: Schema, Meanings, BSL werden geladen
-3. **Intent-Analyse**: Frage wird klassifiziert und SQL-Hints generiert
-4. **BSL-Generierung**: Business Rules werden aus KB + Meanings extrahiert
-5. **SQL-Generierung**: LLM generiert SQL mit BSL-Compliance
-6. **Validierung**: Mehrstufige Prüfung (Safety + Semantics + BSL)
+3. **BSL-Generierung**: Business Rules werden aus KB + Meanings extrahiert
+4. **SQL-Generierung mit integrierter Intent-Erkennung**: LLM generiert SQL direkt aus Frage + BSL + Schema (Intent wird implizit durch LLM erkannt)
+5. **BSL-Compliance-Checks**: Pattern-basierte Helper-Funktionen prüfen bekannte Edge Cases und triggern ggf. SQL-Regeneration mit spezifischen BSL-Anweisungen
+6. **Validierung**: Mehrstufige Prüfung (Safety + Semantics)
 7. **Ausführung**: SQL wird mit Paging ausgeführt
 8. **Ergebnis-Anzeige**: Formatierte Ergebnisse mit Zusammenfassung
+
+#### Wie Intent-Erkennung in diesem Projekt funktioniert:
+
+**Kein separater Intent-Classifier**, sondern **hybride Lösung**:
+
+1. **Implizite Intent-Erkennung**: Das LLM erkennt den Intent direkt beim SQL-Generieren (z.B. "nach Segment" → Aggregation, "top 10" → Ranking)
+2. **Pattern-basierte BSL-Compliance-Trigger**: Helper-Funktionen in `llm/generator.py` erkennen spezifische Frage-Patterns:
+   - `_is_property_leverage_question()`: "property leverage", "mortgage ratio", "LTV"
+   - `_is_digital_engagement_cohort_question()`: Cohort-basierte Engagement-Fragen
+   - `_is_credit_classification_details_question()`: Detail-Requests für Credit-Klassifikation
+   - Diese Trigger **aktivieren BSL-Regel-Verstärkungen**, sind aber **keine hardcodierten SQL-Antworten**
+3. **BSL-Compliance-Regeneration**: Falls Verstöße erkannt werden, wird SQL mit spezifischen BSL-Anweisungen regeneriert
+
+> **Wichtig**: Pattern-Funktionen verstärken nur relevante BSL-Regeln im Prompt. Das LLM generiert immer dynamisch SQL basierend auf vollständigem BSL + Schema + Meanings Kontext.
 
 ---
 
@@ -547,6 +551,34 @@ Die Methoden wie `_is_property_leverage_question()` in `llm/generator.py` sind *
 | ❌ Frage-Antwort-Paare speichern | ✅ Dem LLM signalisieren, welche Regeln wichtig sind |
 | ❌ Das LLM umgehen | ✅ Das LLM mit zusätzlichem Kontext unterstützen |
 
+**Technische Implementierung:**
+
+Die Intent-Erkennung funktioniert in zwei Stufen:
+
+1. **Initial SQL-Generierung** (implizite Intent-Erkennung):
+   ```python
+   # LLM erkennt Intent direkt im Prompt
+   sql_result = llm_generator.generate_sql(question, schema, meanings, bsl)
+   # LLM analysiert Frage + BSL und erkennt: Aggregation? Detail? Ranking?
+   ```
+
+2. **BSL-Compliance-Check & Regeneration** (explizite Pattern-Erkennung für Edge Cases):
+   ```python
+   # Pattern-basierte Helper-Funktionen erkennen bekannte Edge Cases
+   instruction = llm_generator._bsl_compliance_instruction(question, sql_result["sql"])
+   
+   # Falls Probleme erkannt, Regeneration mit spezifischen BSL-Anweisungen
+   if instruction:
+       sql_result = llm_generator._regenerate_with_bsl_compliance(...)
+   ```
+
+**Beispiel Pattern-Funktionen** (in `llm/generator.py`):
+- `_is_property_leverage_question(question)`: Erkennt "property leverage", "mortgage ratio", "LTV"
+- `_is_digital_engagement_cohort_question(question)`: Erkennt "cohort" + "engagement" + "digital"
+- `_has_explicit_time_range(question)`: Erkennt explizite Jahres-/Quartals-Angaben
+
+Diese Funktionen geben nur `True/False` zurück und generieren **keine SQL**, sondern aktivieren spezifische BSL-Regel-Verstärkungen im Regenerations-Prompt.
+
 **Beweis für Generalisierung**: Das System reagiert korrekt auf Variationen wie:
 - "property leverage" → "mortgage ratio" → "loan-to-value" → "LTV"
 - "top wealthy customers" → "top 5 wealthy customers" → "wealthiest clients"
@@ -618,13 +650,14 @@ Wie können wir diese Fehler systematisch erkennen und beheben?
 
 Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Depth bietet und verschiedene Fehlerklassen auf unterschiedlichen Ebenen erkennt.
 
-**Die 3 Validierungs-Ebenen:**
+**Die Validierungs-Ebenen:**
 
-| Ebene | Typ | Prüft | Geschwindigkeit |
-|-------|-----|-------|-----------------|
-| **Level 1** | SQL Guard (Regex) | Sicherheit (nur SELECT, keine Injection) | ~10ms |
-| **Level 2** | LLM Validation | Semantik, JOINs, Spalten-Existenz | ~1-2s |
-| **Level 3** | BSL Compliance | Identifier, Aggregation, BSL-Regeln | ~500ms |
+| Ebene | Typ | Prüft | Geschwindigkeit | Implementierung |
+|-------|-----|-------|-----------------|-----------------|
+| **Level 1** | SQL Guard (Regex) | Sicherheit (nur SELECT, keine Injection) | ~10ms | `utils/sql_guard.py` |
+| **Level 2** | LLM Validation | Semantik, JOINs, Spalten-Existenz, BSL-Compliance | ~1-2s | `llm/generator.py` (`validate_sql()`) |
+
+> **Hinweis**: Die BSL-Compliance-Prüfung erfolgt integriert in Level 2 (LLM Validation). Es gibt kein separates Level-3-Modul - die BSL-Validierung wird durch das LLM im Validation-Prompt durchgeführt.
 
 #### Positive Consequences
 
@@ -636,8 +669,7 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 #### Negative Consequences
 
 - Zusätzliche Latenz (~2-3s für vollständige Validation)
-- Komplexere Architektur mit 3 Ebenen
-- Integriert in `llm/generator.py` (kein separates Modul)
+- Validation ist in `llm/generator.py` integriert (kein separates Modul)
 
 #### Pros and Cons of the Options
 
@@ -677,18 +709,20 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 
 ### 🎯 Validierungs-Performance
 
-**Consistency Checker Results:**
+**Manuelle Evaluationsergebnisse (basierend auf 10 Testfragen):**
 - **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q5)
 - **JOIN Chain Validation**: 100% Korrektheit
 - **Aggregation Logic**: 100% Korrektheit  
 - **BSL Compliance**: 98% Korrektheit
 - **Overall Success Rate**: 95% (9.5/10 Fragen)
 
+> **Hinweis**: Diese Metriken sind manuelle Evaluationsergebnisse aus der Analyse der 10 Testfragen. Die SQL-Validation erfolgt durch `llm_generator.validate_sql()` in `backend/llm/generator.py` (integriert, kein separates Consistency-Checker-Modul).
+
 **Performance-Metriken:**
 - **Durchschnittliche Antwortzeit**: 3.2 Sekunden
 - **Token-Verbrauch**: ~32KB pro Query
 - **Cache-Hit-Rate**: 87% (Schema), 72% (BSL)
-- **Validation-Time**: <500ms für Consistency Checks
+- **Validation-Time**: <500ms für SQL-Validation
 
 ### 🔬 Evaluationsmethode
 

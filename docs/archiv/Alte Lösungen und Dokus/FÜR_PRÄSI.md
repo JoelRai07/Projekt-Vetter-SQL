@@ -3,7 +3,7 @@
 ## 🎯 Ziel dieses Dokuments
 Komprimierte Zusammenfassung für Teammitglieder zur schnellen Vorbereitung auf Präsentationen und Demo. Enthält alle wichtigen Punkte, die für die Verteidigung des Projekts benötigt werden.
 
-**Status**: Januar 2026 | **Version**: 3.0.0 (BSL-first) | **Scope**: Credit-Datenbank
+**Status**: Januar 2026 | **Version**: X.0.0 (BSL-first) | **Scope**: Credit-Datenbank
 
 ---
 

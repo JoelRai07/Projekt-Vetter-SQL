@@ -398,4 +398,4 @@ Dieses Projekt dient ausschließlich zu Studienzwecken an der DHBW Stuttgart.
 
 **Letztes Update**: January 2026  
 **Status**: In aktiver Entwicklung  
-**Version**: 9.0.0
+**Version**: X.0.0

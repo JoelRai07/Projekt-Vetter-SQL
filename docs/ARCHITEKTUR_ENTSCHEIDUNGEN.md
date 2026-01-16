@@ -4,7 +4,7 @@
 Dieses Dokument enthält alle wichtigen Architektur-Entscheidungen (Architecture Decision Records) des Text2SQL-Projekts. Es folgt dem **MADR-Standard** (Markdown Architecture Decision Record) und dokumentiert die vollständige Entwicklungsgeschichte von der initialen Multi-Database-RAG-Architektur bis zur aktuellen BSL-first Single-Database-Architektur.
 
 **Status**: Dokumentation auf aktuellem Stand (Januar 2026)  
-**Version**: 3.0.0 (BSL-first mit modularen Regeln)  
+**Version**: X.0.0 (BSL-first mit modularen Regeln)  
 **Scope**: Credit-Datenbank (BIRD mini-interact Subset)
 
 ---
@@ -373,11 +373,14 @@ Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in ei
 - **BSL**: Business Semantics Layer (~10 KB) aus `credit_bsl.txt`
 - **KB**: Knowledge Base (nur für Ambiguity Detection)
 
-**Phase 2: Frageklassifizierung & Intent-Erkennung**
-- **Intent-Erkennung**: Primär durch LLM im SQL-Generator, unterstützt durch spezialisierte BSL Compliance Trigger (`_is_property_leverage_question`, etc.) für Edge Cases
-- **SQL-Hints**: Automatische Generierung basierend auf erkannter Query-Art (z.B. Aggregation, Detail, Ranking)
-- **Ambiguity Detection**: Parallele Prüfung auf Mehrdeutigkeit durch separaten LLM-Call
-- **Hinweis**: Es gibt keinen separaten "GenericQuestionClassifier" - die Intent-Erkennung ist in `llm/generator.py` integriert
+**Phase 2: Intent-Erkennung & BSL-Compliance-Checks**
+- **Intent-Erkennung**: Hybride Lösung ohne separaten Classifier:
+  - **Implizit**: LLM erkennt Intent direkt beim SQL-Generieren im Prompt (z.B. "nach Segment" → Aggregation)
+  - **Explizit**: Pattern-basierte Helper-Funktionen (`_is_property_leverage_question()`, etc.) erkennen Edge Cases
+  - **BSL-Compliance**: Nach initialer SQL-Generierung werden BSL-Verstöße durch `_bsl_compliance_instruction()` erkannt
+  - **Regeneration**: Bei Problemen wird SQL mit spezifischen BSL-Anweisungen regeneriert (`_regenerate_with_bsl_compliance()`)
+- **Pattern-Trigger**: Helper-Funktionen sind **keine hardcodierten SQL-Antworten**, sondern aktivieren nur BSL-Regel-Verstärkungen für bekannte Edge Cases
+- **Ambiguity Detection**: Parallele Prüfung auf Mehrdeutigkeit durch separaten LLM-Call (`check_ambiguity()`)
 
 **Phase 3: BSL-Generierung**
 - **Modulare Regel-Extraktion**: 6 separate Module
@@ -625,7 +628,7 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
 
 **Letztes Update**: Januar 2026  
 **Status**: Produktion-ready für Credit-DB Scope  
-**Version**: 9.0.0
+**Version**: X.0.0
 **Nächste Meilensteine**: Multi-DB-Support, Performance-Optimierung, Security Hardening, Rückfragen möglichkeit
 
 ---
@@ -766,4 +769,4 @@ Token-Kosten sind akzeptabel für Credit-DB-Scope.
 
 **Letztes Update**: Aktuell (nach BSL-Migration)  
 **Status**: Dokumentation auf aktuellem Stand  
-**Version**: 9.0.0 (BSL-first Architektur)
+**Version**: X.0.0 (BSL-first Architektur)

@@ -40,11 +40,10 @@ graph TB
     end
     
     subgraph "Backend Layer"
-        API --> |Pipeline| QC[Intent Handling (LLM)]
         API --> |Pipeline| BB[BSL Builder]
         API --> |Pipeline| SG[SQL Generator]
-        API --> |Pipeline| CC[Consistency Checker]
         API --> |Pipeline| DM[Database Manager]
+        SG --> |integriert| INT[Intent & Validation]
     end
     
     subgraph "Data Layer"
@@ -60,12 +59,11 @@ graph TB
     end
     
     SG --> LLM
+    INT --> LLM
     BB --> KB
     BB --> SCHEMA
     BB --> MEANINGS
     DM --> CACHE
-    QC --> LLM
-    CC --> LLM
 ```
 
 ### Kernkomponenten
@@ -74,10 +72,8 @@ graph TB
 |------------|-------------|------------------|------------------|
 | **Frontend** | React 18+ | Nutzer-Interface, Frage-Input, Ergebnisanzeige | - |
 | **Backend API** | FastAPI | Anfrage-Koordination, Pipeline-Orchestrierung | - |
-| **Intent Handling** | LLM (SQL Generator) | Intent-Erkennung, SQL-Hints-Generierung, Ambiguity Detection | BSL-first Prompting |
 | **BSL Builder** | Modular (6 Module) | Business Semantics Layer Generierung | **Kernkomponente** |
-| **SQL Generator** | OpenAI GPT-5.2 | BSL-first SQL-Generierung | **BSL-first Prompting** |
-| **Consistency Checker** | Multi-Level Validation | BSL-Compliance, Fehlererkennung | **BSL Validation** |
+| **SQL Generator** | OpenAI GPT-5.2 | BSL-first SQL-Generierung, Intent-Erkennung (integriert), SQL-Validation (integriert) | **BSL-first Prompting** |
 | **Database Manager** | SQLite | Query-Ausführung, Paging, Caching | - |
 
 ### BSL-Sektionen (in generierter `credit_bsl.txt`)
@@ -253,19 +249,49 @@ Der Backend lädt vier Kontextdokumente parallel:
    - **Caching**: TTL-Cache (1 Stunde)
    - **Format**: Plain-Text (`credit_bsl.txt`)
 
-### Phase 2: Intent Handling (LLM)
+### Phase 2: Intent-Erkennung & BSL-Compliance-Checks
 
-**Schritt 2.1: Intent-Erkennung (im SQL Generator)**
+**Wie Intent-Erkennung in diesem Projekt funktioniert:**
+
+Die Intent-Erkennung erfolgt **nicht durch einen separaten LLM-Call**, sondern durch eine **hybride Kombination**:
+
+1. **Implizite Intent-Erkennung durch LLM** (beim SQL-Generieren):
+   - Das LLM analysiert die Frage direkt im SQL-Generierungs-Prompt
+   - Es erkennt Aggregationsbedarf, Detail-Requests, Ranking-Anfragen basierend auf BSL-Regeln
+   - Beispiel: "nach Segment" → LLM erkennt: braucht GROUP BY
+
+2. **Pattern-basierte BSL-Compliance-Trigger** (für Edge Cases):
+   - Heuristische Helper-Funktionen in `llm/generator.py` erkennen spezifische Frage-Patterns:
+     - `_is_property_leverage_question()`: Erkennt Fragen zu "property leverage", "mortgage ratio", "LTV"
+     - `_is_digital_engagement_cohort_question()`: Erkennt "cohort" + "engagement" + "digital"
+     - `_is_credit_classification_details_question()`: Erkennt Detail-Requests für Credit-Klassifikation
+     - `_has_explicit_time_range()`: Erkennt explizite Jahres-/Quartals-Angaben
+   - Diese Trigger sind **keine hardcodierten SQL-Antworten**, sondern aktivieren spezifische BSL-Regel-Verstärkungen
+
+3. **BSL-Compliance-Checks & Regeneration**:
+   - Nach der initialen SQL-Generierung wird `_bsl_compliance_instruction()` aufgerufen
+   - Diese Methode prüft, ob die generierte SQL gegen bekannte BSL-Patterns verstößt
+   - Bei Verstößen wird SQL mit spezifischen BSL-Anweisungen regeneriert
+
+**Beispiel-Ablauf:**
+```python
+# 1. SQL wird initial generiert
+sql_result = llm_generator.generate_sql(question, schema, meanings, bsl)
+
+# 2. BSL-Compliance-Check
+instruction = llm_generator._bsl_compliance_instruction(question, sql_result["sql"])
+
+# 3. Falls Probleme erkannt werden, Regeneration mit spezifischen Anweisungen
+if instruction:
+    sql_result = llm_generator._regenerate_with_bsl_compliance(...)
 ```
-Input: "Zeige mir Kunden mit hoher Schuldenlast nach Segment"
 
-LLM (SQL Generator) nutzt BSL + Schema:
-- erkennt Aggregationsbedarf ("nach Segment")
-- erzeugt GROUP BY passend zur Segmentierung
-- wendet passende BSL-Regeln an
-```
+**Wichtige Klarstellung:**
+- Die Pattern-Funktionen (`_is_*_question()`) sind **keine hardcodierten Antworten**
+- Sie verstärken nur relevante BSL-Regeln im Prompt für Edge Cases
+- Das LLM generiert immer dynamisch SQL basierend auf vollständigem BSL + Schema + Meanings
 
-**Schritt 2.2: Ambiguity Detection (parallel)**
+**Schritt 2.3: Ambiguity Detection (parallel, separater LLM-Call)**
 ```
 LLM prüft:
 - Frage mehrdeutig? (false)
@@ -347,24 +373,23 @@ sql_result = generator.generate_sql(
 - Question Intent: Strukturierte Analyse der Frage
 - SQL Hints: Generierte Hinweise für korrekte SQL
 
-### Phase 5: Consistency Validation
+### Phase 5: SQL Validation (integriert im Generator)
 
 **Schritt 5.1: Umfassende Validierung**
 ```python
-validation_result = consistency_checker.validate_sql_against_bsl(
+# Validation erfolgt durch den SQL Generator (integriert)
+validation_result = llm_generator.validate_sql(
     sql=generated_sql,
-    question=user_question,
-    bsl_content=bsl_content,
-    question_intent=question_intent
+    schema=schema
 )
 ```
 
+> **Hinweis**: Die SQL-Validation ist in `llm/generator.py` integriert, nicht als separates `consistency_checker.py` Modul. Die Methode `validate_sql()` verwendet das LLM zur Validierung der generierten SQL gegen das Schema.
+
 **Validierungs-Ebenen:**
-1. **Identifier Consistency**: CU vs CS Korrektheit
-2. **JOIN Chain Validation**: Foreign Key Chain komplett?
-3. **Aggregation Logic**: GROUP BY/HAVING korrekt?
-4. **BSL Compliance**: Business Rules befolgt?
-5. **JSON Field Rules**: Korrekte Tabellen-Qualifizierung?
+1. **Level 1: SQL Guard** (`utils/sql_guard.py`): Sicherheits-Checks (nur SELECT, keine Injection)
+2. **Level 2: LLM Validation** (`llm/generator.py`): Semantik, JOINs, BSL-Compliance-Prüfung durch LLM
+3. **BSL-Compliance**: Wird durch LLM im Validation-Prompt geprüft (Teil von Level 2)
 
 **Severity-Level:**
 - `critical`: Führt zu Fehlern oder falschen Ergebnissen
@@ -531,10 +556,8 @@ sequenceDiagram
     participant User
     participant Frontend
     participant API
-    participant Classifier
     participant BSL
     participant Generator
-    participant Validator
     participant DB
     participant LLM
     
@@ -547,21 +570,17 @@ sequenceDiagram
         API->>API: Load Column Meanings
     end
     
-    API->>Classifier: Classify Question
-    Classifier->>LLM: Intent Recognition
-    LLM-->>Classifier: Question Intent + SQL Hints
-    
     API->>BSL: Generate BSL Rules
     BSL->>BSL: Extract modular rules
     BSL-->>API: BSL Content
     
-    API->>Generator: Generate SQL
-    Generator->>LLM: BSL-first Generation
+    API->>Generator: Generate SQL (mit integrierter Intent-Erkennung)
+    Generator->>LLM: BSL-first Generation + Intent Detection
     LLM-->>Generator: SQL + Explanation
     
-    API->>Validator: Validate SQL
-    Validator->>Validator: Consistency Checks
-    Validator-->>API: Validation Result
+    API->>Generator: Validate SQL (integriert)
+    Generator->>LLM: SQL Validation Check
+    LLM-->>Generator: Validation Result
     
     API->>DB: Execute SQL with Paging
     DB-->>API: Results + Metadata
@@ -966,5 +985,5 @@ Dieses Text2SQL System demonstriert moderne Software-Architektur-Prinzipien:
 Die Architektur ist bereit für Produktivierung mit den identifizierten Erweiterungen und Optimierungen.
 
 **Status**: Produktion-ready für Credit-DB Scope
-**Version**: 9.0.0 (BSL-first)
+**Version**: X.0.0 (BSL-first)
 **Nächste Meilensteine**: Multi-DB-Support, Performance-Optimierung, Security Hardening

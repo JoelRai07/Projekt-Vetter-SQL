@@ -3,7 +3,7 @@
 ## 🎯 Ziel dieses Dokuments
 Komprimierte Zusammenfassung für Teammitglieder zur schnellen Vorbereitung auf Präsentationen und Demo. Enthält alle wichtigen Punkte, die für die Verteidigung des Projekts benötigt werden.
 
-**Status**: Januar 2026 | **Version**: 3.0.0 (BSL-first) | **Scope**: Credit-Datenbank
+**Status**: Januar 2026 | **Version**: X.0.0 (BSL-first) | **Scope**: Credit-Datenbank
 
 ---
 
@@ -34,10 +34,10 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 
 ### Die 6 Phasen
 1. **Context Loading** - Schema + Meanings + BSL (~10ms cached)
-2. **Question Classification** - Intent + SQL-Hints (parallel)
+2. **Intent-Erkennung** - System erkennt, was der User will (vereinfacht erklärt unten)
 3. **BSL-Generierung** - 6 modulare Regel-Module
 4. **SQL-Generierung** - BSL-first, deterministisch
-5. **Consistency Validation** - 3-Level (Safety + Semantics + BSL)
+5. **Consistency Validation** - 2-Level (Safety + Semantics)
 6. **Query Execution** - Mit Paging + Sessions
 
 ### BSL-Sektionen (in generierter `credit_bsl.txt`)
@@ -49,6 +49,44 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 6. **Complex Query Templates** - Multi-Level Aggregation, CTEs
 
 > **Hinweis**: Diese sind Textblöcke im generierten BSL-File, keine separaten `.py`-Dateien.
+
+---
+
+## 🧠 Wie Intent-Erkennung funktioniert (vereinfacht)
+
+**Problem**: Das System muss verstehen, was der Nutzer will:
+- "Schuldenlast **nach Segment**" → Aggregation (GROUP BY)
+- "**Top 10** Kunden" → Ranking (ORDER BY + LIMIT)
+- "Property Leverage" → Spezielle Business-Regel aktivieren
+
+**Lösung**: Zwei-Stufen-Ansatz (kein separater Classifier nötig):
+
+### Stufe 1: LLM versteht automatisch (implizit)
+- Das LLM liest die Frage + BSL-Regeln
+- Es erkennt selbst: "nach Segment" = Aggregation, "top 10" = Ranking
+- → Generiert passende SQL direkt
+
+### Stufe 2: Pattern-Checks für bekannte Probleme (explizit)
+- Für schwierige Fragen gibt es **Helper-Funktionen** im Code
+- Diese erkennen bekannte Edge Cases:
+  - "Property Leverage" → Aktiviert spezielle BSL-Regel
+  - "Digital Engagement Cohort" → Aktiviert Zeitreihen-Regel
+- **Wichtig**: Diese Funktionen geben **keine fertige SQL** zurück!
+- Sie **verstärken nur BSL-Regeln** im Prompt → LLM generiert SQL dynamisch
+
+### Beispiel-Ablauf:
+```
+1. User: "Zeige Property Leverage"
+2. LLM generiert initial SQL
+3. System prüft: "Ist das eine Property Leverage Frage?" → JA
+4. System verstärkt relevante BSL-Regel: "Nutze coreregistry für JOINs"
+5. Falls SQL noch nicht korrekt → System regeneriert SQL mit verstärkter Regel
+```
+
+**Warum so?**
+- ✅ Generalisierung: LLM versteht Variationen ("LTV", "mortgage ratio", "property leverage")
+- ✅ Robustheit: Bekannte Probleme werden abgefangen
+- ✅ Kein Hardcoding: LLM generiert immer dynamisch SQL
 
 ---
 
@@ -223,10 +261,10 @@ Zeige wie query_id für Paging funktioniert
 ### 6-Phasen Pipeline
 
 1. **Context Loading** - Schema, Knowledge Base, Meanings, BSL laden
-2. **Intent-Erkennung** - Integriert im SQL-Generator (kein separater Classifier)
+2. **Intent-Erkennung** - LLM versteht Frage automatisch, Pattern-Checks für Edge Cases (siehe Erklärung oben)
 3. **BSL-Generierung** - 6 Regel-Sektionen in generierter Textdatei
-4. **SQL-Generierung** - BSL-first mit Intent-Integration
-5. **Consistency Validation** - Identifier, JOIN, Aggregation (integriert in Generator)
+4. **SQL-Generierung** - BSL-first, LLM generiert SQL mit passendem Intent (Aggregation/Ranking/Detail)
+5. **Consistency Validation** - Sicherheits-Checks + Semantik-Validierung (integriert in Generator)
 6. **Query Execution** - Mit Paging und Session-Management
 
 ### Datenfluss
@@ -236,10 +274,8 @@ sequenceDiagram
     participant User
     participant Frontend
     participant API
-    participant Classifier
     participant BSL
     participant Generator
-    participant Validator
     participant DB
     participant LLM
     
@@ -252,21 +288,17 @@ sequenceDiagram
         API->>API: Load Column Meanings
     end
     
-    API->>Classifier: Classify Question
-    Classifier->>LLM: Intent Recognition
-    LLM-->>Classifier: Question Intent + SQL Hints
-    
     API->>BSL: Generate BSL Rules
     BSL->>BSL: Extract modular rules
     BSL-->>API: BSL Content
     
-    API->>Generator: Generate SQL
-    Generator->>LLM: BSL-first Generation
+    API->>Generator: Generate SQL (mit integrierter Intent-Erkennung)
+    Generator->>LLM: BSL-first Generation + Intent Detection
     LLM-->>Generator: SQL + Explanation
     
-    API->>Validator: Validate SQL
-    Validator->>Validator: Consistency Checks
-    Validator-->>API: Validation Result
+    API->>Generator: Validate SQL (integriert)
+    Generator->>LLM: SQL Validation Check
+    LLM-->>Generator: Validation Result
     
     API->>DB: Execute SQL with Paging
     DB-->>API: Results + Metadata
@@ -351,9 +383,9 @@ erDiagram
 
 2. **SQL Generator** (`llm/generator.py`)
    - BSL-first SQL-Generierung
-   - Integrierte Intent-Erkennung und Ambiguity Detection
-   - BSL Compliance Checks
-   - Intent-basierte Identifier-Logik
+   - Intent-Erkennung: LLM versteht Frage + Pattern-Checks für Edge Cases
+   - BSL Compliance Checks (prüft bekannte Probleme, regeneriert SQL bei Bedarf)
+   - Ambiguity Detection (erkennt mehrdeutige Fragen)
 
 3. **SQL Guard** (`utils/sql_guard.py`)
    - Safety-Validierung (nur SELECT erlaubt)
