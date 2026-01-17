@@ -120,11 +120,14 @@ graph TB
 * **Date:** 12.01.2026
 * **Kernpunkt:** Edge-Case Stabilisierung ohne Hardcoding: Heuristiken → Compliance Instruction → ggf. Regeneration
 
-### ADR-006: Consistency Validation (mehrstufig, accepted)
+### ADR-006: Consistency Validation (3-Ebenen, accepted)
 
 * **Status:** accepted
 * **Date:** 12.01.2026
-* **Kernpunkt:** Layer A (rule-based) + Layer B (LLM-based) + serverseitige Guards
+* **Kernpunkt:** 3-Ebenen Validierung:
+  1. **Layer A** (rule-based): BSL-Compliance + Auto-Repair in `generator.py`
+  2. **Server Guards** (Phase 5): `enforce_safety` + `enforce_known_tables` in `main.py`
+  3. **Layer B** (LLM-based): Semantische Validierung + Self-Correction
 
 ---
 
@@ -202,14 +205,19 @@ Wenn `ambiguity.is_ambiguous == true`:
 
 ---
 
-### Phase 5: Server-Side Security & Known-Table Validation
+### Phase 5: Server Guards (Security & Known-Table Validation)
+
+**Server Guards** sind die mittlere Validierungsebene zwischen Layer A und Layer B:
 
 In `main.py` (vor Execution):
 
-* `enforce_safety(sql)` → nur SELECT, keine gefährlichen Statements
-* `enforce_known_tables(sql, table_columns)` → nur bekannte Tabellen
+* `enforce_safety(sql)` → nur SELECT, keine gefährlichen Statements (DROP, DELETE, INSERT, etc.)
+* `enforce_known_tables(sql, table_columns)` → nur bekannte Tabellen aus dem Schema erlaubt
 
+**Autokorrektur bei Tabellenfehlern:**
 Bei *nur* Table-Fehlern versucht `main.py` eine **Autokorrektur der Tabellennamen** via LLM (separater Correction Prompt) und validiert erneut.
+
+> **Hinweis**: Server Guards sind Teil der 3-Ebenen Validierungsarchitektur (ADR-006) und bilden die Sicherheitsschicht zwischen rule-based (Layer A) und LLM-based (Layer B) Validierung.
 
 ---
 

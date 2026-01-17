@@ -4,7 +4,7 @@
 **Team**: 5 Studierende der DHBW Stuttgart  
 **Datum**: Januar 2026  
 **Version**: X.0.0 (BSL-first)
-**Success Rate**: 95% (9.5/10 Fragen)
+**Success Rate**: 88.5% (7×100% + 3×95%)
 
 ---
 
@@ -198,10 +198,11 @@ flowchart TD
     E --> F[Phase 2: Parallelisierung - Ambiguity + SQL Generation]
     F --> G[Phase 3: SQL-Generierung BSL-first + Layer A]
     G --> H[Phase 4: Optional Self-Correction Layer B]
-    H --> I[Phase 5: Server Guards + LLM Validation]
-    I --> J[Phase 6: Execution + Summarization]
+    H --> I[Phase 5: Server Guards - Safety + Tabellenvalidierung]
+    I --> I2[Phase 6: LLM SQL Validation]
+    I2 --> J[Phase 7-8: Execution + Summarization]
 
-    I --> K{SQL gültig?}
+    I2 --> K{SQL gültig?}
     K -->|Ja| L[Query ausführen]
     K -->|Nein| M[Fehlerkorrektur via LLM]
     M --> G
@@ -218,18 +219,21 @@ flowchart TD
     T --> P
 ```
 
-### 🔄 Detail-Prozessablauf
+### 🔄 Detail-Prozessablauf (8-Phasen-Pipeline)
 
-> **Wichtig**: `bsl_builder.py` ist ein **Offline/On-demand Tool** und **kein** Request-Step. Die BSL-Datei wird zur Laufzeit nur geladen.
+> **Wichtig**: `bsl_builder.py` ist ein **Offline/On-demand Tool** (Phase 0) und **kein** Request-Step. Die BSL-Datei wird zur Laufzeit nur geladen.
 
-1. **Context Loading**: Schema, Meanings, KB, BSL werden geladen (cached)
-2. **Parallelisierung**: Ambiguity Detection + SQL-Generierung parallel
-3. **SQL-Generierung (BSL-first)**: LLM generiert SQL mit heuristischen Fragetyp-Checks + Layer A (rule-based Compliance + Auto-Repair)
-4. **Optional: Self-Correction Loop (Layer B)**: Bei niedriger Confidence
-5. **Server-Side Guards**: `enforce_safety` + `enforce_known_tables`
-6. **LLM SQL Validation**: Zusätzliche Prüfung + ggf. Korrektur bei high severity
-7. **Query Execution**: Mit Paging und Session-Management
-8. **Result Summarization**: Zusammenfassung der Ergebnisse
+| Phase | Bezeichnung | Beschreibung |
+|-------|-------------|--------------|
+| **Phase 0** | Build/Maintenance (offline) | BSL-Generierung durch `bsl_builder.py` (nicht pro Request) |
+| **Phase 1** | Context Loading | Schema, Meanings, KB, BSL werden geladen (cached) |
+| **Phase 2** | Parallelisierung | Ambiguity Detection + SQL-Generierung parallel |
+| **Phase 3** | SQL-Generierung (BSL-first) | LLM generiert SQL + Layer A (rule-based Compliance + Auto-Repair) |
+| **Phase 4** | Self-Correction Loop (Layer B) | Optional bei niedriger Confidence |
+| **Phase 5** | Server Guards | `enforce_safety` + `enforce_known_tables` (Sicherheit + Tabellenvalidierung) |
+| **Phase 6** | LLM SQL Validation | Semantische Prüfung + ggf. Korrektur bei high severity |
+| **Phase 7** | Query Execution | Mit Paging und Session-Management |
+| **Phase 8** | Result Summarization | Zusammenfassung der Ergebnisse |
 
 #### Wie heuristische Fragetyp-Erkennung in diesem Projekt funktioniert:
 
@@ -599,13 +603,18 @@ Wie können wir diese Fehler systematisch erkennen und beheben?
 
 Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Depth bietet und verschiedene Fehlerklassen auf unterschiedlichen Ebenen erkennt.
 
-**Die Validierungs-Ebenen:**
+**Die 3-Ebenen Validierungs-Architektur:**
 
 | Ebene | Typ | Prüft | Geschwindigkeit | Implementierung |
 |-------|-----|-------|-----------------|-----------------|
 | **Layer A** | Rule-based + Auto-repair | BSL-Compliance, SQLite Dialektfix | ~10ms | `llm/generator.py` (Heuristiken) |
-| **Server Guards** | SQL Guard + Known Tables | Sicherheit (nur SELECT, keine Injection), Tabellenvalidierung | ~10ms | `utils/sql_guard.py`, `main.py` |
+| **Server Guards** | SQL Guard + Known Tables | Sicherheit (nur SELECT, keine Injection), Tabellenvalidierung + Autokorrektur bei Tabellenfehlern | ~10ms | `utils/sql_guard.py`, `main.py` |
 | **Layer B** | LLM Validation | Semantik, JOINs, Spalten-Existenz, Self-correction bei low confidence | ~1-2s | `llm/generator.py` (`validate_sql()`) |
+
+**Server Guards im Detail (Phase 5):**
+- `enforce_safety(sql)`: Erlaubt nur SELECT-Statements, blockiert gefährliche SQL-Befehle
+- `enforce_known_tables(sql, table_columns)`: Validiert, dass nur bekannte Tabellen verwendet werden
+- **Autokorrektur**: Bei reinen Tabellenfehlern versucht das System eine automatische Korrektur via LLM
 
 > **Hinweis**: Es gibt **kein separates** `consistency_checker.py` Modul - alles ist in `llm/generator.py` integriert.
 
@@ -642,7 +651,7 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 
 ## 7. Testergebnisse
 
-### 📊 Success Rate: 95% (9.5/10 Fragen)
+### 📊 Success Rate: 88.5% (7×100% + 3×95%)
 
 | Frage | Typ | Erwartetes Verhalten | Ergebnis | Status | BSL-Regeln angewendet |
 |-------|------|---------------------|----------|--------|----------------------|
@@ -660,19 +669,19 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 ### 🎯 Validierungs-Performance
 
 **Manuelle Evaluationsergebnisse (basierend auf 10 Testfragen):**
-- **Identifier Consistency**: 90% Korrektheit (1 Fehler bei Q5 und Q10)
+- **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q5)
 - **Mehr ausgegebene Spalten als gefragt**: 95% Korrektheit (1 Fehler bei Q6)
 - **JOIN Chain Validation**: 100% Korrektheit
-- **Aggregation Logic**: 100% Korrektheit  
+- **Aggregation Logic**: 100% Korrektheit
 - **BSL Compliance**: 98% Korrektheit
-- **Overall Success Rate**: 85% (5.5/10 Fragen)
+- **Overall Success Rate**: 88.5% (7×100% + 3×95%)
 
 > **Hinweis**: Diese Metriken sind manuelle Evaluationsergebnisse aus der Analyse der 10 Testfragen. Die SQL-Validation erfolgt durch `validate_sql()` in `backend/llm/generator.py` (integriert, **kein separates** `consistency_checker.py` Modul).
 
-**Performance-Metriken:**
-- **Durchschnittliche Antwortzeit**: Schneller als beim alten RAG + ReAct Ansatz
-- **Token-Verbrauch**: Sehr großer Token-Verbrauch
-- **Cache-Hit-Rate**: 87% (Schema), 72% (BSL)
+**Performance-Charakteristik:**
+- **Antwortzeit**: Schneller als beim alten RAG + ReAct Ansatz (keine Retrieval-Latenz)
+- **Token-Verbrauch**: Höher als RAG-Ansatz (BSL-first benötigt vollständigen Kontext)
+- **Trade-off**: Stabilität und Determinismus gegen Token-Kosten
 - **Validation-Time**: <500ms für SQL-Validation
 
 ### 🔬 Evaluationsmethode

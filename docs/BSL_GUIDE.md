@@ -353,7 +353,7 @@ Genau so solltest du es im Gespräch auch formulieren.
 
 ## 11) Aktuelle Testergebnisse & Validation (Januar 2026)
 
-### Success Rate: 95% (9.5/10 Fragen)
+### Success Rate: 88.5% (7×100% + 3×95%)
 
 | Frage | Typ | Erwartetes Verhalten | Ergebnis | Status | BSL-Regeln angewendet |
 |-------|------|---------------------|----------|--------|----------------------|
@@ -362,11 +362,11 @@ Genau so solltest du es im Gespräch auch formulieren.
 | Q3 | Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ Bestanden | 100% | Aggregation, Business Logic |
 | Q4 | Top 10 Kunden | ORDER BY + LIMIT | ✅ Bestanden | 100% | Aggregation Patterns |
 | Q5 | Digital Natives | JSON-Extraktion | ⚠️ 95% | 95% | JSON Rules, Identity |
-| Q6 | Risikoklassifizierung | Business Rules | ✅ Bestanden | 100% | Business Logic |
+| Q6 | Risikoklassifizierung | Business Rules | ⚠️ 95% | 95% | Business Logic |
 | Q7 | Multi-Level Aggregation | CTEs, Prozentberechnung | ✅ Bestanden | 100% | Complex Templates |
 | Q8 | Segment-Übersicht + Total | UNION ALL | ✅ Bestanden | 100% | Complex Templates |
 | Q9 | Property Leverage | Tabellen-spezifische Regeln | ✅ Bestanden | 100% | Business Logic |
-| Q10 | Kredit-Details | Detail-Query, kein GROUP BY | ✅ Bestanden | 100% | Aggregation Patterns |
+| Q10 | Kredit-Details | Detail-Query, kein GROUP BY | ⚠️ 95% | 95% | Aggregation Patterns |
 
 ### Validierungs-Performance
 
@@ -375,12 +375,12 @@ Genau so solltest du es im Gespräch auch formulieren.
 - **JOIN Chain Validation**: 100% Korrektheit
 - **Aggregation Logic**: 100% Korrektheit
 - **BSL Compliance**: 98% Korrektheit
-- **Overall Success Rate**: 95% (9.5/10 Fragen)
+- **Overall Success Rate**: 88.5% (7×100% + 3×95%)
 
-**Performance-Metriken:**
-- **Durchschnittliche Antwortzeit**: ~3.2 Sekunden
-- **Token-Verbrauch**: ~32KB pro Query
-- **Cache-Hit-Rate**: 87% (Schema), 72% (BSL)
+**Performance-Charakteristik:**
+- **Antwortzeit**: Schneller als RAG-Ansatz (keine Retrieval-Latenz)
+- **Token-Verbrauch**: Höher als RAG (BSL-first benötigt vollständigen Kontext)
+- **Trade-off**: Stabilität und Determinismus gegen Token-Kosten
 - **Validation-Time**: <500ms für Consistency Checks
 
 > **Hinweis**: Die Consistency-Prüfung ist in `llm/generator.py` integriert (nicht als separates `consistency_checker.py` Modul). Die Validierung erfolgt durch BSL Compliance Checks innerhalb des SQL-Generation-Flows.

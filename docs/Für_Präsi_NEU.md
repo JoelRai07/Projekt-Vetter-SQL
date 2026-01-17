@@ -17,7 +17,7 @@ Komprimierte Zusammenfassung für Teammitglieder zur schnellen Vorbereitung auf 
 - Business Rules (Financially Vulnerable, etc.)
 - Join Chain Rules (strikte FK-Kette)
 
-**Ergebnis**: **95% Success Rate** (9.5/10 Fragen), deterministische Ergebnisse, nachvollziehbare Architektur.
+**Ergebnis**: **88.5% Success Rate** (7×100% + 3×95%), deterministische Ergebnisse, nachvollziehbare Architektur.
 
 **Warum erfolgreich**: Professor-Feedback ("BSL ist guter Ansatz"), Scope-Fit (Credit-DB), keine Over-Engineering.
 
@@ -29,18 +29,22 @@ Komprimierte Zusammenfassung für Teammitglieder zur schnellen Vorbereitung auf 
 ```
 User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → Results
                     ↓
-            6-Phasen Pipeline (BSL-first)
+            8-Phasen Pipeline (BSL-first)
 ```
 
-### Der Request-Flow (Phasen)
-1. **Context Loading** - Schema + Meanings + BSL werden geladen (~10ms cached)
-2. **Parallelisierung** - Ambiguity Detection + SQL-Generierung parallel
-3. **SQL-Generierung (BSL-first)** - LLM generiert SQL mit heuristischen Fragetyp-Checks + Layer A (rule-based Compliance)
-4. **Optional: Self-Correction Loop** - Bei niedriger Confidence (Layer B)
-5. **Server-Side Guards** - Safety (`enforce_safety`) + Known-Table Validation
-6. **LLM SQL Validation** - Zusätzliche Prüfung + ggf. Korrektur
-7. **Query Execution** - Mit Paging + Sessions
-8. **Result Summarization** - Zusammenfassung der Ergebnisse
+### Der Request-Flow (Phase 0-8)
+
+| Phase | Bezeichnung | Beschreibung |
+|-------|-------------|--------------|
+| **Phase 0** | Build/Maintenance (offline) | BSL-Generierung durch `bsl_builder.py` (nicht pro Request) |
+| **Phase 1** | Context Loading | Schema + Meanings + BSL werden geladen (~10ms cached) |
+| **Phase 2** | Parallelisierung | Ambiguity Detection + SQL-Generierung parallel |
+| **Phase 3** | SQL-Generierung (BSL-first) | LLM generiert SQL + Layer A (rule-based Compliance) |
+| **Phase 4** | Self-Correction Loop (Layer B) | Optional bei niedriger Confidence |
+| **Phase 5** | Server Guards | `enforce_safety` + `enforce_known_tables` (Sicherheit + Tabellenvalidierung) |
+| **Phase 6** | LLM SQL Validation | Semantische Prüfung + ggf. Korrektur |
+| **Phase 7** | Query Execution | Mit Paging + Sessions |
+| **Phase 8** | Result Summarization | Zusammenfassung der Ergebnisse |
 
 > **Wichtig**: Es gibt keine separate "Question Classification" Phase. Die heuristische Fragetyp-Erkennung ist in `llm/generator.py` integriert (Pattern-Matching für BSL-Compliance).
 
@@ -96,7 +100,7 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 
 ## 📊 Testergebnisse & Validation
 
-### Success Rate: 95% (9.5/10 Fragen)
+### Success Rate: 88.5% (7×100% + 3×95%)
 
 | Frage | Typ | Status | BSL-Regeln |
 |-------|------|--------|------------|
@@ -105,14 +109,16 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 | Q3: Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ 100% | Aggregation, Business Logic |
 | Q4: Top 10 Kunden | ORDER BY + LIMIT | ✅ 100% | Aggregation Patterns |
 | Q5: Digital Natives | JSON-Extraktion | ⚠️ 95% | JSON Rules, Identity |
-| Q6-Q10 | Various | ✅ 100% | Multiple BSL Rules |
+| Q6: Risikoklassifizierung | Business Rules | ⚠️ 95% | Business Logic |
+| Q7-Q9 | Various | ✅ 100% | Multiple BSL Rules |
+| Q10: Kredit-Details | Detail-Query | ⚠️ 95% | Aggregation Patterns |
 
 ### Validation Performance
 - **Identifier Consistency**: 95% (1 Fehler bei Q5)
 - **JOIN Chain Validation**: 100%
 - **Aggregation Logic**: 100%
-- **Overall Response Time**: 3.2 Sekunden
-- **Token-Verbrauch**: ~32KB pro Query
+- **Antwortzeit**: Schneller als RAG-Ansatz (keine Retrieval-Latenz)
+- **Token-Verbrauch**: Höher als RAG (BSL-first benötigt vollständigen Kontext)
 
 ---
 
@@ -127,9 +133,12 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 **Problem**: Edge Cases bei bestimmten Frage-Typen
 **Lösung**: Heuristiken → Compliance Instruction → ggf. Regeneration (keine Hardcoding)
 
-### ADR-006: Consistency Validation (mehrstufig)
+### ADR-006: Consistency Validation (3-Ebenen)
 **Problem**: LLM macht trotz BSL Fehler
-**Lösung**: Layer A (rule-based) + Layer B (LLM-based) + serverseitige Guards
+**Lösung**: 3-Ebenen Validierung:
+1. **Layer A** (rule-based): BSL-Compliance + Auto-Repair
+2. **Server Guards** (Phase 5): `enforce_safety` + `enforce_known_tables` (Sicherheit + Tabellenvalidierung)
+3. **Layer B** (LLM-based): Semantische Validierung + Self-Correction
 
 > **Hinweis**: Für vollständige ADRs siehe `docs/ARCHITEKTUR_ENTSCHEIDUNGEN.md`
 
@@ -172,8 +181,8 @@ Zeige wie query_id für Paging funktioniert
 ### Q1: "Ist das nicht hardcoded?"
 **A**: "Nein. Wir kodifizieren Business Rules aus KB/Meanings, keine fertigen SQL-Lösungen. BSL ist ein Regelwerk, keine Antwortentabelle."
 
-### Q2: "Warum 95% und nicht 100%?"
-**A**: "1 Fehler bei Identifier-Consistency (Q5). Das zeigt, dass BSL funktioniert, aber LLM-Integration noch perfektiert werden kann. 95% ist für Text2SQL sehr gut."
+### Q2: "Warum 88.5% und nicht 100%?"
+**A**: "3 Fragen erreichten 95% statt 100% (Q5: Identifier, Q6: Spaltenausgabe, Q10: Details). Das zeigt, dass BSL funktioniert, aber LLM-Integration noch perfektiert werden kann. 88.5% ist für Text2SQL sehr gut."
 
 ### Q3: "Warum nicht RAG/Vector Store?"
 **A**: "BSL ist deterministisch und nachvollziehbar. RAG wäre token-effizienter aber nicht-deterministisch. Für Evaluation und akademische Verteidigung ist Stabilität wichtiger."
@@ -190,16 +199,16 @@ Zeige wie query_id für Paging funktioniert
 
 ### ✅ Technische Artefakte
 - [ ] Prototyp mit Live-Demo
-- [ ] Architekturdiagramm (6-Phasen Pipeline)
+- [ ] Architekturdiagramm (8-Phasen Pipeline)
 - [ ] Prozessdiagramm (Datenfluss)
 - [ ] Datenmodell (ER-Diagramm Credit-DB)
 - [ ] ADRs (Architecture Decision Records)
 
 ### ✅ Ergebnisse & Validation
-- [ ] Testergebnisse (9.5/10 Success Rate)
-- [ ] Performance-Metriken (3.2s avg, ~32KB tokens)
+- [ ] Testergebnisse (88.5% Success Rate)
+- [ ] Performance-Charakteristik (schneller als RAG, höherer Token-Verbrauch)
 - [ ] Consistency Validation Results
-- [ ] BSL-Regeln (6 Module)
+- [ ] BSL-Regeln (6 Sektionen)
 
 ### ✅ Akademische Anforderungen
 - [ ] Limitationen dokumentiert
@@ -224,7 +233,7 @@ Zeige wie query_id für Paging funktioniert
 **Mitigation**: "Scope-fit für Credit-DB, nicht für alle BIRD-Tasks"
 
 ### Risiko 3: "Warum nicht 100%?"
-**Mitigation**: "95% ist sehr gut für Text2SQL, 1 Fehler zeigt Realismus"
+**Mitigation**: "88.5% ist sehr gut für Text2SQL, 3 Fragen mit 95% zeigen Realismus"
 
 ### Risiko 4: Technische Probleme
 **Mitigation**: Einfache Fallback-Demo, Screenshots als Backup
@@ -234,7 +243,7 @@ Zeige wie query_id für Paging funktioniert
 ## 🎯 Key Messages (wiederholen)
 
 1. **BSL löst Semantik-Probleme** - explizite Regeln statt "Black Box"
-2. **95% Success Rate** - nachweisbare Qualität auf Credit-DB
+2. **88.5% Success Rate** - nachweisbare Qualität auf Credit-DB
 3. **Deterministische Ergebnisse** - wichtig für Evaluation & Produktion
 4. **Nachvollziehbare Architektur** - MADR-Format, keine Hardcoding
 5. **Scope-Fit** - Credit-DB Fokus vermeidet Over-Engineering
@@ -260,18 +269,21 @@ Zeige wie query_id für Paging funktioniert
 
 > **Hinweis**: Heuristische Fragetyp-Erkennung und Consistency Checks sind in `llm/generator.py` integriert, nicht als separate Module.
 
-### Request-Flow (Phasen im API-Call)
+### Request-Flow (Phase 0-8)
 
-> **Wichtig**: `bsl_builder.py` ist ein **Build-/Maintenance-Tool** (offline/on-demand) und **kein** Request-Step im API-Flow. Die BSL-Datei (`credit_bsl.txt`) wird zur Laufzeit nur geladen, nicht generiert.
+> **Wichtig**: `bsl_builder.py` ist ein **Build-/Maintenance-Tool** (Phase 0, offline/on-demand) und **kein** Request-Step im API-Flow. Die BSL-Datei (`credit_bsl.txt`) wird zur Laufzeit nur geladen, nicht generiert.
 
-1. **Context Loading** - Schema, Meanings, KB, BSL werden geladen (cached)
-2. **Parallelisierung** - Ambiguity Detection + SQL-Generierung parallel
-3. **SQL-Generierung (BSL-first)** - LLM generiert SQL mit heuristischen Fragetyp-Checks + Layer A (rule-based Compliance + Auto-Repair)
-4. **Optional: Self-Correction Loop (Layer B)** - Bei niedriger Confidence
-5. **Server-Side Guards** - `enforce_safety` + `enforce_known_tables`
-6. **LLM SQL Validation** - Zusätzliche Prüfung + ggf. Korrektur bei high severity
-7. **Query Execution** - Mit Paging und Session-Management
-8. **Result Summarization** - Zusammenfassung der Ergebnisse
+| Phase | Bezeichnung | Beschreibung |
+|-------|-------------|--------------|
+| **Phase 0** | Build/Maintenance (offline) | BSL-Generierung durch `bsl_builder.py` |
+| **Phase 1** | Context Loading | Schema, Meanings, KB, BSL werden geladen (cached) |
+| **Phase 2** | Parallelisierung | Ambiguity Detection + SQL-Generierung parallel |
+| **Phase 3** | SQL-Generierung (BSL-first) | LLM generiert SQL + Layer A (rule-based Compliance + Auto-Repair) |
+| **Phase 4** | Self-Correction Loop (Layer B) | Optional bei niedriger Confidence |
+| **Phase 5** | Server Guards | `enforce_safety` + `enforce_known_tables` (Sicherheit + Tabellenvalidierung) |
+| **Phase 6** | LLM SQL Validation | Semantische Prüfung + ggf. Korrektur bei high severity |
+| **Phase 7** | Query Execution | Mit Paging und Session-Management |
+| **Phase 8** | Result Summarization | Zusammenfassung der Ergebnisse |
 
 ### Datenfluss (korrigiert)
 
@@ -429,25 +441,25 @@ erDiagram
 
 ## 📈 Testergebnisse & Performance
 
-### Success Rate: 95% (9.5/10 Fragen)
+### Success Rate: 88.5% (7×100% + 3×95%)
 
 | Testfall | Beschreibung | Erwartet | Ergebnis | Status |
 |-----------|--------------|------------|-----------|---------|
-| Frage 1 | Finanzielle Kennzahlen pro Kunde | CS Format, korrekte JOINs | ✅ Bestanden |
-| Frage 2 | Engagement nach Kohorte | Zeitbasierte Aggregation | ✅ Bestanden |
-| Frage 3 | Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ Bestanden |
-| Frage 4 | Top 10 Kunden | ORDER BY + LIMIT | ✅ Bestanden |
-| Frage 5 | Digital Natives | JSON-Extraktion | ⚠️ Identifier-Konsistenz |
-| Frage 6 | Risikoklassifizierung | Business Rules | ✅ Bestanden |
-| Frage 7 | Komplexe Multi-Level Aggregation | CTEs, Prozentberechnung | ✅ Bestanden |
-| Frage 8 | Segment-Übersicht mit Grand Total | UNION ALL | ✅ Bestanden |
-| Frage 9 | Property Leverage | Tabellen-spezifische Regeln | ✅ Bestanden |
-| Frage 10 | Kredit-Klassifizierungsdetails | Detail-Query, kein GROUP BY | ✅ Bestanden |
+| Frage 1 | Finanzielle Kennzahlen pro Kunde | CS Format, korrekte JOINs | ✅ 100% |
+| Frage 2 | Engagement nach Kohorte | Zeitbasierte Aggregation | ✅ 100% |
+| Frage 3 | Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ 100% |
+| Frage 4 | Top 10 Kunden | ORDER BY + LIMIT | ✅ 100% |
+| Frage 5 | Digital Natives | JSON-Extraktion | ⚠️ 95% (Identifier) |
+| Frage 6 | Risikoklassifizierung | Business Rules | ⚠️ 95% (Spalten) |
+| Frage 7 | Komplexe Multi-Level Aggregation | CTEs, Prozentberechnung | ✅ 100% |
+| Frage 8 | Segment-Übersicht mit Grand Total | UNION ALL | ✅ 100% |
+| Frage 9 | Property Leverage | Tabellen-spezifische Regeln | ✅ 100% |
+| Frage 10 | Kredit-Klassifizierungsdetails | Detail-Query, kein GROUP BY | ⚠️ 95% (Details) |
 
-### Performance-Metriken
-- **Durchschnittliche Antwortzeit**: 3.2 Sekunden
-- **Token-Verbrauch**: ~32KB pro Query
-- **Cache-Hit-Rate**: 87% (Schema), 72% (BSL)
+### Performance-Charakteristik
+- **Antwortzeit**: Schneller als RAG-Ansatz (keine Retrieval-Latenz)
+- **Token-Verbrauch**: Höher als RAG (BSL-first benötigt vollständigen Kontext)
+- **Trade-off**: Stabilität und Determinismus gegen Token-Kosten
 - **Validation-Time**: <500ms für Consistency Checks
 
 ---

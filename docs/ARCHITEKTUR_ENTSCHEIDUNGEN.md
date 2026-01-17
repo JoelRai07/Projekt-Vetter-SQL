@@ -199,11 +199,11 @@ Wenn die erste SQL nicht compliant ist, wird gezielt eine **Regeneration** ausge
 
 ---
 
-## ADR-006: Consistency Validation (mehrstufig)
+## ADR-006: Consistency Validation (3-Ebenen)
 
-**Status**: accepted  
-**Deciders**: Projektteam  
-**Date**: 12.01.2026  
+**Status**: accepted
+**Deciders**: Projektteam
+**Date**: 12.01.2026
 **Technical Story**: Qualitätssicherung, Fehlervermeidung, bessere Debugbarkeit
 
 ### Context and Problem Statement
@@ -215,17 +215,30 @@ Trotz BSL treten in der Praxis wiederkehrende Fehler auf:
 - SQL-Dialekt-Fallen (z.B. UNION + ORDER BY in SQLite)
 
 ### Decision Outcome
-Einführung einer **mehrstufigen Validation**, um typische Fehler früh zu erkennen und
+Einführung einer **3-Ebenen Validation**, um typische Fehler früh zu erkennen und
 gezielt zu korrigieren.
 
-### Validation Layers
-- **Layer A (deterministisch / rule-based):**
-  - SQL Guard / Placeholder-Checks (`_contains_param_placeholders`)
-  - UNION/ORDER Fix (`_fix_union_order_by`)
-  - Fragetyp-spezifische Konsistenzregeln (über ADR-005 Trigger + Compliance Instruction)
-- **Layer B (LLM-Validation optional):**
-  - Semantische Validierung gegen Schema (Funktion `validate_sql(...)`)
-  - Optionaler Correction-Loop (`generate_sql_with_correction(...)`)
+### Validation Layers (3 Ebenen)
+
+| Ebene | Typ | Prüft | Implementierung |
+|-------|-----|-------|-----------------|
+| **Layer A** | Rule-based + Auto-repair | BSL-Compliance, SQLite Dialektfix | `llm/generator.py` |
+| **Server Guards** | SQL Guard + Known Tables | Sicherheit (nur SELECT), Tabellenvalidierung | `utils/sql_guard.py`, `main.py` |
+| **Layer B** | LLM Validation | Semantik, JOINs, Spalten-Existenz | `llm/generator.py` (`validate_sql()`) |
+
+**Layer A (deterministisch / rule-based):**
+- SQL Guard / Placeholder-Checks (`_contains_param_placeholders`)
+- UNION/ORDER Fix (`_fix_union_order_by`)
+- Fragetyp-spezifische Konsistenzregeln (über ADR-005 Trigger + Compliance Instruction)
+
+**Server Guards (Phase 5):**
+- `enforce_safety(sql)`: Erlaubt nur SELECT-Statements
+- `enforce_known_tables(sql, table_columns)`: Validiert bekannte Tabellen
+- Autokorrektur bei Tabellenfehlern via LLM
+
+**Layer B (LLM-Validation optional):**
+- Semantische Validierung gegen Schema (Funktion `validate_sql(...)`)
+- Optionaler Correction-Loop (`generate_sql_with_correction(...)`)
 
 ### Consequences
 - Höhere Robustheit und bessere Fehlermeldungen (Debugging)
@@ -343,82 +356,81 @@ Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in ei
 
 ---
 
-### Phase 3: Initiale SQL-Generierung (BSL-first, LLM)
-- **Funktion**: `generate_sql(question, schema, meanings, bsl)`
-- **Prompt-Reihenfolge (BSL-first)**:
-  1. `BSL OVERRIDES (MANUAL)` (falls vorhanden)
-  2. `BUSINESS SEMANTICS LAYER (BSL)`
-  3. `DATENBANK SCHEMA & BEISPIELDATEN`
-  4. `SPALTEN BEDEUTUNGEN (Meanings)`
-  5. `NUTZER-FRAGE`
-- **Determinismus**: `temperature=0`
-- **Intent (implizit)**: Das LLM entscheidet im Prompt über Detailgrad/Aggregation/Ranking usw. basierend auf BSL+Schema+Meanings.
+### Phase 3: SQL-Generierung (BSL-first) + Layer A (rule-based Compliance + Auto-Repair)
+
+**In `OpenAIGenerator.generate_sql(...)`:**
+
+1. **Prompt-Reihenfolge (BSL-first)**:
+   - `BSL OVERRIDES (MANUAL)` (falls vorhanden)
+   - `BUSINESS SEMANTICS LAYER (BSL)`
+   - `DATENBANK SCHEMA & BEISPIELDATEN`
+   - `SPALTEN BEDEUTUNGEN (Meanings)`
+   - `NUTZER-FRAGE`
+2. LLM liefert JSON (sql, explanation, confidence, …)
+3. **Determinismus**: `temperature=0`
+
+**Layer A (rule-based Checks + Auto-Repair):**
+- **SQL Placeholder Guard**: `_contains_param_placeholders(sql)` - verhindert Platzhalter
+- **SQLite Dialekt-Fix**: `_fix_union_order_by(sql)` - wrappt UNION-Queries
+- **Fragetyp-Heuristiken**: `_is_property_leverage_question()`, `_has_explicit_time_range()`, etc.
+- **BSL-Compliance Instruction**: `_bsl_compliance_instruction(question, sql)` → ggf. Instruction
+- **Auto-Repair via Regeneration**: `_regenerate_with_bsl_compliance(...)` → 2. LLM Call nur bei Verstoß
 
 ---
 
-### Phase 4: Rule-based Compliance & Auto-Repair (Layer A)
-Diese Phase läuft **nach** der initialen SQL-Erzeugung und ist **deterministisch / regelbasiert**, kann aber bei Bedarf eine **gezielte Regeneration** triggern.
+### Phase 4: Self-Correction Loop (Layer B) bei niedriger Confidence
+Der Self-Correction Loop wird **im Request-Orchestrator (Backend)** ausgelöst, wenn das System erkennt, dass die initiale SQL vermutlich nicht ausreichend ist:
 
-#### 4.1 Rule-based Checks (deterministisch)
-- **SQL Placeholder Guard**: `_contains_param_placeholders(sql)`
-  - verhindert Platzhalter wie `?`, `:name`, `@name`, `$name` (nicht kompatibel mit Execution)
-- **SQLite Dialekt-Fix**: `_fix_union_order_by(sql)`
-  - wrappt `UNION`-Queries bei top-level `ORDER BY`, um SQLite-Kompatibilität sicherzustellen
-
-#### 4.2 Fragetyp-Heuristiken (Pattern-Trigger)
-- Beispiele:  
-  - `_is_property_leverage_question(question)`  
-  - `_is_credit_classification_summary_question(question)`  
-  - `_is_credit_classification_details_question(question)`  
-  - `_has_explicit_time_range(question)`  
-- Zweck: Edge Cases erkennen, bei denen LLMs häufig inkonsistente oder falsche SQL erzeugen (z. B. falscher Detailgrad, falsche Join-Chain, falsche Output-Spalten).
-
-#### 4.3 BSL-Compliance Instruction
-- **Funktion**: `_bsl_compliance_instruction(question, sql)`
-- Ergebnis: Liefert eine konkrete Anweisung, wenn die SQL gegen projektkritische Regeln verstößt (z. B. falsches ID-System CU/CS, falscher Summary-vs-Detail Output, Cohort-Fehler ohne expliziten Zeitraum).
-
-#### 4.4 Auto-Repair via Regeneration
-- **Funktion**: `_regenerate_with_bsl_compliance(...)`
-- Triggert einen **zweiten LLM-Call**, nur wenn `_bsl_compliance_instruction(...)` einen Verstoß erkennt.
-- Markiert die Erklärung intern mit `"[BSL compliance regeneration]"`, um den Repair-Schritt nachvollziehbar zu machen.
+- **Trigger**: Wenn `confidence < 0.4`
+- **Funktion**: `generate_sql_with_correction(...)` führt iterativ:
+  - SQL generieren/korrigieren
+  - `validate_sql(sql, schema)` via LLM
+  - erneute Korrektur (max 2 Iterationen)
 
 ---
 
-### Phase 5: LLM-gestützte Validierung & Self-Correction (Layer B)
-Diese Phase ergänzt Layer A um eine semantische Prüfung gegen das Schema und kann eine Korrekturschleife ausführen.
+### Phase 5: Server Guards (Security & Known-Table Validation)
 
-#### 5.1 Semantische SQL-Validierung
-- **Funktion**: `validate_sql(sql, schema)`
+**Server Guards** sind die mittlere Validierungsebene zwischen Layer A und Layer B:
+
+In `main.py` (vor Execution):
+- `enforce_safety(sql)` → nur SELECT, keine gefährlichen Statements (DROP, DELETE, INSERT, etc.)
+- `enforce_known_tables(sql, table_columns)` → nur bekannte Tabellen aus dem Schema erlaubt
+
+**Autokorrektur bei Tabellenfehlern:**
+Bei *nur* Table-Fehlern versucht `main.py` eine **Autokorrektur der Tabellennamen** via LLM (separater Correction Prompt) und validiert erneut.
+
+> **Hinweis**: Server Guards sind Teil der 3-Ebenen Validierungsarchitektur (ADR-006) und bilden die Sicherheitsschicht zwischen rule-based (Layer A) und LLM-based (Layer B) Validierung.
+
+---
+
+### Phase 6: LLM SQL Validation (zusätzliche Prüfung) + ggf. Korrektur
+
+Nach Server Guards:
+- **Funktion**: `validate_sql(generated_sql, schema)` (LLM)
 - LLM prüft die SQL semantisch (Schema-Kompatibilität, offensichtliche Logikfehler) und liefert:
   - `is_valid`
   - `errors`
   - `severity`
   - `suggestions`
+- Bei `severity == "high"`: `generate_sql_with_correction(...)` und erneute Validation
 
-### Phase 5.2: Self-Correction Loop (Layer B)
-
-Der Self-Correction Loop wird **im Request-Orchestrator (Backend)** ausgelöst, wenn das System erkennt, dass die initiale SQL vermutlich nicht ausreichend ist. Es gibt zwei Trigger:
-
-1) **Nach der ersten SQL-Generierung (Confidence-Gate)**
-- Wenn das Modell eine niedrige Sicherheit meldet  
-  → `confidence < 0.4`  
-- Dann wird `generate_sql_with_correction(...)` gestartet.
-
-2) **Nach der SQL-Validierung (Severity-Gate)**
-- Wenn die LLM-Validierung einen schweren Fehler erkennt  
-  → `severity == "high"`  
-- Dann wird ebenfalls `generate_sql_with_correction(...)` ausgeführt und anschließend erneut validiert.
-
-> Hinweis: Die Gates (Confidence/Severity) liegen im Orchestrator/Endpoint und entscheiden, ob eine Korrektur gestartet wird. 
-> Sobald der Orchestrator `generate_sql_with_correction` aufruft führt der `OpenAIGenerator` die Korrekturschleife intern aus (Generate → Validate → Correct, bis max_iterations (hier n = 2)).
 ---
 
-### Phase 6: Query Execution, Paging & Result Handling
+### Phase 7: Query Execution & Paging
 - **Execution**: SQLite führt die (finale) SQL deterministisch aus.
-- **Paging / Session Management**: typischerweise UUID-/Session-basiert (Orchestrator/Backend-API, außerhalb `OpenAIGenerator`).
-- **Result Processing**:
-  - Ergebnisse werden strukturiert zurückgegeben (z. B. JSON/Tabellenformat).
-  - Optional: **Result Summary** via `summarize_results(...)` (separater LLM-Call) auf Basis von Sample Rows.
+- **Normalisierung**: `generated_sql = db_manager.normalize_sql_for_paging(generated_sql)`
+- **Paging**: `execute_query_with_paging(sql, page, page_size)` liefert:
+  - `results`
+  - `paging_info` (page, total_pages, total_rows, …)
+- **Session Management**: UUID-basiert via `query_id`
+
+---
+
+### Phase 8: Result Summarization (optional)
+- **Funktion**: `summarize_results(question, generated_sql, results, len(results), notice)`
+- Separater LLM-Call auf Basis von Sample Rows
+- Fallback: einfache Preview ("Top N rows…")
 
 ---
 
@@ -544,11 +556,11 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
 | Q3 | Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ Bestanden | 100% | Aggregation, Business Logic |
 | Q4 | Top 10 Kunden | ORDER BY + LIMIT | ✅ Bestanden | 100% | Aggregation Patterns |
 | Q5 | Digital Natives | JSON-Extraktion | ⚠️ 95% | 95% | JSON Rules, Identity |
-| Q6 | Risikoklassifizierung | Business Rules | ✅ Bestanden | 100% | Business Logic |
+| Q6 | Risikoklassifizierung | Business Rules | ⚠️ 95% | 95% | Business Logic |
 | Q7 | Multi-Level Aggregation | CTEs, Prozentberechnung | ✅ Bestanden | 100% | Complex Templates |
 | Q8 | Segment-Übersicht + Total | UNION ALL | ✅ Bestanden | 100% | Complex Templates |
 | Q9 | Property Leverage | Tabellen-spezifische Regeln | ✅ Bestanden | 100% | Business Logic |
-| Q10 | Kredit-Details | Detail-Query, kein GROUP BY | ✅ Bestanden | 100% | Aggregation Patterns |
+| Q10 | Kredit-Details | Detail-Query, kein GROUP BY | ⚠️ 95% | 95% | Aggregation Patterns |
 
 ### Validierungs-Performance
 
@@ -557,12 +569,12 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
 - **JOIN Chain Validation**: 100% Korrektheit
 - **Aggregation Logic**: 100% Korrektheit
 - **BSL Compliance**: 98% Korrektheit
-- **Overall Success Rate**: 95% (9.5/10 Fragen)
+- **Overall Success Rate**: 88.5% (7×100% + 3×95%)
 
-**Performance-Metriken:**
-- **Durchschnittliche Antwortzeit**: ~3.2 Sekunden
-- **Token-Verbrauch**: ~32KB pro Query
-- **Cache-Hit-Rate**: 87% (Schema), 72% (BSL)
+**Performance-Charakteristik:**
+- **Antwortzeit**: Schneller als RAG-Ansatz (keine Retrieval-Latenz)
+- **Token-Verbrauch**: Höher als RAG (BSL-first benötigt vollständigen Kontext)
+- **Trade-off**: Stabilität und Determinismus gegen Token-Kosten
 - **Validation-Time**: <500ms für Consistency Checks
 
 > **Hinweis**: Die Consistency-Prüfung ist in `llm/generator.py` integriert, nicht als separates `consistency_checker.py` Modul.
