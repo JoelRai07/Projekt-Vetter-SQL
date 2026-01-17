@@ -218,7 +218,7 @@ Trotz BSL treten in der Praxis wiederkehrende Fehler auf:
 Einführung einer **mehrstufigen Validation**, um typische Fehler früh zu erkennen und
 gezielt zu korrigieren.
 
-### Validation Layers (empfohlen so zu dokumentieren)
+### Validation Layers
 - **Layer A (deterministisch / rule-based):**
   - SQL Guard / Placeholder-Checks (`_contains_param_placeholders`)
   - UNION/ORDER Fix (`_fix_union_order_by`)
@@ -308,42 +308,114 @@ Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in ei
 
 > **Hinweis**: Diese Sektionen sind Textblöcke im generierten BSL-File, keine separaten `.py`-Dateien.
 
-### Pipeline (6 Phasen)
+## Text2SQL Pipeline (Credit DB, BSL-first) – Stand Januar 2026
 
-**Phase 1: Context Loading**
-- **Schema**: Vollständiges Schema (7.5 KB) aus `credit_schema.txt`
-- **Meanings**: Spalten-Definitionen (15 KB) aus `credit_column_meaning_base.json`
-- **BSL**: Business Semantics Layer (~10 KB) aus `credit_bsl.txt`
-- **KB**: Knowledge Base (nur für Ambiguity Detection)
+> **Hinweis zur Terminologie:**  
+> In diesem Projekt wird zwischen **Build/Maintenance** (nicht pro Request) und **Runtime** (pro User-Request) unterschieden.  
+> Außerdem wird die Validierung in **Layer A (rule-based)** und **Layer B (LLM-based)** gegliedert, passend zur Implementierung in `backend/llm/generator.py`.
 
-**Phase 2: Intent-Erkennung & BSL-Compliance-Checks**
-- **Intent-Erkennung**: Hybride Lösung ohne separaten Classifier:
-  - **Implizit**: LLM erkennt Intent direkt beim SQL-Generieren im Prompt (z.B. "nach Segment" → Aggregation)
-  - **Explizit**: Pattern-basierte Helper-Funktionen (`_is_property_leverage_question()`, etc.) erkennen Edge Cases
-  - **BSL-Compliance**: Nach initialer SQL-Generierung werden BSL-Verstöße durch `_bsl_compliance_instruction()` erkannt
-  - **Regeneration**: Bei Problemen wird SQL mit spezifischen BSL-Anweisungen regeneriert (`_regenerate_with_bsl_compliance()`)
-- **Pattern-Trigger**: Helper-Funktionen sind **keine hardcodierten SQL-Antworten**, sondern aktivieren nur BSL-Regel-Verstärkungen für bekannte Edge Cases
-- **Ambiguity Detection**: Parallele Prüfung auf Mehrdeutigkeit durch separaten LLM-Call (`check_ambiguity()`)
+---
 
-**Phase 3: BSL-Generierung**
-- **Dynamische Regel-Generierung**: Aus KB + Meanings
-- **Override-Integration**: Manuelles System-Korrekturen
+### Phase 0: Build / Maintenance (nicht pro Request)
+- **BSL Builder** (`bsl_builder.py`): Generiert die Datei `credit_bsl.txt` aus **KB + Meanings + Schema** (on-demand/offline).
+- **Manuelle Overrides**: Optionaler Abschnitt `# BSL OVERRIDES (MANUAL)` in `credit_bsl.txt`.
+  - Wird zur Laufzeit per `_extract_bsl_overrides(bsl_text)` extrahiert und im Prompt als **höchste Priorität** platziert.
 
-**Phase 4: SQL-Generierung (BSL-first)**
-- **Prompt-Struktur**: BSL → Schema → Meanings → Frage
-- **Deterministische Generierung**: Temperature=0.0
-- **Intent-Integration**: SQL-Hints berücksichtigen
+---
 
-**Phase 5: Consistency Validation**
-- **Level 1**: SQL Guard (Regex-basiert, Safety)
-- **Level 2**: LLM Validation (Semantik, JOINs, BSL)
-- **Level 3**: BSL Consistency Checker (Identifier, Aggregation)
-- **Level 4 (Falls notwendig)**: Self Correction Loop
+### Phase 1: Context Loading (Runtime)
+- **Schema**: Vollständiges Schema (z. B. aus `credit_schema.sql` / `credit_schema.txt` je nach Export)  
+- **Meanings**: Spaltenbedeutungen aus `credit_column_meaning_base.json`
+- **BSL**: Business Semantics Layer aus `credit_bsl.txt` (inkl. optionaler Overrides)
+- **KB**: Knowledge Base wird primär für **Ambiguity Detection** verwendet (nicht zwingend Teil des SQL-Generation-Prompts)
 
-**Phase 6: Query Execution & Paging**
-- **SQLite Execution**: Deterministische Ausführung
-- **Session Management**: UUID-basierte Paging-Sessions
-- **Result Processing**: Formatierung und Zusammenfassung
+---
+
+### Phase 2: Ambiguity Detection (optional, separater LLM-Call)
+- **Funktion**: `check_ambiguity(question, schema, kb, meanings)`
+- **Ziel**: Mehrdeutige Fragen erkennen, bevor SQL erzeugt wird
+- **Output**:  
+  - `is_ambiguous`  
+  - `reason`  
+  - `questions` (Rückfragen zur Präzisierung)
+
+> **Wichtig:** Diese Phase ist ein **separater Schritt** (kein „Parallelprozess“ im Generator selbst). Ob sie immer ausgeführt wird, hängt vom Orchestrator/Endpoint ab.
+
+---
+
+### Phase 3: Initiale SQL-Generierung (BSL-first, LLM)
+- **Funktion**: `generate_sql(question, schema, meanings, bsl)`
+- **Prompt-Reihenfolge (BSL-first)**:
+  1. `BSL OVERRIDES (MANUAL)` (falls vorhanden)
+  2. `BUSINESS SEMANTICS LAYER (BSL)`
+  3. `DATENBANK SCHEMA & BEISPIELDATEN`
+  4. `SPALTEN BEDEUTUNGEN (Meanings)`
+  5. `NUTZER-FRAGE`
+- **Determinismus**: `temperature=0`
+- **Intent (implizit)**: Das LLM entscheidet im Prompt über Detailgrad/Aggregation/Ranking usw. basierend auf BSL+Schema+Meanings.
+
+---
+
+### Phase 4: Rule-based Compliance & Auto-Repair (Layer A)
+Diese Phase läuft **nach** der initialen SQL-Erzeugung und ist **deterministisch / regelbasiert**, kann aber bei Bedarf eine **gezielte Regeneration** triggern.
+
+#### 4.1 Rule-based Checks (deterministisch)
+- **SQL Placeholder Guard**: `_contains_param_placeholders(sql)`
+  - verhindert Platzhalter wie `?`, `:name`, `@name`, `$name` (nicht kompatibel mit Execution)
+- **SQLite Dialekt-Fix**: `_fix_union_order_by(sql)`
+  - wrappt `UNION`-Queries bei top-level `ORDER BY`, um SQLite-Kompatibilität sicherzustellen
+
+#### 4.2 Fragetyp-Heuristiken (Pattern-Trigger)
+- Beispiele:  
+  - `_is_property_leverage_question(question)`  
+  - `_is_credit_classification_summary_question(question)`  
+  - `_is_credit_classification_details_question(question)`  
+  - `_has_explicit_time_range(question)`  
+- Zweck: Edge Cases erkennen, bei denen LLMs häufig inkonsistente oder falsche SQL erzeugen (z. B. falscher Detailgrad, falsche Join-Chain, falsche Output-Spalten).
+
+#### 4.3 BSL-Compliance Instruction
+- **Funktion**: `_bsl_compliance_instruction(question, sql)`
+- Ergebnis: Liefert eine konkrete Anweisung, wenn die SQL gegen projektkritische Regeln verstößt (z. B. falsches ID-System CU/CS, falscher Summary-vs-Detail Output, Cohort-Fehler ohne expliziten Zeitraum).
+
+#### 4.4 Auto-Repair via Regeneration
+- **Funktion**: `_regenerate_with_bsl_compliance(...)`
+- Triggert einen **zweiten LLM-Call**, nur wenn `_bsl_compliance_instruction(...)` einen Verstoß erkennt.
+- Markiert die Erklärung intern mit `"[BSL compliance regeneration]"`, um den Repair-Schritt nachvollziehbar zu machen.
+
+---
+
+### Phase 5: LLM-gestützte Validierung & Self-Correction (Layer B)
+Diese Phase ergänzt Layer A um eine semantische Prüfung gegen das Schema und kann eine Korrekturschleife ausführen.
+
+#### 5.1 Semantische SQL-Validierung
+- **Funktion**: `validate_sql(sql, schema)`
+- LLM prüft die SQL semantisch (Schema-Kompatibilität, offensichtliche Logikfehler) und liefert:
+  - `is_valid`
+  - `errors`
+  - `severity`
+  - `suggestions`
+
+#### 5.2 Self-correction Loop (iterative Korrektur)
+- **Funktion**: `generate_sql_with_correction(question, schema, meanings, bsl, max_iterations=2)`
+- Ablauf:
+  1. initiale Generierung (Phase 3 + ggf. Layer A)
+  2. LLM-Validation (5.1)
+  3. falls nötig: Korrekturprompt mit Fehlerliste → neue SQL
+  4. erneute Validation
+- Output enthält zusätzlich:
+  - `correction_iterations`
+  - optional `validation_warnings`
+
+---
+
+### Phase 6: Query Execution, Paging & Result Handling
+- **Execution**: SQLite führt die (finale) SQL deterministisch aus.
+- **Paging / Session Management**: typischerweise UUID-/Session-basiert (Orchestrator/Backend-API, außerhalb `OpenAIGenerator`).
+- **Result Processing**:
+  - Ergebnisse werden strukturiert zurückgegeben (z. B. JSON/Tabellenformat).
+  - Optional: **Result Summary** via `summarize_results(...)` (separater LLM-Call) auf Basis von Sample Rows.
+
+---
 
 ### BSL (Business Semantics Layer)
 
