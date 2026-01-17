@@ -162,7 +162,7 @@ BSL hat explizite Regelpriorität:
 
 ---
 
-## 6) Warum plötzlich „alle 10 Fragen“ funktionieren – und wie man das verteidigst
+## 6) Warum plötzlich „alle 10 Fragen“ funktionieren – und wie man das verteidigt
 
 ### Kernpunkt
 Die 10 Fragen sind inhaltlich nicht zufällig, sondern decken wiederkehrende **Fehlerklassen** ab:

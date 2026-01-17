@@ -26,9 +26,9 @@ bis zur aktuellen **BSL-first Single-Database** Architektur.
 | 001 | Initiale Multi-Database RAG/ReAct Architektur | deprecated | 12.01.2026 | ADR-004 |
 | 002 | Alte Routing Architektur (Database Auto-Routing) | deprecated | 12.01.2026 | ADR-004 |
 | 003 | Vector Store (ChromaDB) | deprecated | 12.01.2026 | ADR-004 |
-| 004 | Migration zu BSL-first Single-Database | accepted | 14.01.2026 | – |
-| 005 | Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger | accepted | 14.01.2026 | – |
-| 006 | Consistency Validation (mehrstufig) | accepted | 14.01.2026 | – |
+| 004 | Migration zu BSL-first Single-Database | accepted | 12.01.2026 | – |
+| 005 | Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger | accepted | 12.01.2026 | – |
+| 006 | Consistency Validation (mehrstufig) | accepted | 12.01.2026 | – |
 
 ---
 
@@ -194,7 +194,7 @@ Wenn die erste SQL nicht compliant ist, wird gezielt eine **Regeneration** ausge
 - Regeneration bei Verstoß: `_regenerate_with_bsl_compliance(...)`
 
 ### Consequences
-- Weniger typische Fehler (Aggregation vs Detail, CU vs CS, Cohort-Fehler)
+- Weniger typische Fehler (Aggregation vs Detail, CU vs CS, Cohort/Time-Logic Fehler)
 - Kein Hardcoding von SQL, sondern „Policy/Compliance“-Schicht
 
 ---
@@ -272,11 +272,11 @@ Die aktuelle Architektur ist das Ergebnis der oben dokumentierten Entscheidungen
 |------------|-------------|------------------|--------------|
 | **Frontend** | React 18+ | Nutzer-Interface, API-Kommunikation | - |
 | **Backend API** | FastAPI | Anfrage-Koordination, Pipeline-Orchestrierung | - |
-| **Intent Handling** | LLM (SQL Generator) | Intent-Erkennung, Ambiguity Detection, SQL-Hints | ADR-003 |
-| **BSL Builder** | Monolitisch | Business Semantics Layer Generierung | ADR-002 / ADR-005 |
-| **SQL Generator** | OpenAI GPT-5.2 | BSL-first SQL-Generierung | ADR-002 |
-| **Consistency Checker** | Multi-Level Validation | BSL-Compliance, Fehlererkennung | ADR-005 |
-| **Database Manager** | SQLite | Query-Ausführung, Paging, Sessions | - |
+| **Intent Handling** | LLM (SQL Generator) | Intent-Erkennung, Ambiguity Detection, SQL-Hints | ADR-005 |
+| **BSL Builder** | Monolitisch | Business Semantics Layer Generierung | ADR-002 / ADR-004 |
+| **SQL Generator** | OpenAI GPT-5.2 | BSL-first SQL-Generierung | ADR-004 |
+| **Consistency Checker** | Multi-Level Validation | BSL-Compliance, Fehlererkennung | ADR-006 |
+| **Database Manager** | SQLite | Query-Ausführung, Paging, Sessions | ADR-001 |
 
 ### BSL-Sektionen (in generierter `credit_bsl.txt`)
 
@@ -395,17 +395,22 @@ Diese Phase ergänzt Layer A um eine semantische Prüfung gegen das Schema und k
   - `severity`
   - `suggestions`
 
-#### 5.2 Self-correction Loop (iterative Korrektur)
-- **Funktion**: `generate_sql_with_correction(question, schema, meanings, bsl, max_iterations=2)`
-- Ablauf:
-  1. initiale Generierung (Phase 3 + ggf. Layer A)
-  2. LLM-Validation (5.1)
-  3. falls nötig: Korrekturprompt mit Fehlerliste → neue SQL
-  4. erneute Validation
-- Output enthält zusätzlich:
-  - `correction_iterations`
-  - optional `validation_warnings`
+### Phase 5.2: Self-Correction Loop (Layer B)
 
+Der Self-Correction Loop wird **im Request-Orchestrator (Backend)** ausgelöst, wenn das System erkennt, dass die initiale SQL vermutlich nicht ausreichend ist. Es gibt zwei Trigger:
+
+1) **Nach der ersten SQL-Generierung (Confidence-Gate)**
+- Wenn das Modell eine niedrige Sicherheit meldet  
+  → `confidence < 0.4`  
+- Dann wird `generate_sql_with_correction(...)` gestartet.
+
+2) **Nach der SQL-Validierung (Severity-Gate)**
+- Wenn die LLM-Validierung einen schweren Fehler erkennt  
+  → `severity == "high"`  
+- Dann wird ebenfalls `generate_sql_with_correction(...)` ausgeführt und anschließend erneut validiert.
+
+> Hinweis: Die Gates (Confidence/Severity) liegen im Orchestrator/Endpoint und entscheiden, ob eine Korrektur gestartet wird. 
+> Sobald der Orchestrator `generate_sql_with_correction` aufruft führt der `OpenAIGenerator` die Korrekturschleife intern aus (Generate → Validate → Correct, bis max_iterations (hier n = 2)).
 ---
 
 ### Phase 6: Query Execution, Paging & Result Handling
@@ -517,7 +522,7 @@ und enthaelt die wichtigsten Business Rules.
 | **Stabilität** | Niedrig (nicht-deterministisch) | Hoch (deterministisch) | **Aktuell** | Wichtig für Evaluation |
 | **Nachvollziehbarkeit** | Niedrig (Black Box) | Hoch (explizite Regeln) | **Aktuell** | Academic Rigor |
 | **Wartbarkeit** | Niedrig (viele Dependencies) | Hoch (modular) | **Aktuell** | SOLID-Prinzipien |
-| **Token-Kosten** | **Hoch** (~2KB) | Niedrig (~32KB) | **Alt** | Kosteneffizienz |
+| **Token-Kosten** | **Niedrig** (~2KB) | **Hoch** | **Alt** | Kosteneffizienz |
 | **Skalierbarkeit** | **Hoch** (Multi-DB) | Niedrig (Single-DB) | **Alt** | Flexibilität |
 | **Debugbarkeit** | Niedrig (komplex) | Hoch (klar) | **Aktuell** | Fehleranalyse |
 | **Scope-Fit** | Niedrig (Over-Engineering) | **Hoch** (Credit-DB) | **Aktuell** | YAGNI-Prinzip |
@@ -703,8 +708,10 @@ if auto_select:
 ```python
 # BSL-first, Single-DB
 selected_db = Config.DEFAULT_DATABASE  # Immer credit
-schema, meanings, bsl = load_context_files(selected_db)
-sql = generate_sql(question, schema, meanings, bsl)  # Direkt, kein ReAct
+schema = get_cached_schema(db_path)
+meanings = get_cached_meanings(database, DATA_DIR)
+kb, bsl = load_context_files(database, DATA_DIR)  # je nach Implementierung
+sql = llm_generator.generate_sql(question, schema, meanings, bsl)  # Direkt, kein ReAct
 ```
 
 ---
