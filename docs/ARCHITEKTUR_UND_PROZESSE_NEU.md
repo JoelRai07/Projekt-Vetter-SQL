@@ -44,8 +44,6 @@ Das System verwendet einen **Business Semantics Layer (BSL)** als explizite Rege
 
 ## Architektur auf höchster Ebene
 
-> **Korrektur:** Der BSL Builder ist im produktiven Request-Flow **nicht** Teil der Pipeline. Die API **lädt** `credit_bsl.txt`; der Builder wird offline/on-demand genutzt, um diese Datei zu erzeugen/aktualisieren.
-
 ```mermaid
 graph TB
   subgraph "Frontend Layer"
@@ -86,8 +84,6 @@ graph TB
 
 ## Kernkomponenten
 
-> **Korrektur:** Backend ist **FastAPI**, nicht FastAPI + separater „Consistency Checker" als Modul. Validierung ist verteilt auf `utils/sql_guard.py`, `enforce_known_tables`, plus LLM-Validation in `llm/generator.py`.
-
 | Komponente             | Technologie                         | Verantwortlichkeit                                                         | BSL-Integration         |
 | ---------------------- | ----------------------------------- | -------------------------------------------------------------------------- | ----------------------- |
 | **Frontend**           | React                               | UI, Frage-Input, Ergebnisanzeige, Paging                                   | -                       |
@@ -100,8 +96,6 @@ graph TB
 ---
 
 ## BSL-Sektionen (in `credit_bsl.txt`)
-
-> **Korrektur:** Der Builder trennt in **Part A (True BSL)**, **Part B (Mapping, nicht Teil der BSL)**, **Annex C (Policy)**. Es sind Textblöcke in einer Datei, keine `.py`-Module im Runtime-System.
 
 1. **Part A: BUSINESS SEMANTICS LAYER (BSL)** (Business Terms, Rules, Metric Definitions)
 2. **Part B: SEMANTIC-TO-SCHEMA MAPPING (NOT PART OF THE BSL)** (Identifier-Mapping, Relationship-Chain, JSON-Feldpfade)
@@ -131,8 +125,6 @@ graph TB
 * **Status:** accepted
 * **Date:** 12.01.2026
 * **Kernpunkt:** Layer A (rule-based) + Layer B (LLM-based) + serverseitige Guards
-
-> **Korrektur gegenüber vorheriger Version:** Es gibt in deinem Code weiterhin Fragetyp-Checks – das ist **kein Hardcoding von SQL**, sondern "Guardrails/Policy".
 
 ---
 
@@ -173,13 +165,9 @@ Content-Type: application/json
   * KB + BSL: `load_context_files(database, DATA_DIR)` 
     (danach wird Meanings nochmals aus Cache überschrieben – ist okay, aber doppelt)
 
-> **Korrektur:** "unendlich" als Cache-Policy ist keine Eigenschaft aus dem Code. Nenne es neutral: *Schema wird gecacht, da es selten ändert.*
-
 ---
 
 ### Phase 2: Parallelisierung – Ambiguity Detection + SQL-Generierung
-
-> **Korrektur:** In `main.py` laufen Ambiguity Check und SQL-Generierung **parallel** (ThreadPool), und Ambiguity führt **nicht** zum Abbruch — es wird nur ein Hinweis (`notice`) ergänzt.
 
 * Task A: `llm_generator.check_ambiguity(question, schema, kb, meanings)` 
 * Task B: `llm_generator.generate_sql(question, schema, meanings, bsl)` 
@@ -202,13 +190,9 @@ Wenn `ambiguity.is_ambiguous == true`:
    * `_regenerate_with_bsl_compliance(...)` → 2. LLM Call nur bei Verstoß
    * `_fix_union_order_by(sql)` für SQLite
 
-> **Korrektur:** Placeholders-Guard existiert (`_contains_param_placeholders`), wird aber aktuell nur indirekt über `_bsl_compliance_instruction` behandelt (Instruction), nicht als harter Block.
-
 ---
 
 ### Phase 4: Optionaler Self-Correction Loop (Layer B) bei niedriger Confidence
-
-> **Korrektur:** Layer B wird in `main.py` **zusätzlich** getriggert, wenn `confidence < 0.4`.
 
 * `generate_sql_with_correction(...)` führt iterativ:
 
@@ -227,8 +211,6 @@ In `main.py` (vor Execution):
 
 Bei *nur* Table-Fehlern versucht `main.py` eine **Autokorrektur der Tabellennamen** via LLM (separater Correction Prompt) und validiert erneut.
 
-> **Korrektur:** Das ist zusätzlich zu Layer A/B und gehört als eigener "Server Guard"-Step in die Doku.
-
 ---
 
 ### Phase 6: LLM SQL Validation (zusätzliche Prüfung) + ggf. Korrektur
@@ -237,8 +219,6 @@ Nach Server Guards:
 
 * `validate_sql(generated_sql, schema)` (LLM)
 * Bei `severity == "high"`: `generate_sql_with_correction(...)` und erneute Validation
-
-> **Korrektur:** Validation ist **nicht** nur "Consistency Checker"; es ist LLM-based Semantikprüfung + mögliche Korrektur.
 
 ---
 
@@ -311,9 +291,6 @@ Query Session:
 
 ### End-to-End Request Flow (korrigiert)
 
-> **Korrektur:** Keine "BSL Generate" Phase im Request. BSL wird geladen.
-> Außerdem: Ambiguity läuft parallel und blockiert nicht.
-
 ```mermaid
 sequenceDiagram
   participant User
@@ -361,9 +338,7 @@ sequenceDiagram
 
 ## Frontend-Backend Kommunikation
 
-### Request Format (korrigiert)
-
-> **Korrektur:** In `main.py` wird `database` nicht aus dem Request genutzt, sondern `Config.DEFAULT_DATABASE`. Du kannst `database` im Request weglassen oder als "future extension" deklarieren.
+### Request Format
 
 ```json
 {
@@ -374,10 +349,7 @@ sequenceDiagram
 }
 ```
 
-### Response Format (korrigiert / code-nah)
-
-> **Korrektur:** In `main.py` wird **kein `question_intent`** erzeugt. Außerdem heißt die SQL in der Response `generated_sql`.
-> Validation/Ambiguity werden als Objekte (`ambiguity_check`, `validation`) ausgegeben, wenn verfügbar.
+### Response Format
 
 ```json
 {
@@ -422,7 +394,7 @@ sequenceDiagram
 
 ---
 
-## Limitationen & Ausblick (korrigiert)
+## Limitationen & Ausblick
 
 ### Aktuelle Limitationen
 
@@ -441,9 +413,7 @@ sequenceDiagram
 
 ---
 
-## Testergebnisse & Validierung (korrigiert)
-
-> **Korrektur:** "Consistency Checker Results" ist irreführend, da Validierung verteilt ist. Nenne es neutral: **Validation/Guardrail Results**.
+## Testergebnisse & Validierung 
 
 * **Rule-based Layer A:** BSL-Compliance-Regeneration + SQLite Fixes
 * **Server Guards:** SELECT-only + known tables
@@ -453,9 +423,7 @@ sequenceDiagram
 
 ---
 
-## Produktivierungsanforderungen (korrigiert)
-
-> **Korrektur:** "Stored Procedures (Read-Only)" passt nicht zu SQLite und eurem Guard. Formuliere stattdessen "CTEs, Window Functions, Subqueries" (read-only).
+## Produktivierungsanforderungen 
 
 ---
 
@@ -466,7 +434,7 @@ sequenceDiagram
 
 ---
 
-## Zusammenfassung (korrigiert)
+## Zusammenfassung
 
 Dieses Text2SQL-System demonstriert:
 
