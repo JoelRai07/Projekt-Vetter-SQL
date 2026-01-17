@@ -35,14 +35,14 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 ### Der Request-Flow (Phasen)
 1. **Context Loading** - Schema + Meanings + BSL werden geladen (~10ms cached)
 2. **Parallelisierung** - Ambiguity Detection + SQL-Generierung parallel
-3. **SQL-Generierung (BSL-first)** - LLM generiert SQL mit integrierter Intent-Erkennung + Layer A (rule-based Compliance)
+3. **SQL-Generierung (BSL-first)** - LLM generiert SQL mit heuristischen Fragetyp-Checks + Layer A (rule-based Compliance)
 4. **Optional: Self-Correction Loop** - Bei niedriger Confidence (Layer B)
 5. **Server-Side Guards** - Safety (`enforce_safety`) + Known-Table Validation
 6. **LLM SQL Validation** - Zusätzliche Prüfung + ggf. Korrektur
 7. **Query Execution** - Mit Paging + Sessions
 8. **Result Summarization** - Zusammenfassung der Ergebnisse
 
-> **Wichtig**: Es gibt keine separate "Question Classification" Phase. Die Intent-Erkennung ist in `llm/generator.py` integriert (implizit durch LLM + explizite Pattern-Checks für Edge Cases).
+> **Wichtig**: Es gibt keine separate "Question Classification" Phase. Die heuristische Fragetyp-Erkennung ist in `llm/generator.py` integriert (Pattern-Matching für BSL-Compliance).
 
 ### BSL-Sektionen (in generierter `credit_bsl.txt`)
 1. **Identity System Rules** - CU vs CS Identifier System
@@ -56,7 +56,7 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 
 ---
 
-## 🧠 Wie Intent-Erkennung funktioniert (vereinfacht)
+## 🧠 Wie heuristische Fragetyp-Erkennung funktioniert (vereinfacht)
 
 **Problem**: Das System muss verstehen, was der Nutzer will:
 - "Schuldenlast **nach Segment**" → Aggregation (GROUP BY)
@@ -254,11 +254,11 @@ Zeige wie query_id für Paging funktioniert
 | **Frontend** | React | Nutzer-Interface, Frage-Input, Ergebnisanzeige |
 | **Backend API** | FastAPI | Anfrage-Koordination, Pipeline-Orchestrierung |
 | **BSL Builder** | Python | Business Semantics Layer Generierung aus KB |
-| **SQL Generator** | GPT-5.2 | SQL-Generierung mit BSL-Compliance + integrierte Intent-Erkennung |
+| **SQL Generator** | GPT-5.2 | SQL-Generierung mit BSL-Compliance + heuristische Fragetyp-Checks |
 | **SQL Guard** | Python | Safety-Validierung, Injection-Prevention |
 | **Database Manager** | SQLite | Query-Ausführung, Paging, Caching |
 
-> **Hinweis**: Intent-Erkennung und Consistency Checks sind in `llm/generator.py` integriert, nicht als separate Module.
+> **Hinweis**: Heuristische Fragetyp-Erkennung und Consistency Checks sind in `llm/generator.py` integriert, nicht als separate Module.
 
 ### Request-Flow (Phasen im API-Call)
 
@@ -266,7 +266,7 @@ Zeige wie query_id für Paging funktioniert
 
 1. **Context Loading** - Schema, Meanings, KB, BSL werden geladen (cached)
 2. **Parallelisierung** - Ambiguity Detection + SQL-Generierung parallel
-3. **SQL-Generierung (BSL-first)** - LLM generiert SQL mit integrierter Intent-Erkennung + Layer A (rule-based Compliance + Auto-Repair)
+3. **SQL-Generierung (BSL-first)** - LLM generiert SQL mit heuristischen Fragetyp-Checks + Layer A (rule-based Compliance + Auto-Repair)
 4. **Optional: Self-Correction Loop (Layer B)** - Bei niedriger Confidence
 5. **Server-Side Guards** - `enforce_safety` + `enforce_known_tables`
 6. **LLM SQL Validation** - Zusätzliche Prüfung + ggf. Korrektur bei high severity

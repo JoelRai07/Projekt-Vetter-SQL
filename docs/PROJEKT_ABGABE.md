@@ -178,7 +178,7 @@ sequenceDiagram
 | **React Frontend** | UI, Frage-Input, Ergebnisanzeige | HTTP → Backend |
 | **FastAPI Backend** | Pipeline-Orchestrierung, Caching, Server Guards | Koordiniert Request-Flow |
 | **BSL Builder (Offline-Tool)** | Generiert `credit_bsl.txt` aus KB + Meanings | KB + Meanings → BSL (einmalig) |
-| **LLM Generator** | BSL-first SQL-Generierung, Intent-Erkennung (integriert), SQL-Validation (integriert), Summaries | BSL + Schema → SQL |
+| **LLM Generator** | BSL-first SQL-Generierung, heuristische Fragetyp-Erkennung (Pattern-Matching), SQL-Validation (integriert), Summaries | BSL + Schema → SQL |
 | **SQL Guard** | Security (nur SELECT), Tabellenvalidierung | SQL → Validated SQL |
 | **Database Manager** | Query-Ausführung, Paging, Sessions | SQL → Results |
 
@@ -224,16 +224,16 @@ flowchart TD
 
 1. **Context Loading**: Schema, Meanings, KB, BSL werden geladen (cached)
 2. **Parallelisierung**: Ambiguity Detection + SQL-Generierung parallel
-3. **SQL-Generierung (BSL-first)**: LLM generiert SQL mit integrierter Intent-Erkennung + Layer A (rule-based Compliance + Auto-Repair)
+3. **SQL-Generierung (BSL-first)**: LLM generiert SQL mit heuristischen Fragetyp-Checks + Layer A (rule-based Compliance + Auto-Repair)
 4. **Optional: Self-Correction Loop (Layer B)**: Bei niedriger Confidence
 5. **Server-Side Guards**: `enforce_safety` + `enforce_known_tables`
 6. **LLM SQL Validation**: Zusätzliche Prüfung + ggf. Korrektur bei high severity
 7. **Query Execution**: Mit Paging und Session-Management
 8. **Result Summarization**: Zusammenfassung der Ergebnisse
 
-#### Wie Intent-Erkennung in diesem Projekt funktioniert:
+#### Wie heuristische Fragetyp-Erkennung in diesem Projekt funktioniert:
 
-**Kein separater Intent-Classifier**, sondern **hybride Lösung in `llm/generator.py`**:
+**Kein separater Intent-Classifier**, sondern **Pattern-Matching für BSL-Compliance** in `llm/generator.py`:
 
 1. **Implizite Intent-Erkennung**: Das LLM erkennt den Intent direkt beim SQL-Generieren (z.B. "nach Segment" → Aggregation, "top 10" → Ranking)
 2. **Pattern-basierte BSL-Compliance-Trigger (Layer A)**: Helper-Funktionen erkennen spezifische Frage-Patterns:
@@ -445,7 +445,7 @@ Chosen option: **"Option 3: BSL-first"**, because es erfüllt alle kritischen An
 
 ### ADR-005: Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger
 
-**[short title of solved problem and solution]**: LLM-basierte Intent-Erkennung mit Keyword-Triggern für BSL-Regel-Verstärkung
+**[short title of solved problem and solution]**: Heuristische Fragetyp-Erkennung mit Keyword-Triggern für BSL-Regel-Verstärkung
 **Status**: accepted
 **Deciders**: Tim Kühne, Dominik Ruoff, Joel Martinez
 **Date**: 12.01.2026
@@ -490,7 +490,7 @@ Die Methoden wie `_is_property_leverage_question()` in `llm/generator.py` sind *
 
 **Technische Implementierung:**
 
-Die Intent-Erkennung funktioniert in zwei Stufen:
+Die heuristische Fragetyp-Erkennung funktioniert in zwei Stufen:
 
 1. **Initial SQL-Generierung** (implizite Intent-Erkennung):
    ```python

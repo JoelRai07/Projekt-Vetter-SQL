@@ -288,7 +288,7 @@ Als nächster Ausbauschritt wäre ein deterministischer Policy Checker möglich 
 Außerdem bleibt ein LLM-Teil probabilistisch – BSL reduziert Fehlerklassen, eliminiert aber nicht jede Halluzination.“
 
 ### Q8: „Wie würdet ihr das auf mehrere DBs skalieren?“
-**A:** „Pro DB eigenes BSL, plus ein Routing/Intent-Layer.  
+**A:** „Pro DB eigenes BSL, plus ein Routing-Layer.  
 Wichtig: BSL bleibt pro Domäne/DB die Semantikquelle; Routing ist orthogonal.“
 
 ---
