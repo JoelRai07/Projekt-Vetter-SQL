@@ -651,26 +651,27 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 | Q3 | Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ Bestanden | 100% | Aggregation, Business Logic |
 | Q4 | Top 10 Kunden | ORDER BY + LIMIT | ✅ Bestanden | 100% | Aggregation Patterns |
 | Q5 | Digital Natives | JSON-Extraktion | ⚠️ 95% | 95% | JSON Rules, Identity |
-| Q6 | Risikoklassifizierung | Business Rules | ✅ Bestanden | 100% | Business Logic |
+| Q6 | Risikoklassifizierung | Business Rules | ⚠️ 95% | 95% | Business Logic |
 | Q7 | Multi-Level Aggregation | CTEs, Prozentberechnung | ✅ Bestanden | 100% | Complex Templates |
 | Q8 | Segment-Übersicht + Total | UNION ALL | ✅ Bestanden | 100% | Complex Templates |
 | Q9 | Property Leverage | Tabellen-spezifische Regeln | ✅ Bestanden | 100% | Business Logic |
-| Q10 | Kredit-Details | Detail-Query, kein GROUP BY | ✅ Bestanden | 100% | Aggregation Patterns |
+| Q10 | Kredit-Details | Detail-Query, kein GROUP BY | ⚠️ 95% | 95% | Aggregation Patterns |
 
 ### 🎯 Validierungs-Performance
 
 **Manuelle Evaluationsergebnisse (basierend auf 10 Testfragen):**
-- **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q5)
+- **Identifier Consistency**: 90% Korrektheit (1 Fehler bei Q5 und Q10)
+- **Mehr ausgegebene Spalten als gefragt**: 95% Korrektheit (1 Fehler bei Q6)
 - **JOIN Chain Validation**: 100% Korrektheit
 - **Aggregation Logic**: 100% Korrektheit  
 - **BSL Compliance**: 98% Korrektheit
-- **Overall Success Rate**: 95% (9.5/10 Fragen)
+- **Overall Success Rate**: 85% (5.5/10 Fragen)
 
 > **Hinweis**: Diese Metriken sind manuelle Evaluationsergebnisse aus der Analyse der 10 Testfragen. Die SQL-Validation erfolgt durch `validate_sql()` in `backend/llm/generator.py` (integriert, **kein separates** `consistency_checker.py` Modul).
 
 **Performance-Metriken:**
-- **Durchschnittliche Antwortzeit**: 3.2 Sekunden
-- **Token-Verbrauch**: ~32KB pro Query
+- **Durchschnittliche Antwortzeit**: Schneller als beim alten RAG + ReAct Ansatz
+- **Token-Verbrauch**: Sehr großer Token-Verbrauch
 - **Cache-Hit-Rate**: 87% (Schema), 72% (BSL)
 - **Validation-Time**: <500ms für SQL-Validation
 
@@ -693,7 +694,7 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
    - Multi-DB-Support würde pro-DB BSL und Routing erfordern
    - Aktuelle Architektur ist auf Credit-DB optimiert
 
-2. **Token-Kosten**: ~32KB pro Prompt durch BSL-first Ansatz
+2. **Token-Kosten**: Hohe Anzahl an Tokens pro Prompt durch BSL-first Ansatz
    - Höher als RAG-Ansatz (~2KB), aber für Credit-DB akzeptabel
    - Trade-off: Stabilität > Token-Effizienz
 
@@ -822,56 +823,59 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 
 ```mermaid
 graph TD
-    PM[Project Manager] --> ARCH[Architecture Lead]
-    PM --> DEV1[Backend Developer 1]
-    PM --> DEV2[Backend Developer 2]
-    PM --> FE[Frontend Developer]
-    PM --> QA[QA & Documentation]
-    
-    ARCH --> BSL[BSL Development]
-    DEV1 --> API[API Development]
-    DEV2 --> DB[Database & LLM]
-    FE --> UI[React Interface]
-    QA --> TEST[Testing & Docs]
+    PL[Project Lead<br/>Tim Kühne] --> ARCH[System Architecture]
+    PL --> COORD[Project Coordination]
+
+    PL --> BE[Backend Developer<br/>Dominik Ruoff]
+    PL --> FS[Fullstack Developer<br/>Joel Martinez]
+    PL --> PE[Prompt Engineer<br/>Umut Polat]
+    PL --> QA[QA & Documentation<br/>Sören Frank]
+
+    BE --> LLM[LLM Integration]
+    BE --> DB[Database Management]
+
+    FS --> FE[Frontend UI]
+    FS --> BSL[BSL Integration]
+    FS --> RAR[ReAct + RAG Optimization]
+
+    PE --> PROMPT[Few-Shot Prompting]
+    PE --> PE2[Prompt Engineering]
+
+    QA --> TEST[Testing]
+    QA --> DOCS[Documentation]
+    QA --> DEPLOY[Deployment]
 ```
 
 ### 📋 Team-Mitglieder
 
-| Rolle | Person | Verantwortlichkeiten | Arbeitspakete |
-|-------|--------|-------------------|---------------|
-| **Project Lead** | Tim Kühne | Gesamtprojekt-Koordination, Architektur | AP-001, AP-002 |
-| **Backend Developer** | Dominik Ruoff | LLM Integration, Database Management | AP-003, AP-004 |
-| **Backend Developer** | Joel Martinez | API Development, Performance | AP-003, AP-004 |
-| **Frontend Developer** | Umut Polat | React UI, User Experience | AP-005 |
-| **QA & Documentation** | Sören Frank | Testing, Dokumentation, Deployment | AP-006 |
+| Rolle | Person | Verantwortlichkeiten |
+|-------|--------|-------------------|
+| **Project Lead** | Tim Kühne | Gesamtprojekt-Koordination, Architektur | 
+| **Backend Developer** | Dominik Ruoff | LLM Integration, Database Management | 
+| **Fullstack Developer** | Joel Martinez | Frontend UI, BSL-Integration, ReAct + RAG optimizer | 
+| **Prompt Engineer** | Umut Polat | Few-Shot Prompting, Prompting, Promptengineering | 
+| **QA & Documentation** | Sören Frank | Testing, Dokumentation, Deployment | 
 
 ### 📅 Arbeitspakete & Zeitplan
 
 | Arbeitspaket | Verantwortlich | Dauer | Status | Aufwand |
 |--------------|----------------|--------|--------|--------|
-| **AP-001**: Projekt-Setup & Architektur | Tim Kühne | Woche 1-2 | ✅ Abgeschlossen | 40h |
-| **AP-002**: Backend API Development | Dominik + Joel | Woche 2-3 | ✅ Abgeschlossen | 80h |
-| **AP-003**: BSL Development | Tim + Sören | Woche 3-4 | ✅ Abgeschlossen | 60h |
-| **AP-004**: LLM Integration | Dominik | Woche 4-5 | ✅ Abgeschlossen | 50h |
-| **AP-005**: Frontend Development | Umut | Woche 3-5 | ✅ Abgeschlossen | 70h |
-| **AP-006**: Testing & Documentation | Sören | Woche 5-6 | ✅ Abgeschlossen | 45h |
-| **AP-007**: Integration & Demo | Alle | Woche 6 | ✅ Abgeschlossen | 30h |
+Hier kommen die Jira Tickets rein
 
-**Gesamtaufwand**: 375 Stunden (ca. 10 Wochen bei 40h/Woche)
+**Gesamtaufwand**: X Stunden (ca. 10 Wochen bei Y Stunden pro Woche)
 
 ### 🔄 Projektmethodik
 
 **Agile Entwicklung mit Scrum:**
 - **Sprint-Länge**: 2 Wochen
-- **Daily Standups**: Jeden Tag 15 Min
+- **Daily Standups**: An der DHBW ab und zu besprochen
 - **Sprint Reviews**: Ende jeder Sprint-Woche
 - **Retrospektive**: Nach jedem Sprint
-- **Tools**: GitHub Projects, Kanban Board, Slack
+- **Tools**: GitHub Projects, Kanban Board, Jira
 
 **Kommunikation:**
-- **Wöchentliches Team-Meeting**: Freitag 14:00
-- **Ad-hoc Meetings**: Bei Bedarf
-- **Dokumentation**: Confluence + GitHub Wiki
+- **Wöchentliches Team-Meeting**: Montags 18:30
+- **Dokumentation**: Confluence + GitHub
 - **Code Reviews**: Pull Requests für alle Änderungen
 
 ---
