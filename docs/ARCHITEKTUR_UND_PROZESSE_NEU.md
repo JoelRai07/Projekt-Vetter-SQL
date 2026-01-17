@@ -1,4 +1,12 @@
-# Architektur & Prozesse - Text2SQL System (BSL-first)
+# Architektur & Prozesse – Text2SQL System (BSL-first)
+
+> **Stand:** Januar 2026  
+> **Scope:** **Credit-DB (mini-interact / BIRD Subset)**  
+> **Backend:** **FastAPI** (`backend/main.py`)  
+> **LLM-Integration:** OpenAI ChatCompletions via `OpenAIGenerator` (`backend/llm/generator.py`)  
+> **Wichtiger Hinweis zur BSL-Generierung:** `bsl_builder.py` ist ein **Build-/Maintenance-Tool** (offline/on-demand) und **kein** Request-Step im API-Flow.
+
+---
 
 ## 📖 Inhaltsverzeichnis
 1. [System-Übersicht](#system-übersicht)
@@ -20,438 +28,239 @@
 
 ### Was ist das System?
 
-**Text2SQL** ist ein KI-basiertes System, das **natürliche Sprache in SQL-Abfragen übersetzt** und diese auf einer SQLite-Datenbank ausführt. Ein Nutzer stellt eine Frage in normaler Sprache (z.B. "Zeige mir alle Premium-Kunden mit hoher Finanzstabilität"), und das System generiert automatisch die entsprechende SQL-Query, führt sie aus und präsentiert die Ergebnisse.
+**Text2SQL** ist ein KI-basiertes System, das **natürliche Sprache in SQL-Abfragen übersetzt**, diese auf einer **SQLite-Datenbank** ausführt und die Ergebnisse (inkl. Paging) zurückliefert. Ein Nutzer stellt eine Frage in normaler Sprache (z. B. „Zeige mir Kunden mit hoher Schuldenlast nach Segment“), und das System generiert eine SQL-Query, validiert sie (rule-based + LLM-based), führt sie aus und präsentiert die Resultate samt Kurz-Zusammenfassung.
 
 ### Kerninnovation: Business Semantics Layer (BSL)
 
-Unser System verwendet einen **Business Semantics Layer (BSL)** - eine explizite Regelschicht, die fachliche Logik, Identifier-Systeme und Aggregationsmuster kodifiziert. Dies löst die häufigsten Fehlerklassen in Text2SQL-Systemen:
-- Identifier-Verwechslungen (CU vs CS)
-- Falsche Aggregationsentscheidungen
-- JOIN-Chain-Verletzungen
-- Unklare Business-Begriffe
+Das System verwendet einen **Business Semantics Layer (BSL)** als explizite Regelschicht, die **fachliche Logik**, **Identifier-Systeme** und **Aggregation/Output-Patterns** kodifiziert. Damit werden typische Fehlerklassen in Text2SQL reduziert:
 
-### Architektur auf höchster Ebene
+- Identifier-Verwechslungen (**CU vs CS**)
+- falscher Detailgrad (Summary vs Row-Level)
+- JOIN-Chain-Verletzungen / „Skipping tables“
+- unklare Business-Begriffe / Metriken
+- SQL-Dialekt-Fallen (z. B. SQLite `UNION` + `ORDER BY`)
+
+---
+
+## Architektur auf höchster Ebene
+
+> **Korrektur:** Der BSL Builder ist im produktiven Request-Flow **nicht** Teil der Pipeline. Die API **lädt** `credit_bsl.txt`; der Builder wird offline/on-demand genutzt, um diese Datei zu erzeugen/aktualisieren.
 
 ```mermaid
 graph TB
-    subgraph "Frontend Layer"
-        UI[React Frontend]
-        UI --> |HTTP/REST| API[FastAPI Backend]
-    end
-    
-    subgraph "Backend Layer"
-        API --> |Pipeline| BB[BSL Builder]
-        API --> |Pipeline| SG[SQL Generator]
-        API --> |Pipeline| DM[Database Manager]
-        SG --> |integriert| INT[Intent & Validation]
-    end
-    
-    subgraph "Data Layer"
-        KB[Knowledge Base]
-        SCHEMA[Database Schema]
-        BSL_FILE[BSL Rules]
-        MEANINGS[Column Meanings]
-        CACHE[Cache Layer]
-    end
-    
-    subgraph "External Services"
-        LLM[OpenAI GPT-5.2]
-    end
-    
-    SG --> LLM
-    INT --> LLM
-    BB --> KB
-    BB --> SCHEMA
-    BB --> MEANINGS
-    DM --> CACHE
+  subgraph "Frontend Layer"
+    UI[React Frontend]
+    UI -->|HTTP/REST| API[FastAPI Backend]
+  end
+
+  subgraph "Backend Layer"
+    API -->|load context + orchestrate| ORCH[Request Orchestrator]
+    ORCH --> GEN[OpenAIGenerator]
+    ORCH --> DBM[DatabaseManager]
+    ORCH --> GUARD[SQL Guard + Known Table Checks]
+    ORCH --> CACHE[Cache / Query Sessions]
+  end
+
+  subgraph "Data Assets"
+    KB[credit_kb.jsonl]
+    SCHEMA[credit_schema.sql or credit.sqlite]
+    MEANINGS[credit_column_meaning_base.json]
+    BSL_FILE[credit_bsl.txt]
+  end
+
+  subgraph "External Services"
+    LLM[OpenAI ChatCompletions Model]
+  end
+
+  ORCH -->|load| KB
+  ORCH -->|load| SCHEMA
+  ORCH -->|load| MEANINGS
+  ORCH -->|load| BSL_FILE
+
+  GEN --> LLM
+  DBM --> SCHEMA
+  CACHE --> ORCH
 ```
 
-### Kernkomponenten
+---
 
-| Komponente | Technologie | Verantwortlichkeit | BSL-Integration |
-|------------|-------------|------------------|------------------|
-| **Frontend** | React 18+ | Nutzer-Interface, Frage-Input, Ergebnisanzeige | - |
-| **Backend API** | FastAPI | Anfrage-Koordination, Pipeline-Orchestrierung | - |
-| **BSL Builder** | Modular (6 Module) | Business Semantics Layer Generierung | **Kernkomponente** |
-| **SQL Generator** | OpenAI GPT-5.2 | BSL-first SQL-Generierung, Intent-Erkennung (integriert), SQL-Validation (integriert) | **BSL-first Prompting** |
-| **Database Manager** | SQLite | Query-Ausführung, Paging, Caching | - |
+## Kernkomponenten
 
-### BSL-Sektionen (in generierter `credit_bsl.txt`)
+> **Korrektur:** Backend ist **FastAPI**, nicht FastAPI + separater „Consistency Checker" als Modul. Validierung ist verteilt auf `utils/sql_guard.py`, `enforce_known_tables`, plus LLM-Validation in `llm/generator.py`.
 
-Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in einer Textdatei** gespeichert - nicht als separate Python-Module:
+| Komponente             | Technologie                         | Verantwortlichkeit                                                         | BSL-Integration         |
+| ---------------------- | ----------------------------------- | -------------------------------------------------------------------------- | ----------------------- |
+| **Frontend**           | React                               | UI, Frage-Input, Ergebnisanzeige, Paging                                   | -                       |
+| **Backend API**        | FastAPI                             | Orchestrierung, Caching, Paging, Validierung                               | lädt `credit_bsl.txt`   |
+| **LLM Generator**      | `OpenAIGenerator`                   | SQL-Generierung + BSL-Compliance-Regeneration + LLM-Validation + Summaries | **BSL-first Prompting** |
+| **SQL Guard**          | `utils/sql_guard.py` + known tables | Security (nur SELECT), Tabellenvalidierung                                 | indirekt                |
+| **Database Manager**   | SQLite                              | Execution, Paging, Query-Normalisierung                                    | -                       |
+| **BSL Builder (Tool)** | `bsl_builder.py`                    | Offline/On-demand: Generiert `credit_bsl.txt`                              | erzeugt BSL-Datei       |
 
-1. **Identity System Rules** - CU vs CS Identifier System
-2. **Aggregation Patterns** - GROUP BY vs ORDER BY + LIMIT Erkennung
-3. **Business Logic Rules** - Financially Vulnerable, High-Risk, Digital Native
-4. **Join Chain Rules** - Strikte Foreign-Key Chain Validierung
-5. **JSON Field Rules** - JSON-Extraktionsregeln und Tabellen-Qualifizierung
-6. **Complex Query Templates** - Multi-Level Aggregation und CTE-Templates
+---
 
-> **Hinweis**: Diese sind Textblöcke im generierten BSL-File (`credit_bsl.txt`), keine separaten `.py`-Dateien.
+## BSL-Sektionen (in `credit_bsl.txt`)
+
+> **Korrektur:** Der Builder trennt in **Part A (True BSL)**, **Part B (Mapping, nicht Teil der BSL)**, **Annex C (Policy)**. Es sind Textblöcke in einer Datei, keine `.py`-Module im Runtime-System.
+
+1. **Part A: BUSINESS SEMANTICS LAYER (BSL)** (Business Terms, Rules, Metric Definitions)
+2. **Part B: SEMANTIC-TO-SCHEMA MAPPING (NOT PART OF THE BSL)** (Identifier-Mapping, Relationship-Chain, JSON-Feldpfade)
+3. **Annex C: SQL GENERATION POLICY** (Implementation Notes: Aggregation/Ranking/Row-level Policies)
 
 ---
 
 ## Architektur-Historie & ADRs
 
-### ADR-001: Von RAG/ReAct zu BSL-first Migration
+> **Wichtig:** In deinem ADR-Dokument sind die Nummern bereits sauber (ADR-001..006).
+> Dieses Dokument referenziert die relevanten Entscheidungen nur kurz und konsistent.
 
-**Status**: Accepted  
-**Deciders**: Projektteam, Professor-Feedback  
-**Date**: 2025-01-14  
-**Supersedes**: ADR-001 (RAG/ReAct Architektur)
+### ADR-004: Migration zu BSL-first Single-Database Architektur (accepted)
 
-#### Context and Problem Statement
-Die initiale RAG/ReAct-Architektur zeigte kritische Probleme:
-- **Nicht-deterministische Ergebnisse**: Gleiche Fragen produzierten unterschiedliche SQL
-- **Hohe Komplexität**: Viele Dependencies (ChromaDB, LangChain)
-- **Scope-Mismatch**: Projekt nutzt faktisch nur Credit-Datenbank
-- **Professor-Feedback**: "Es geht nur um die Credit-DB und BSL wäre ein besserer Ansatz"
+* **Status:** accepted
+* **Date:** 12.01.2026 (Verwurf der RAG-Architektur) / Einführung BSL-first erfolgte zuvor im Projektverlauf
+* **Kernpunkt:** Scope-Fit (Credit DB), Stabilität, Auditability
 
-#### Decision Drivers
-1. **Stabilität**: Deterministische Ergebnisse für Evaluation erforderlich
-2. **Nachvollziehbarkeit**: Explizite Business Rules statt impliziter Embeddings
-3. **Wartbarkeit**: Weniger Dependencies und Moving Parts
-4. **Scope-Fit**: Projekt fokussiert auf Credit-Datenbank
-5. **Professor-Feedback**: BSL als "bester Ansatz" empfohlen
+### ADR-005: Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger (accepted)
 
-#### Considered Options
-**Option 1: RAG + ReAct beibehalten**
-- Good: Token-Effizienz (~2KB vs 32KB), modern
-- Bad: Nicht-deterministisch, hohe Komplexität, schwer debugbar
+* **Status:** accepted
+* **Date:** 12.01.2026
+* **Kernpunkt:** Edge-Case Stabilisierung ohne Hardcoding: Heuristiken → Compliance Instruction → ggf. Regeneration
 
-**Option 2: Hybrid-Ansatz (RAG + BSL)**
-- Good: Flexibilität für große Schemas
-- Bad: Komplexität bleibt, Fehlerquellen
+### ADR-006: Consistency Validation (mehrstufig, accepted)
 
-**Option 3: BSL-first (chosen)**
-- Good: Deterministisch, explizite Regeln, wartbar, professor-konform
-- Bad: Höherer Token-Verbrauch (~32KB), weniger "modern"
+* **Status:** accepted
+* **Date:** 12.01.2026
+* **Kernpunkt:** Layer A (rule-based) + Layer B (LLM-based) + serverseitige Guards
 
-#### Decision Outcome
-Chosen option: **BSL-first**, because:
-- Erfüllt alle kritischen Anforderungen (Stabilität, Nachvollziehbarkeit, Wartbarkeit)
-- Implementiert Professor-Feedback direkt
-- Reduziert Komplexität signifikant
-- Bessere Grundlage für akademische Verteidigung
-
-#### Positive Consequences
-- Deterministische SQL-Generierung
-- Explizite, auditierbare Business Rules
-- Weniger Dependencies (kein ChromaDB, LangChain)
-- Einfachere Wartung und Debugging
-- Bessere akademische Argumentation
-
-#### Negative Consequences
-- Höhere Token-Kosten (~32KB vs ~2KB pro Prompt)
-- Weniger skalierbar für Multi-DB-Szenarien
-- Weniger "buzzword-compliant" (keine RAG/Vector Store)
-
----
-
-### ADR-002: Modularisierung der BSL-Regeln
-
-**Status**: Accepted  
-**Deciders**: Projektteam  
-**Date**: 2025-01-14
-
-#### Context and Problem Statement
-Die BSL-Generierung war monolithisch in einer 595-Zeilen-Datei implementiert. Dies erschwerte Wartung, Testing und Erweiterbarkeit.
-
-#### Decision Outcome
-Chosen option: **Modularisierung**, because:
-- Bessere Software-Engineering-Prinzipien
-- Unabhängige Tests und Wartung möglich
-- Klare Verantwortlichkeiten pro Modul
-
----
-
-### ADR-003: Eliminierung von Hardcoding
-
-**Status**: Accepted  
-**Deciders**: Projektteam  
-**Date**: 2025-01-14
-
-#### Context and Problem Statement
-Die SQL-Generierung enthielt hartcodierte Methoden für spezifische Frage-Typen. Dies widersprach dem Generalisierungsziel.
-
-#### Decision Outcome
-Chosen option: **Dynamische Intent-basierte Erkennung**, because:
-- Kompatibel mit LLM-basierter Intent-Erkennung im SQL-Generator
-- Keine spezifischen Frage-Typen hartcodiert
-- Automatische Anpassung an neue Intent-Typen
-
----
-
-### ADR-004: Implementierung von Consistency Validation
-
-**Status**: Accepted  
-**Deciders**: Projektteam  
-**Date**: 2025-01-14
-
-#### Context and Problem Statement
-Nach BSL-Migration zeigte sich, dass LLMs trotz BSL-Regeln häufig Fehler machten (Identifier, JOINs, Aggregation).
-
-#### Decision Outcome
-Chosen option: **Mehrstufige Consistency Validation**, because:
-- Bietet umfassende Fehlererkennung
-- Enthält BSL-Compliance-Checks
-- Liefert klare Fehlermeldungen
+> **Korrektur gegenüber vorheriger Version:** Es gibt in deinem Code weiterhin Fragetyp-Checks – das ist **kein Hardcoding von SQL**, sondern "Guardrails/Policy".
 
 ---
 
 ## Detaillierter Prozessablauf
 
-### Phase 1: Anfrage-Entgegennahme & Context Loading
+### Phase 0: Build/Maintenance (offline/on-demand)
+
+* `bsl_builder.py` generiert `mini-interact/credit/credit_bsl.txt` 
+* BSL Overrides können manuell in `credit_bsl.txt` gepflegt werden (`# BSL OVERRIDES (MANUAL)`)
+
+> Diese Phase ist **nicht** Teil des `/query` Request-Flows.
+
+---
+
+### Phase 1: Request Intake, Context Loading & Caching
 
 **Schritt 1.1: Frontend sendet Anfrage**
-```
-User: "Zeige mir Kunden mit hoher Schuldenlast nach Segment"
-     ↓
-Frontend POST /query
+
+```http
+POST /query
+Content-Type: application/json
+
 {
   "question": "Zeige mir Kunden mit hoher Schuldenlast nach Segment",
-  "database": "credit",
   "page": 1,
-  "page_size": 100
+  "page_size": 100,
+  "query_id": null
 }
 ```
 
-**Schritt 1.2: Backend lädt Kontext (mit Caching)**
+**Schritt 1.2: Backend lädt Kontext**
 
-Der Backend lädt vier Kontextdokumente parallel:
+* DB-Pfad: `DATA_DIR/credit/credit.sqlite` 
+* Kontext:
 
-1. **Schema** (7,5 KB)
-   - CREATE TABLE Statements für alle Tabellen
-   - Beispielzeilen von jeder Tabelle (wichtig für JSON-Spalten!)
-   - Foreign Key Beziehungen
-   - **Caching**: LRU-Cache (unendlich, ändert sich nie)
+  * Schema: `get_cached_schema(db_path)` 
+  * Meanings: `get_cached_meanings(database, DATA_DIR)` 
+  * KB + BSL: `load_context_files(database, DATA_DIR)` 
+    (danach wird Meanings nochmals aus Cache überschrieben – ist okay, aber doppelt)
 
-2. **Knowledge Base** (10 KB) - Domänen-Wissen
-   - 51 Einträge mit Definitionen von Metriken
-   - Formeln: DTI = debincratio, CUR = credutil, FSI = 0.3×(1-debincratio) + ...
-   - Klassifizierungen: "Prime Customer", "Financially Vulnerable", etc.
-   - **Caching**: TTL-Cache (1 Stunde, da Metriken stabil sind)
+> **Korrektur:** "unendlich" als Cache-Policy ist keine Eigenschaft aus dem Code. Nenne es neutral: *Schema wird gecacht, da es selten ändert.*
 
-3. **Column Meanings** (15 KB) - Spalten-Definitionen
-   - Beschreibung jeder Spalte
-   - JSON-Felder und ihre Unterkategorien
-   - Datentypen und Beispielwerte
-   - **Caching**: TTL-Cache (1 Stunde)
+---
 
-4. **BSL (Business Semantics Layer)** (~10 KB) - **NEU!**
-   - Modulare Regeln aus 6 Modulen:
-     - Identity Rules: CU vs CS Identifier
-     - Aggregation Patterns: GROUP BY vs ORDER BY
-     - Business Logic Rules: Financially Vulnerable, High-Risk, etc.
-     - Join Chain Rules: Foreign Key Chain
-     - JSON Field Rules: Korrekte Tabellen-Qualifizierung
-     - Complex Query Templates: Multi-Level Aggregation
-   - **Caching**: TTL-Cache (1 Stunde)
-   - **Format**: Plain-Text (`credit_bsl.txt`)
+### Phase 2: Parallelisierung – Ambiguity Detection + SQL-Generierung
 
-### Phase 2: Intent-Erkennung & BSL-Compliance-Checks
+> **Korrektur:** In `main.py` laufen Ambiguity Check und SQL-Generierung **parallel** (ThreadPool), und Ambiguity führt **nicht** zum Abbruch — es wird nur ein Hinweis (`notice`) ergänzt.
 
-**Wie Intent-Erkennung in diesem Projekt funktioniert:**
+* Task A: `llm_generator.check_ambiguity(question, schema, kb, meanings)` 
+* Task B: `llm_generator.generate_sql(question, schema, meanings, bsl)` 
 
-Die Intent-Erkennung erfolgt **nicht durch einen separaten LLM-Call**, sondern durch eine **hybride Kombination**:
+Wenn `ambiguity.is_ambiguous == true`:
 
-1. **Implizite Intent-Erkennung durch LLM** (beim SQL-Generieren):
-   - Das LLM analysiert die Frage direkt im SQL-Generierungs-Prompt
-   - Es erkennt Aggregationsbedarf, Detail-Requests, Ranking-Anfragen basierend auf BSL-Regeln
-   - Beispiel: "nach Segment" → LLM erkennt: braucht GROUP BY
+* Kein Hard-Fail; es wird ein `ambiguity_notice` in `notice` eingeblendet.
 
-2. **Pattern-basierte BSL-Compliance-Trigger** (für Edge Cases):
-   - Heuristische Helper-Funktionen in `llm/generator.py` erkennen spezifische Frage-Patterns:
-     - `_is_property_leverage_question()`: Erkennt Fragen zu "property leverage", "mortgage ratio", "LTV"
-     - `_is_digital_engagement_cohort_question()`: Erkennt "cohort" + "engagement" + "digital"
-     - `_is_credit_classification_details_question()`: Erkennt Detail-Requests für Credit-Klassifikation
-     - `_has_explicit_time_range()`: Erkennt explizite Jahres-/Quartals-Angaben
-   - Diese Trigger sind **keine hardcodierten SQL-Antworten**, sondern aktivieren spezifische BSL-Regel-Verstärkungen
+---
 
-3. **BSL-Compliance-Checks & Regeneration**:
-   - Nach der initialen SQL-Generierung wird `_bsl_compliance_instruction()` aufgerufen
-   - Diese Methode prüft, ob die generierte SQL gegen bekannte BSL-Patterns verstößt
-   - Bei Verstößen wird SQL mit spezifischen BSL-Anweisungen regeneriert
+### Phase 3: SQL-Generierung (BSL-first) + Layer A (rule-based Compliance + Auto-Repair)
 
-**Beispiel-Ablauf:**
-```python
-# 1. SQL wird initial generiert
-sql_result = llm_generator.generate_sql(question, schema, meanings, bsl)
+**In `OpenAIGenerator.generate_sql(...)`:**
 
-# 2. BSL-Compliance-Check
-instruction = llm_generator._bsl_compliance_instruction(question, sql_result["sql"])
+1. Prompt: **Overrides → BSL → Schema → Meanings → Frage**
+2. LLM liefert JSON (sql, explanation, confidence, …)
+3. Layer A:
 
-# 3. Falls Probleme erkannt werden, Regeneration mit spezifischen Anweisungen
-if instruction:
-    sql_result = llm_generator._regenerate_with_bsl_compliance(...)
-```
+   * `_bsl_compliance_instruction(question, sql)` → ggf. Instruction
+   * `_regenerate_with_bsl_compliance(...)` → 2. LLM Call nur bei Verstoß
+   * `_fix_union_order_by(sql)` für SQLite
 
-**Wichtige Klarstellung:**
-- Die Pattern-Funktionen (`_is_*_question()`) sind **keine hardcodierten Antworten**
-- Sie verstärken nur relevante BSL-Regeln im Prompt für Edge Cases
-- Das LLM generiert immer dynamisch SQL basierend auf vollständigem BSL + Schema + Meanings
+> **Korrektur:** Placeholders-Guard existiert (`_contains_param_placeholders`), wird aber aktuell nur indirekt über `_bsl_compliance_instruction` behandelt (Instruction), nicht als harter Block.
 
-**Schritt 2.3: Ambiguity Detection (parallel, separater LLM-Call)**
-```
-LLM prüft:
-- Frage mehrdeutig? (false)
-- Klare Absicht erkennbar? (true)
-- Metriken spezifiziert? (true)
+---
 
-Result: {
-  "is_ambiguous": false,
-  "reason": "Frage ist klar und spezifisch"
-}
-```
+### Phase 4: Optionaler Self-Correction Loop (Layer B) bei niedriger Confidence
 
-### Phase 3: BSL-Generierung (modular)
+> **Korrektur:** Layer B wird in `main.py` **zusätzlich** getriggert, wenn `confidence < 0.4`.
 
-**Schritt 3.1: Modulare Regel-Extraktion**
-```python
-# BSL Builder lädt Module
-from bsl.rules import (
-    IdentityRules,
-    AggregationPatterns,
-    BusinessLogicRules,
-    JoinChainRules,
-    JSONFieldRules,
-    ComplexQueryTemplates
-)
+* `generate_sql_with_correction(...)` führt iterativ:
 
-# Generiert BSL aus KB + Meanings
-bsl_content = bsl_builder.build_bsl(
-    knowledge_base=kb_entries,
-    column_meanings=meanings
-)
-```
+  * SQL generieren/korrigieren
+  * `validate_sql(sql, schema)` via LLM
+  * erneute Korrektur (max 2)
 
-**BSL-Inhalt (Beispiel):**
-```
-# IDENTITY SYSTEM RULES
-## ⚠️ CRITICAL: Dual Identifier System
-- CS Format: coreregistry (for customer_id output and JOINs)
-- CU Format: clientref (only when explicitly requested as client reference)
+---
 
-# AGGREGATION PATTERNS
-## Aggregation vs Detail Queries
-- "by category", "by segment" → GROUP BY
-- "top N", "highest" → ORDER BY + LIMIT
+### Phase 5: Server-Side Security & Known-Table Validation
 
-# BUSINESS LOGIC RULES
-## Financial Vulnerability
-- debincratio > 0.5 AND liqassets < mthincome × 3
-```
+In `main.py` (vor Execution):
 
-### Phase 4: SQL-Generierung (BSL-first)
+* `enforce_safety(sql)` → nur SELECT, keine gefährlichen Statements
+* `enforce_known_tables(sql, table_columns)` → nur bekannte Tabellen
 
-**Schritt 4.1: Prompt-Aufbau (BSL-first)**
-```
-Prompt-Struktur (in dieser Reihenfolge):
-  1. BSL Overrides (höchste Priorität)
-  2. Business Semantics Layer (modulare Regeln)
-  3. Vollständiges Schema + Beispieldaten
-  4. Spalten-Bedeutungen (Meanings)
-  5. Nutzer-Frage + Question Intent + SQL Hints
-```
+Bei *nur* Table-Fehlern versucht `main.py` eine **Autokorrektur der Tabellennamen** via LLM (separater Correction Prompt) und validiert erneut.
 
-**Schritt 4.2: SQL-Generierung mit Intent-Integration**
-```python
-sql_result = generator.generate_sql(
-    question=question,
-    schema=schema,
-    meanings=meanings,
-    bsl=bsl_content,
-    question_intent=question_intent,
-    sql_hints=sql_hints
-)
-```
+> **Korrektur:** Das ist zusätzlich zu Layer A/B und gehört als eigener "Server Guard"-Step in die Doku.
 
-**LLM erhält vollständigen Kontext:**
-- Schema (7.5 KB): Alle Tabellen, Foreign Keys, Beispieldaten
-- Meanings (15 KB): Spalten-Definitionen, JSON-Felder
-- BSL (~10 KB): Modulare Business Rules
-- Question Intent: Strukturierte Analyse der Frage
-- SQL Hints: Generierte Hinweise für korrekte SQL
+---
 
-### Phase 5: SQL Validation (integriert im Generator)
+### Phase 6: LLM SQL Validation (zusätzliche Prüfung) + ggf. Korrektur
 
-**Schritt 5.1: Umfassende Validierung**
-```python
-# Validation erfolgt durch den SQL Generator (integriert)
-validation_result = llm_generator.validate_sql(
-    sql=generated_sql,
-    schema=schema
-)
-```
+Nach Server Guards:
 
-> **Hinweis**: Die SQL-Validation ist in `llm/generator.py` integriert, nicht als separates `consistency_checker.py` Modul. Die Methode `validate_sql()` verwendet das LLM zur Validierung der generierten SQL gegen das Schema.
+* `validate_sql(generated_sql, schema)` (LLM)
+* Bei `severity == "high"`: `generate_sql_with_correction(...)` und erneute Validation
 
-**Validierungs-Ebenen:**
-1. **Level 1: SQL Guard** (`utils/sql_guard.py`): Sicherheits-Checks (nur SELECT, keine Injection)
-2. **Level 2: LLM Validation** (`llm/generator.py`): Semantik, JOINs, BSL-Compliance-Prüfung durch LLM
-3. **BSL-Compliance**: Wird durch LLM im Validation-Prompt geprüft (Teil von Level 2)
+> **Korrektur:** Validation ist **nicht** nur "Consistency Checker"; es ist LLM-based Semantikprüfung + mögliche Korrektur.
 
-**Severity-Level:**
-- `critical`: Führt zu Fehlern oder falschen Ergebnissen
-- `high`: Verletzt kritische Business Rules
-- `medium`: Stil-Probleme, funktioniert aber
-- `low`: Minimale Issues
+---
 
-### Phase 6: SQL-Ausführung mit Paging
+### Phase 7: Query Execution & Paging
 
-**Schritt 6.1: Query Execution**
-```sql
--- Generierte SQL
-SELECT 
-    cr.coreregistry AS customer_id,
-    cr.clientseg,
-    AVG(ei.debincratio) AS avg_debt_ratio,
-    COUNT(*) AS customer_count
-FROM core_record cr
-JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref
-GROUP BY cr.clientseg
-HAVING AVG(ei.debincratio) > 0.5
-ORDER BY avg_debt_ratio DESC
-LIMIT 100 OFFSET 0
-```
+* `generated_sql = db_manager.normalize_sql_for_paging(generated_sql)` 
+* `execute_query_with_paging(sql, page, page_size)` liefert:
 
-**Schritt 6.2: Paging-Logik**
-```
-Nutzer-Request: page=2, page_size=100
-              ↓
-Backend berechnet:
-  - OFFSET = (page - 1) × page_size = 100
-  - LIMIT = 100
-              ↓
-Paging-SQL:
-  SELECT ... LIMIT 100 OFFSET 100
-              ↓
-Response enthält:
-  {
-    results: [...],
-    page: 2,
-    total_pages: 47,
-    total_rows: 4650,
-    has_next_page: true,
-    has_previous_page: true
-  }
-```
+  * `results` 
+  * `paging_info` (page, total_pages, total_rows, …)
 
-### Phase 7: Ergebniszusammenfassung
+Query Session:
 
-**Schritt 7.1: Natürlichsprachliche Zusammenfassung**
-```
-Input für LLM:
-  - Nutzer-Frage: "Schuldenlast nach Segment"
-  - Generierte SQL: "SELECT clientseg, AVG(debincratio), ..."
-  - Erste 3 Ergebnis-Zeilen (als JSON)
-  - Row-Count: 1247
+* `query_id = create_query_session(database, sql, question)` 
+* Für Folgeseiten: `query_id` erforderlich; die SQL kommt aus der Session
 
-LLM generiert:
-  "Die Analyse zeigt, dass Premium-Kunden eine durchschnittliche 
-   Schuldenquote von 32% haben, während Standard-Kunden bei 45% liegen. 
-   Insgesamt wurden 1247 Kundensätze analysiert..."
-```
+---
+
+### Phase 8: Result Summarization (optional)
+
+* `summarize_results(question, generated_sql, results, len(results), notice)` 
+* Fallback: einfache Preview ("Top N rows…")
 
 ---
 
@@ -459,233 +268,148 @@ LLM generiert:
 
 ### Frontend (React)
 
-**Datei**: `frontend/src/App.jsx`
+* sendet `POST /query` mit `question`, `page`, `page_size`, optional `query_id` 
+* zeigt SQL, Results, Paging, Summary, Notice, Errors
 
-```mermaid
-graph TD
-    UI[User Interface] --> INPUT[Question Input]
-    UI --> DB[Database Selection]
-    UI --> SUB[Submit Button]
-    
-    INPUT --> API[POST /query]
-    DB --> API
-    SUB --> API
-    
-    API --> RES[Results Display]
-    API --> PAGE[Paging Controls]
-    API --> SQL[SQL Visualization]
-    API --> COPY[Copy to Clipboard]
-```
+### Backend (FastAPI – `backend/main.py`)
 
-**Key Features:**
-- Dark/Light Theme
-- Responsive Design
-- SQL-Visualisierung mit Syntax-Highlighting
-- Paging-Steuerung (Seite X von Y)
-- Copy-to-Clipboard für SQL
-- Error-Handling mit klaren Meldungen
+* Orchestriert:
 
-### Backend Pipeline
+  * Context Loading
+  * parallel Ambiguity + SQL Generation
+  * Confidence-based Self-correction
+  * Server-side Guards
+  * LLM Validation + Korrektur bei high severity
+  * Execution + Paging + Query Sessions
+  * Summaries + Caching
 
-**Datei**: `backend/main.py`
+### LLM Generator (`backend/llm/generator.py`)
 
-```mermaid
-graph LR
-    subgraph "API Layer"
-        ENDPOINT[POST /query]
-    end
-    
-    subgraph "Processing Pipeline"
-        CLASS[Intent Handling (LLM)]
-        BSL[BSL Builder]
-        GEN[SQL Generator]
-        VAL[Consistency Checker]
-        DB[Database Manager]
-    end
-    
-    subgraph "Data Layer"
-        CACHE[Cache Layer]
-        KB[Knowledge Base]
-        SCHEMA[Database Schema]
-    end
-    
-    ENDPOINT --> CLASS
-    CLASS --> BSL
-    CLASS --> GEN
-    GEN --> VAL
-    VAL --> DB
-    
-    BSL --> KB
-    BSL --> SCHEMA
-    DB --> CACHE
-```
+* **Layer A (rule-based + auto-repair):**
 
-**Module im Detail:**
+  * Fragetyp-Heuristiken (`_is_property_leverage_question`, `_has_explicit_time_range`, …)
+  * `_bsl_compliance_instruction` → `_regenerate_with_bsl_compliance` 
+  * SQLite Dialektfix (`_fix_union_order_by`)
+* **Layer B (LLM-based):**
 
-1. **Intent Handling & SQL Generator** (`llm/generator.py`)
-   - Intent-Erkennung und Ambiguity Detection (integriert, kein separater Classifier)
-   - SQL-Hints-Generierung (Heuristiken + BSL)
-   - BSL-first SQL-Generierung
-   - Intent-basierte Identifier-Logik
-   - BSL Compliance Checks (integriert)
+  * `validate_sql` 
+  * `generate_sql_with_correction` 
+* `summarize_results` 
 
-2. **BSL Builder** (`bsl_builder.py`)
-   - Generiert BSL als Textdatei mit 6 Regel-Sektionen
-   - Dynamische Regel-Extraktion aus Knowledge Base + Column Meanings
-   - Output: `credit_bsl.txt`
+### BSL Builder (`bsl_builder.py`) – Tooling
 
-3. **Database Manager** (`database/manager.py`)
-   - Query-Ausführung mit SQLite
-   - Paging-Logik (LIMIT/OFFSET)
-   - Session-Management für konsistentes Paging
+* Generiert `credit_bsl.txt` (Part A / Part B / Annex C)
+* liest:
 
-4. **SQL Guard** (`utils/sql_guard.py`)
-   - Safety-Validierung (nur SELECT erlaubt)
-   - Injection-Prevention
-
-> **Hinweis**: Es gibt kein separates `consistency_checker.py` oder `question_classifier.py` - diese Funktionalität ist in `llm/generator.py` integriert.
+  * `credit_kb.jsonl` 
+  * `credit_column_meaning_base.json` 
+  * `credit_schema.sql` oder `credit.sqlite` 
 
 ---
 
 ## Datenfluss & Pipeline
 
-### End-to-End Request Flow
+### End-to-End Request Flow (korrigiert)
+
+> **Korrektur:** Keine "BSL Generate" Phase im Request. BSL wird geladen.
+> Außerdem: Ambiguity läuft parallel und blockiert nicht.
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Frontend
-    participant API
-    participant BSL
-    participant Generator
-    participant DB
-    participant LLM
-    
-    User->>Frontend: Frage eingeben
-    Frontend->>API: POST /query (question, database, page)
-    
-    par Parallel Context Loading
-        API->>BSL: Load Knowledge Base
-        API->>API: Load Schema
-        API->>API: Load Column Meanings
-    end
-    
-    API->>BSL: Generate BSL Rules
-    BSL->>BSL: Extract modular rules
-    BSL-->>API: BSL Content
-    
-    API->>Generator: Generate SQL (mit integrierter Intent-Erkennung)
-    Generator->>LLM: BSL-first Generation + Intent Detection
-    LLM-->>Generator: SQL + Explanation
-    
-    API->>Generator: Validate SQL (integriert)
-    Generator->>LLM: SQL Validation Check
-    LLM-->>Generator: Validation Result
-    
-    API->>DB: Execute SQL with Paging
-    DB-->>API: Results + Metadata
-    
-    API->>LLM: Generate Summary
-    LLM-->>API: Natural Language Summary
-    
-    API-->>Frontend: Complete Response
-    Frontend-->>User: Display Results
-```
+  participant User
+  participant FE as Frontend
+  participant API as FastAPI
+  participant GEN as OpenAIGenerator
+  participant DB as DatabaseManager
+  participant LLM as OpenAI
+  participant GUARD as Server Guards
 
-### Datenfluss-Diagramm (BPMN)
+  User->>FE: Frage + Paging Parameter
+  FE->>API: POST /query
 
-```mermaid
-graph TD
-    START([Start]) --> INPUT[User Input]
-    INPUT --> VALIDATE[Validate Request]
-    VALIDATE --> LOAD[Load Context]
-    
-    LOAD --> CLASSIFY[Classify Question]
-    CLASSIFY --> AMBIG{Ambiguous?}
-    AMBIG -->|Yes| ERROR[Return Error]
-    AMBIG -->|No| BSL_BUILD[Build BSL]
-    
-    BSL_BUILD --> GENERATE[Generate SQL]
-    GENERATE --> VALIDATE_SQL[Validate SQL]
-    VALIDATE_SQL --> CONSISTENT{Consistent?}
-    CONSISTENT -->|No| CORRECT[Correct SQL]
-    CONSISTENT -->|Yes| EXECUTE[Execute SQL]
-    
-    EXECUTE --> PAGE[Apply Paging]
-    PAGE --> SUMMARIZE[Summarize Results]
-    SUMMARIZE --> RESPONSE[Return Response]
-    
-    ERROR --> END([End])
-    CORRECT --> EXECUTE
-    RESPONSE --> END
+  API->>API: Load Schema/Meanings/KB/BSL (cached)
+
+  par Parallel LLM Calls
+    API->>GEN: check_ambiguity(question, schema, kb, meanings)
+    GEN->>LLM: Ambiguity prompt
+    LLM-->>GEN: ambiguity JSON
+  and
+    API->>GEN: generate_sql(question, schema, meanings, bsl)
+    GEN->>LLM: SQL generation prompt (BSL-first)
+    LLM-->>GEN: SQL JSON
+  end
+
+  API->>API: If confidence < 0.4 -> generate_sql_with_correction()
+  API->>GUARD: enforce_safety + enforce_known_tables
+  API->>GEN: validate_sql(sql, schema)
+  GEN->>LLM: Validation prompt
+  LLM-->>GEN: validation JSON
+  API->>API: If severity high -> correction loop + re-validate
+
+  API->>DB: execute_query_with_paging
+  DB-->>API: results + paging_info
+
+  API->>GEN: summarize_results(...)
+  GEN->>LLM: Summary prompt
+  LLM-->>GEN: Summary text
+
+  API-->>FE: Response (sql, results, paging, validation, ambiguity, summary)
+  FE-->>User: Anzeige
 ```
 
 ---
 
 ## Frontend-Backend Kommunikation
 
-### Request Format
+### Request Format (korrigiert)
 
-```javascript
-POST /query HTTP/1.1
-Content-Type: application/json
+> **Korrektur:** In `main.py` wird `database` nicht aus dem Request genutzt, sondern `Config.DEFAULT_DATABASE`. Du kannst `database` im Request weglassen oder als "future extension" deklarieren.
 
+```json
 {
   "question": "Zeige Schuldenlast pro Segment",
-  "database": "credit",
   "page": 1,
   "page_size": 100,
-  "query_id": null  // Für Paging: UUID der Anfrage
+  "query_id": null
 }
 ```
 
-### Response Format
+### Response Format (korrigiert / code-nah)
 
-```javascript
+> **Korrektur:** In `main.py` wird **kein `question_intent`** erzeugt. Außerdem heißt die SQL in der Response `generated_sql`.
+> Validation/Ambiguity werden als Objekte (`ambiguity_check`, `validation`) ausgegeben, wenn verfügbar.
+
+```json
 {
-  // Basis-Info
-  "question": "...",
-  "generated_sql": "SELECT ...",
-  
-  // Ergebnisse + Paging
-  "results": [
-    { "clientseg": "Premium", "avg_dti": 0.32, ... },
-    { "clientseg": "Standard", "avg_dti": 0.45, ... }
-  ],
-  "row_count": 3,
+  "question": "…",
+  "generated_sql": "SELECT …",
+  "results": [ { "clientseg": "Premium", "avg_debt_ratio": 0.32 } ],
+  "row_count": 1,
+
   "page": 1,
+  "page_size": 100,
   "total_pages": 1,
-  "total_rows": 3,
+  "total_rows": 1,
   "has_next_page": false,
   "has_previous_page": false,
-  
-  // Metadaten + Zusammenfassung
-  "summary": "Die Analyse zeigt dass...",
-  "explanation": "Diese Query aggregiert...",
-  "notice": "Zeige Seite 1 von 1",
-  
-  // Validierung & Classification
+
+  "summary": "…",
+  "explanation": "…",
+  "notice": "…",
+
   "ambiguity_check": {
     "is_ambiguous": false,
-    "reason": "Frage ist klar und spezifisch"
+    "reason": "…",
+    "questions": []
   },
   "validation": {
-    "is_consistent": true,
-    "issues": [],
-    "suggestions": [],
-    "severity": "low"
+    "is_valid": true,
+    "errors": [],
+    "severity": "low",
+    "suggestions": []
   },
-  "question_intent": {
-    "primary_intent": "aggregation",
-    "entities": ["Schuldenlast", "Segment"],
-    "sql_hints": {
-      "requires_group_by": true,
-      "identifier_type": "CS"
-    }
-  },
-  
-  // Session
-  "query_id": "a1b2c3d4..."
+
+  "query_id": "uuid..."
 }
 ```
 
@@ -693,297 +417,65 @@ Content-Type: application/json
 
 ## Datenmodellierung & -beschreibung
 
-### Datenbank-Schema (Credit DB)
-
-```mermaid
-erDiagram
-    CORE_RECORD ||--|| EMPLOYMENT_AND_INCOME : coreregistry = emplcoreref
-    EMPLOYMENT_AND_INCOME ||--|| EXPENSES_AND_ASSETS : emplcoreref = exemplref
-    EXPENSES_AND_ASSETS ||--|| BANK_AND_TRANSACTIONS : exemplref = bankexpref
-    BANK_AND_TRANSACTIONS ||--|| CREDIT_AND_COMPLIANCE : bankexpref = compbankref
-    CREDIT_AND_COMPLIANCE ||--|| CREDIT_ACCOUNTS_AND_HISTORY : compbankref = histcompref
-    
-    CORE_RECORD {
-        string coreregistry PK
-        string clientref
-        string clientseg
-        date scoredate
-        string risklev
-        real custlifeval
-        int tenureyrs
-    }
-    
-    EMPLOYMENT_AND_INCOME {
-        string emplcoreref PK
-        real mthincome
-        real debincratio
-        real credutil
-    }
-    
-    EXPENSES_AND_ASSETS {
-        string exemplref PK
-        real totassets
-        real totliabs
-        real liqassets
-        string propfinancialdata JSON
-    }
-    
-    BANK_AND_TRANSACTIONS {
-        string bankexpref PK
-        string chaninvdatablock JSON
-    }
-    
-    CREDIT_AND_COMPLIANCE {
-        string compbankref PK
-        int delinqcount
-        int latepaycount
-    }
-```
-
-### Knowledge Base Struktur
-
-```json
-{
-  "type": "domain_knowledge",
-  "knowledge": "Financial Vulnerability Definition",
-  "definition": "Customer with high debt ratio and low liquidity",
-  "formula": "debincratio > 0.5 AND liqassets < mthincome × 3",
-  "examples": ["financially vulnerable customers", "high debt burden"]
-}
-```
-
-### BSL (Business Semantics Layer) Struktur
-
-```
-# IDENTITY SYSTEM RULES
-## ⚠️ CRITICAL: Dual Identifier System
-- CS Format: coreregistry (for customer_id output and JOINs)
-- CU Format: clientref (only when explicitly requested as client reference)
-
-# AGGREGATION PATTERNS
-## Aggregation vs Detail Queries
-- Pattern indicators for GROUP BY vs ORDER BY + LIMIT
-- Multi-level grouping with percentages
-- Time-based aggregation patterns
-
-# BUSINESS LOGIC RULES
-## Financial Metrics
-- Financially Vulnerable: debincratio > 0.5 AND liqassets < mthincome × 3
-- High-Risk: risklev = 'High' OR risklev = 'Very High'
-- Digital Native: chaninvdatablock.onlineuse = 'High'
-
-# JOIN CHAIN RULES
-## Foreign Key Chain
-- Strict FK chain: core_record → employment_and_income → expenses_and_assets → ...
-- Never skip tables in JOIN chain
-- Always use coreregistry for JOINs
-
-# JSON FIELD RULES
-## JSON Extraction
-- Always qualify JSON fields: table.column->'$.field'
-- Correct table mapping for JSON fields
-```
+> **Hinweis:** Das ER-Diagramm ist ok als High-Level-Chain.
+> Die exakten PK/FK-Namen sollten aber aus dem Schema generiert werden. In der Doku formulierst du lieber "Kettenprinzip" statt "||--||" (1:1), falls Kardinalitäten nicht sicher sind.
 
 ---
 
-## Limitationen & Ausblick
+## Limitationen & Ausblick (korrigiert)
 
 ### Aktuelle Limitationen
 
-#### Technische Limitationen
-1. **Single-Database-Fokus**: Nur Credit-Datenbank unterstützt
-2. **Token-Kosten**: ~32KB pro Prompt durch BSL-first Ansatz
-3. **SQLite-Skalierung**: Nicht für High-Concurrency-Szenarien optimiert
-4. **Kein Real-Time**: Batch-Processing, keine Streaming-Queries
+**Technisch**
 
-#### Funktionale Limitationen
-1. **Einfache JOINs**: Nur komplexe Foreign-Key-Chains, keine Ad-hoc JOINs
-2. **Statische Metriken**: Keine dynamische Berechnungen zur Laufzeit
-3. **Begrenzte Aggregation**: Keine Window Functions oder CTEs für komplexe Analysen
-4. **Keine Prozeduren**: Nur SELECT-Statements, keine Stored Procedures
+1. **Single-Database Fokus:** API routet aktuell nicht; `Config.DEFAULT_DATABASE` ist immer Credit.
+2. **Token-Kosten:** BSL-first benötigt großen Kontext (Schema + Meanings + BSL).
+3. **SQLite Concurrency:** nicht optimiert für viele parallele Writer (hier read-only, aber dennoch begrenzt).
+4. **LLM Latenz/Costs:** mehrere LLM Calls möglich (Ambiguity + SQL + Validation + Summary + ggf. Correction).
 
-### Produktivierungsanforderungen
+**Funktional**
 
-#### Technische Anforderungen
-1. **Multi-Database-Support**: Erweiterung auf weitere Datenbanken
-2. **Connection Pooling**: Für bessere Performance bei Concurrency
-3. **Query Optimization**: Index-Strategie, Execution Plan Caching
-4. **Error Handling**: Robustere Fehlerbehandlung und Recovery
-5. **Monitoring**: Logging, Metrics, Performance-Tracking
-
-#### Funktionale Anforderungen
-1. **Erweiterte SQL-Unterstützung**: CTEs, Window Functions, Subqueries
-2. **Dynamische Metriken**: Benutzerdefinierte Berechnungen
-3. **Export-Funktionen**: CSV, Excel Export mit Formatting
-4. **Query History**: Persistente Speicherung von Nutzeranfragen
-5. **Template-System**: Vorlagen für häufige Abfragen
-
-#### Organisatorische Anforderungen
-1. **User Management**: Authentifizierung, Berechtigungen
-2. **Audit Trail**: Logging aller Query-Ausführungen
-3. **Compliance**: GDPR-konforme Datenverarbeitung
-4. **Documentation**: API-Dokumentation, Benutzerhandbuch
-5. **Training**: Onboarding-Material für Endbenutzer
-
-## Testergebnisse & Validierung
-
-### Test-Szenarien (Credit-DB, 10 Fragen)
-
-| Frage | Typ | Erwartetes Verhalten | Ergebnis | Status | BSL-Regeln angewendet |
-|-------|------|---------------------|----------|--------|----------------------|
-| Q1 | Finanzielle Kennzahlen | CS Format, korrekte JOINs | ✅ Bestanden | 100% | Identity, Join Chain |
-| Q2 | Engagement nach Kohorte | Zeitbasierte Aggregation | ✅ Bestanden | 100% | Aggregation, Time Logic |
-| Q3 | Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ Bestanden | 100% | Aggregation, Business Logic |
-| Q4 | Top 10 Kunden | ORDER BY + LIMIT | ✅ Bestanden | 100% | Aggregation Patterns |
-| Q5 | Digital Natives | JSON-Extraktion | ⚠️ 95% | 95% | JSON Rules, Identity |
-| Q6 | Risikoklassifizierung | Business Rules | ✅ Bestanden | 100% | Business Logic |
-| Q7 | Multi-Level Aggregation | CTEs, Prozentberechnung | ✅ Bestanden | 100% | Complex Templates |
-| Q8 | Segment-Übersicht + Total | UNION ALL | ✅ Bestanden | 100% | Complex Templates |
-| Q9 | Property Leverage | Tabellen-spezifische Regeln | ✅ Bestanden | 100% | Business Logic |
-| Q10 | Kredit-Details | Detail-Query, kein GROUP BY | ✅ Bestanden | 100% | Aggregation Patterns |
-
-### Validierungs-Performance
-
-**Consistency Checker Results:**
-- **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q5)
-- **JOIN Chain Validation**: 100% Korrektheit
-- **Aggregation Logic**: 100% Korrektheit
-- **BSL Compliance**: 98% Korrektheit
-- **Overall Success Rate**: 95% (9.5/10 Fragen)
-
-**Performance-Metriken:**
-- **Durchschnittliche Antwortzeit**: ~3.2 Sekunden
-- **Token-Verbrauch**: ~32KB pro Query
-- **Cache-Hit-Rate**: 87% (Schema), 72% (BSL)
-- **Validation-Time**: <500ms für Consistency Checks
-
-> **Hinweis**: Die Consistency-Prüfung ist in `llm/generator.py` integriert, nicht als separates Modul.
+1. **Read-only Policy:** serverseitiger Guard erzwingt SELECT-only.
+2. **Heuristiken für Edge-Cases:** erhöhen Robustheit, decken aber nicht jede Formulierung ab.
+3. **Abhängigkeit von Schema-Export:** Beispiele/JSON-Pfade funktionieren nur, wenn Schema/Meanings konsistent sind.
 
 ---
 
-## Produktivierungsanforderungen
+## Testergebnisse & Validierung (korrigiert)
 
-### Technische Anforderungen
-1. **Multi-Database-Support**
-   - Pro Datenbank eigenes BSL
-   - Database-Routing-Layer
-   - Zentrales BSL-Management
+> **Korrektur:** "Consistency Checker Results" ist irreführend, da Validierung verteilt ist. Nenne es neutral: **Validation/Guardrail Results**.
 
-2. **Performance-Optimierung**
-   - Connection Pooling für SQLite
-   - Query Result Caching
-   - Index-Strategie-Optimierung
+* **Rule-based Layer A:** BSL-Compliance-Regeneration + SQLite Fixes
+* **Server Guards:** SELECT-only + known tables
+* **Layer B:** LLM Validation + optional Self-correction (confidence/ severity-gated)
 
-3. **Security Hardening**
-   - User Authentication & Authorization
-   - Rate Limiting und API Quotas
-   - Audit Logging für Compliance
-
-4. **Monitoring & Observability**
-   - Structured Logging (JSON)
-   - Performance Metrics (Response Time, Token Usage)
-   - Error Tracking und Alerting
-
-### Funktionale Anforderungen
-1. **Erweiterte SQL-Unterstützung**
-   - Window Functions
-   - Recursive CTEs
-   - Stored Procedures (Read-Only)
-
-2. **User Experience**
-   - Query History und Favoriten
-   - Export-Functions (CSV, Excel)
-   - Visual Query Builder
-
-3. **Admin-Funktionen**
-   - BSL-Editor mit Live-Preview
-   - Schema-Management
-   - User Management
+> Falls du bei Q5 "95%" erwähnst: präzisiere, ob es ein **Identifier-Problem** oder **JSON extraction** war.
 
 ---
 
-## Organisatorisches
+## Produktivierungsanforderungen (korrigiert)
 
-### Projektorganisation
-
-#### Team-Struktur
-```
-Projektteam (5 Personen)
-├── Frontend-Entwicklung (1 Person)
-│   ├── React UI Development
-│   ├── User Experience Design
-│   └── API Integration
-├── Backend-Entwicklung (2 Person)
-│   ├── FastAPI Development
-│   ├── LLM Integration
-│   └── Database Management
-└── Architektur & Dokumentation (2 Person)
-    ├── System Design
-    ├── BSL Development
-    └── Quality Assurance
-```
-
-#### Arbeitspakete & Tickets
-
-| Arbeitspaket | Verantwortlich | Status | Aufwand |
-|--------------|----------------|----------|----------|
-| AP-001: Frontend Setup | Frontend-Entwickler | ✅ Abgeschlossen | 16h |
-| AP-002: Backend API | Backend-Entwickler | ✅ Abgeschlossen | 24h |
-| AP-003: BSL Implementierung | Architekten | ✅ Abgeschlossen | 20h |
-| AP-004: Consistency Checker | Architekten | ✅ Abgeschlossen | 12h |
-| AP-005: Integration & Testing | Gesamtes Team | ✅ Abgeschlossen | 8h |
-| AP-006: Dokumentation | Architekten | 🔄 In Arbeit | 16h |
-
-#### Zeitliche Planung
-
-```
-Woche 1-2: Grundarchitektur (Frontend + Backend)
-Woche 3: BSL-Entwicklung + Integration
-Woche 4: Consistency Checks + Testing
-Woche 5: Dokumentation + Vorbereitung Präsentation
-```
-
-## Selbstreflektion (Retrospektive)
-
-### Was gut funktioniert hat
-
-1. **Frühes Professor-Feedback**: BSL-Ansatz war entscheidend für Erfolg
-2. **Modulare Architektur**: BSL-Module machen Wartung und Testing einfach
-3. **Deterministische Ergebnisse**: Reproduzierbarkeit für Evaluation entscheidend
-4. **Explicit over Implicit**: BSL-Regeln sind besser als implizite Embeddings
-5. **Scope-Fit**: Single-DB-Fokus vermeidet Over-Engineering
-6. **Team-Kollaboration**: Klare Verantwortlichkeiten und parallele Arbeit
-
-### Was wir im Nachhinein anders machen würden
-
-1. **Frühere Testing-Phase**: Mehr Unit Tests für einzelne Module
-2. **Performance-Optimierung**: Frühere Beachtung von Token-Kosten
-3. **Error Handling**: Robustere Fehlerbehandlung von Anfang an
-4. **Dokumentation**: Kontinuierliche Dokumentation statt nachträglicher Aufarbeitung
-5. **CI/CD Pipeline**: Automatisiertes Testing und Deployment
-
-### Lessons Learned
-
-1. **Scope-Fit ist kritisch**: Multi-DB-Support war Over-Engineering
-2. **Stabilität > Optimierung**: Deterministische Ergebnisse wichtiger als Token-Effizienz
-3. **Explicit > Implicit**: Explizite BSL-Regeln besser als implizite Embeddings
-4. **Modularität zahlt sich aus**: Bessere Wartbarkeit und Testbarkeit
-5. **Frühes Feedback einholen**: Professor-Integration war entscheidend für Erfolg
+> **Korrektur:** "Stored Procedures (Read-Only)" passt nicht zu SQLite und eurem Guard. Formuliere stattdessen "CTEs, Window Functions, Subqueries" (read-only).
 
 ---
 
-## Zusammenfassung
+## Organisatorisches (kleine Fixes)
 
-Dieses Text2SQL System demonstriert moderne Software-Architektur-Prinzipien:
+* "Backend-Entwicklung (2 Person)" → **2 Personen**
+* "Selbstreflektion" → **Selbstreflexion**
 
-- **Modular Design**: Klare Trennung von Verantwortlichkeiten
-- **Domain-Driven Architecture**: BSL als explizite Business-Logik-Schicht
-- **Deterministic Behavior**: Reproduzierbare Ergebnisse durch BSL-first Ansatz
-- **Quality Assurance**: Mehrstufige Validierung mit Consistency Checks
-- **Academic Rigor**: Keine Hardcoding, nachvollziehbare Entscheidungen
+---
 
-Die Architektur ist bereit für Produktivierung mit den identifizierten Erweiterungen und Optimierungen.
+## Zusammenfassung (korrigiert)
 
-**Status**: Produktion-ready für Credit-DB Scope
-**Version**: X.0.0 (BSL-first)
-**Nächste Meilensteine**: Multi-DB-Support, Performance-Optimierung, Security Hardening
+Dieses Text2SQL-System demonstriert:
+
+* **BSL-first Domain Layer:** explizite Regeln statt impliziter Embeddings
+* **Determinismus:** temperature=0 + Policy/Compliance + Guards
+* **Guardrails:** Layer A (rule-based auto-repair) + Layer B (LLM validation/self-correction) + server-side safety
+* **Praxisnaher API-Flow:** Caching + Query Sessions + Paging + Summaries
+
+**Status:** production-ready **für den aktuellen Credit-DB Scope (read-only, Single-DB)**
+**Nächste Meilensteine:** Multi-DB Routing (optional), Token-/Latency-Optimierung, Observability & Hardening
+
+---
