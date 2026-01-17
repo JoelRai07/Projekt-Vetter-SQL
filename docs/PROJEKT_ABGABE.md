@@ -833,10 +833,11 @@ graph TD
 
     BE --> LLM[LLM Integration]
     BE --> DB[Database Management]
+    BE --> RAG[ReAct + RAG]
 
     FS --> FE[Frontend UI]
     FS --> BSL[BSL Integration]
-    FS --> RAR[ReAct + RAG Optimization]
+    FS --> RAG[ReAct + RAG Optimization]
 
     PE --> PROMPT[Few-Shot Prompting]
     PE --> PE2[Prompt Engineering]
