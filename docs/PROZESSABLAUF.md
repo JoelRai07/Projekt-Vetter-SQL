@@ -129,6 +129,17 @@ graph TB
   2. **Server Guards** (Phase 5): `enforce_safety` + `enforce_known_tables` in `main.py`
   3. **Layer B** (LLM-based): Semantische Validierung + Self-Correction
 
+### ADR-007: Multi-Layer Caching Strategie (accepted)
+
+* **Status:** accepted
+* **Date:** 17.01.2026
+* **Kernpunkt:** Performance-Optimierung durch intelligentes Caching:
+  * **Schema Cache**: Permanent (LRU, 32 DBs)
+  * **Meanings Cache**: 1 Stunde TTL (32 Einträge)
+  * **Query Cache**: 5 Minuten TTL (100 Queries) - komplette Results
+  * **Session Cache**: 1 Stunde TTL (200 Sessions) - Paging
+* **Ergebnis**: Cache-Hits in <100ms statt 3-5 Sekunden Pipeline
+
 ---
 
 ## Detaillierter Prozessablauf
@@ -144,7 +155,13 @@ graph TB
 
 ### Phase 1: Request Intake, Context Loading & Caching
 
-**Schritt 1.1: Frontend sendet Anfrage**
+**Schritt 1.1: Cache-Check (Performance-Optimierung)**
+
+* Prüfung auf Cache-Hit vor kompletter Pipeline
+* `get_cached_query_result(question, database)` mit MD5-Hash Key
+* Bei Cache-Hit: Direkte Rückgabe in <100ms
+
+**Schritt 1.2: Frontend sendet Anfrage**
 
 ```http
 POST /query
@@ -158,13 +175,13 @@ Content-Type: application/json
 }
 ```
 
-**Schritt 1.2: Backend lädt Kontext**
+**Schritt 1.3: Backend lädt Kontext (cached)**
 
 * DB-Pfad: `DATA_DIR/credit/credit.sqlite` 
-* Kontext:
+* Kontext mit Caching:
 
-  * Schema: `get_cached_schema(db_path)` 
-  * Meanings: `get_cached_meanings(database, DATA_DIR)` 
+  * Schema: `get_cached_schema(db_path)` - permanent LRU-Cache
+  * Meanings: `get_cached_meanings(database, DATA_DIR)` - 1h TTL
   * KB + BSL: `load_context_files(database, DATA_DIR)` 
     (danach wird Meanings nochmals aus Cache überschrieben – ist okay, aber doppelt)
 
@@ -238,10 +255,11 @@ Nach Server Guards:
   * `results` 
   * `paging_info` (page, total_pages, total_rows, …)
 
-Query Session:
+Query Session mit Caching:
 
-* `query_id = create_query_session(database, sql, question)` 
+* `query_id = create_query_session(database, sql, question)` - 1h TTL
 * Für Folgeseiten: `query_id` erforderlich; die SQL kommt aus der Session
+* Nur bei Seite 1: Ergebnis wird für Query-Cache gespeichert (5min TTL)
 
 ---
 

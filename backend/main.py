@@ -23,6 +23,9 @@ from utils.cache import (
     cache_query_result,
     create_query_session,
     get_query_session,
+    meanings_cache,
+    query_cache,
+    query_session_cache,
 )
 from utils.query_optimizer import QueryOptimizer
 from utils.context_loader import load_context_files
@@ -87,6 +90,43 @@ async def health():
         "status": "ok",
         "database": Config.DEFAULT_DATABASE,
         "api_url": "http://localhost:8000"
+    }
+
+
+@app.get("/cache-status")
+async def cache_status():
+    """Cache status endpoint for monitoring"""
+    return {
+        "cache_info": {
+            "meanings_cache": {
+                "size": len(meanings_cache),
+                "maxsize": meanings_cache.maxsize,
+                "ttl": meanings_cache.ttl,
+                "currsize": meanings_cache.currsize
+            },
+            "query_cache": {
+                "size": len(query_cache),
+                "maxsize": query_cache.maxsize,
+                "ttl": query_cache.ttl,
+                "currsize": query_cache.currsize
+            },
+            "session_cache": {
+                "size": len(query_session_cache),
+                "maxsize": query_session_cache.maxsize,
+                "ttl": query_session_cache.ttl,
+                "currsize": query_session_cache.currsize
+            },
+            "schema_cache": {
+                "cache_info": get_cached_schema.cache_info(),
+                "maxsize": 32  # LRU cache maxsize
+            }
+        },
+        "performance_tips": {
+            "meanings_cache": "Domänenwissen für 1 Stunde gecached",
+            "query_cache": "Query-Ergebnisse für 5 Minuten gecached",
+            "session_cache": "Paging-Sessions für 1 Stunde gecached",
+            "schema_cache": "Datenbank-Schemas dauerhaft gecached (LRU)"
+        }
     }
 
 

@@ -385,6 +385,7 @@ Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in ei
 | ADR-004 | Migration zu BSL-first Single-Database | accepted | 12.01.2026 | – |
 | ADR-005 | Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger | accepted | 12.01.2026 | – |
 | ADR-006 | Consistency Validation (mehrstufig) | accepted | 12.01.2026 | – |
+| ADR-007 | Multi-Layer Caching Strategie | accepted | 17.01.2026 | – |
 
 ---
 
@@ -727,6 +728,145 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 |-----|--------|
 | Beste Abdeckung aller Fehlerklassen | Komplexere Implementierung |
 | Defense in Depth | |
+
+---
+
+### ADR-007: Multi-Layer Caching Strategie
+
+| | |
+|---|---|
+| **Status** | accepted |
+| **Deciders** | Tim Kühne, Dominik Ruoff, Joel Martinez |
+| **Date** | 17.01.2026 |
+| **Technical Story** | Performance-Optimierung und Kostenreduktion durch intelligentes Caching |
+
+#### Context and Problem Statement
+
+Das Text2SQL System führt bei jeder Anfrage mehrere ressourcenintensive Operationen durch:
+- Schema-Ladung aus Datenbank (langsame I/O-Operationen)
+- Domänenwissen-Ladung aus Dateien (JSON-Parsing, File-Reading)
+- LLM-Aufrufe für SQL-Generierung (teuer, 3-5 Sekunden Latenz)
+- Komplette Pipeline-Ausführung (mehrere Validierungsschritte)
+
+Ohne Caching würde jede identische Frage erneut die komplette Pipeline durchlaufen, was zu:
+- Hoen Latenz bei wiederholten Fragen
+- Unnötigen API-Kosten
+- Schlechter User Experience
+- Ineffizienter Ressourcennutzung
+
+#### Decision Drivers
+
+1. **Performance-Optimierung**: Reduzierung von Antwortzeiten bei wiederholten Fragen
+2. **Kostenreduktion**: Weniger OpenAI API-Costs durch Wiederverwendung von Ergebnissen
+3. **User Experience**: Schnellere Antworten bei häufigen Fragen
+4. **Ressourcen-Effizienz**: Entlastung von Datenbank und LLM-Diensten
+5. **Skalierbarkeit**: Bessere Performance bei hoher Last
+
+#### Considered Options
+
+1. **Kein Caching**: Jede Anfrage läuft durch komplette Pipeline
+2. **Einfacher Result-Cache**: Nur finale Ergebnisse cachen
+3. **Multi-Layer Caching**: Unterschiedliche Cache-Strategien pro Datentyp
+
+#### Decision Outcome
+
+Chosen option: **"Multi-Layer Caching"**, because es unterschiedliche TTL-Anforderungen berücksichtigt und maximale Performance-Vorteile bietet.
+
+#### Cache-Architektur
+
+| Cache-Typ | Zweck | TTL | Größe | Technologie | Key-Strategie |
+|-----------|-------|-----|-------|-------------|----------------|
+| **Schema Cache** | Datenbank-Schemas | Unlimitiert (LRU) | 32 DBs | `@lru_cache` | Datenbank-Pfad |
+| **Meanings Cache** | Domänenwissen | 1 Stunde | 32 Einträge | `TTLCache` | `{db_name}_meanings` |
+| **Query Cache** | Komplette Query-Ergebnisse | 5 Minuten | 100 Queries | `TTLCache` | MD5(`{question}_{database}`) |
+| **Session Cache** | Paging-Sessions | 1 Stunde | 200 Sessions | `TTLCache` | UUID (Session-ID) |
+
+#### Technische Implementierung
+
+**Phase 1: Cache-Check (vor Pipeline)**
+```python
+# Prüfung auf Cache-Hit vor kompletter Pipeline
+cached_result = get_cached_query_result(request.question, selected_database)
+if cached_result and request.page == 1:
+    print("✅ Cache Hit - verwende gecachtes Ergebnis")
+    return QueryResponse(**cached_result)
+```
+
+**Phase 2: Context-Caching (während Pipeline)**
+```python
+# Wiederverwendung von gecachten Daten
+schema = get_cached_schema(db_path)  # LRU, permanent
+meanings_text = get_cached_meanings(selected_database, Config.DATA_DIR)  # 1h TTL
+```
+
+**Phase 3: Result-Caching (nach Pipeline)**
+```python
+# Nur bei Seite 1 cachen (für Cache-Hits)
+if request.page == 1:
+    cache_query_result(request.question, selected_database, result_dict)
+```
+
+#### Positive Consequences
+
+- **Performance**: Cache-Hits in <100ms statt 3-5 Sekunden Pipeline
+- **Kostenersparnis**: Bis zu 80% weniger LLM-Aufrufe bei wiederholten Fragen
+- **Skalierbarkeit**: Bessere Performance bei hoher Last
+- **Monitoring**: `/cache-status` Endpoint für Transparenz und Debugging
+- **User Experience**: Deutlich schnellere Antworten bei häufigen Fragen
+
+#### Negative Consequences
+
+- **Speicherverbrauch**: Caches benötigen RAM (konfigurierbare Größen)
+- **Stale Data**: Mögliche veraltete Ergebnisse bei Datenänderungen
+- **Komplexität**: Zusätzliche Cache-Management-Logik
+- **Cache-Invalidation**: Manuelle Invalidierung bei Schema-Änderungen notwendig
+
+#### Cache-Strategien im Detail
+
+**Schema Cache (Permanent):**
+- Schemas ändern sich selten → dauerhaftes Caching sinnvoll
+- LRU-Verwaltung mit maxsize=32 für verschiedene Datenbanken
+- Keine TTL notwendig, da Schema-Änderungen Backend-Neustart erfordern
+
+**Meanings Cache (1 Stunde):**
+- Domänenwissen ändert sich gelegentlich → kurze TTL
+- Vermeidet wiederholtes File-Reading und JSON-Parsing
+- Balance zwischen Frische der Daten und Performance
+
+**Query Cache (5 Minuten):**
+- Ergebnisse ändern sich potenziell häufig → kurze TTL
+- Komplette Response-Objekte für sofortige Rückgabe
+- MD5-Hash als Key für effiziente Lookups
+
+**Session Cache (1 Stunde):**
+- Paging-Sessions für konsistente Navigation
+- UUID-basiert für parallele User-Sessions
+- Längere TTL für typische User-Session-Dauer
+
+#### Monitoring & Management
+
+**Cache-Status Endpoint:**
+```python
+@app.get("/cache-status")
+async def cache_status():
+    return {
+        "meanings_cache": {"size": len(meanings_cache), "ttl": 3600},
+        "query_cache": {"size": len(query_cache), "ttl": 300},
+        "session_cache": {"size": len(query_session_cache), "ttl": 3600},
+        "schema_cache": get_cached_schema.cache_info()
+    }
+```
+
+**Performance-Metriken:**
+- Cache-Hit-Rate: Ziel >60% bei typischer Last
+- Antwortzeiten: <100ms bei Cache-Hits
+- Kostenreduktion: Bis zu 80% bei wiederholten Fragen
+
+#### Links
+
+- Related: ADR-004 (BSL-first Architektur)
+- Related: ADR-006 (Consistency Validation)
+- Implementation: `backend/utils/cache.py`
 
 ---
 

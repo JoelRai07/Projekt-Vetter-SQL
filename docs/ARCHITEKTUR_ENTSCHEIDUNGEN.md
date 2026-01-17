@@ -29,6 +29,7 @@ bis zur aktuellen **BSL-first Single-Database** Architektur.
 | 004 | Migration zu BSL-first Single-Database | accepted | 12.01.2026 | – |
 | 005 | Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger | accepted | 12.01.2026 | – |
 | 006 | Consistency Validation (mehrstufig) | accepted | 12.01.2026 | – |
+| 007 | Multi-Layer Caching Strategie | accepted | 17.01.2026 | – |
 
 ---
 
@@ -247,6 +248,117 @@ gezielt zu korrigieren.
 
 ---
 
+## ADR-007: Multi-Layer Caching Strategie
+
+**Status**: accepted  
+**Deciders**: Projektteam  
+**Date**: 17.01.2026  
+**Technical Story**: Performance-Optimierung und Kostenreduktion durch intelligentes Caching
+
+### Context and Problem Statement
+Das Text2SQL System führt bei jeder Anfrage mehrere Operationen durch:
+- Schema-Ladung aus Datenbank (langsam)
+- Domänenwissen-Ladung aus Dateien (I/O-intensiv)  
+- LLM-Aufrufe für SQL-Generierung (teuer)
+- Komplette Pipeline-Ausführung (langsam)
+
+Ohne Caching würde jede identische Frage erneut die komplette Pipeline durchlaufen.
+
+### Decision Outcome
+**Multi-Layer Caching** mit unterschiedlichen TTL-Strategien pro Datentyp.
+
+### Cache-Architektur
+
+| Cache-Typ | Zweck | TTL | Größe | Technologie |
+|-----------|-------|-----|-------|-------------|
+| **Schema Cache** | Datenbank-Schemas | Unlimitiert (LRU) | 32 DBs | `@lru_cache` |
+| **Meanings Cache** | Domänenwissen | 1 Stunde | 32 Einträge | `TTLCache` |
+| **Query Cache** | Komplette Query-Ergebnisse | 5 Minuten | 100 Queries | `TTLCache` |
+| **Session Cache** | Paging-Sessions | 1 Stunde | 200 Sessions | `TTLCache` |
+
+### Implementation Details
+
+**Phase 1: Cache-Check (Zeile 125-140 in main.py)**
+```python
+# Prüfung auf Cache-Hit vor kompletter Pipeline
+cached_result = get_cached_query_result(request.question, selected_database)
+if cached_result and request.page == 1:
+    print("✅ Cache Hit - verwende gecachtes Ergebnis")
+    return QueryResponse(**cached_result)
+```
+
+**Phase 2: Context-Caching (Zeile 205-209 in main.py)**
+```python
+# Wiederverwendung von gecachten Daten
+schema = get_cached_schema(db_path)  # LRU, permanent
+meanings_text = get_cached_meanings(selected_database, Config.DATA_DIR)  # 1h TTL
+```
+
+**Phase 3: Result-Caching (Zeile 593-615 in main.py)**
+```python
+# Nur bei Seite 1 cachen (für Cache-Hits)
+if request.page == 1:
+    cache_query_result(request.question, selected_database, result_dict)
+```
+
+### Decision Drivers
+
+1. **Performance-Optimierung**: Reduzierung von LLM-Aufrufen und I/O-Operationen
+2. **Kostenreduktion**: Weniger OpenAI API-Costs durch Wiederverwendung
+3. **User Experience**: Schnellere Antworten bei wiederholten Fragen
+4. **Ressourcen-Effizienz**: Entlastung von Datenbank und LLM
+
+### Consequences
+
+**Positive**
+- **Cache-Hits**: Antworten in <100ms statt 3-5 Sekunden
+- **Kostenersparnis**: Bis zu 80% weniger LLM-Aufrufe bei wiederholten Fragen
+- **Skalierbarkeit**: Bessere Performance bei hoher Last
+- **Monitoring**: `/cache-status` Endpoint für Transparenz
+
+**Negative**
+- **Speicherverbrauch**: Caches benötigen RAM (konfigurierbare Größen)
+- **Stale Data**: Mögliche veraltete Ergebnisse bei Datenänderungen
+- **Komplexität**: Zusätzliche Cache-Management-Logik
+
+### Cache-Strategien im Detail
+
+**Schema Cache (Permanent):**
+- Schemas ändern sich selten → dauerhaftes Caching sinnvoll
+- LRU-Verwaltung mit maxsize=32 für verschiedene Datenbanken
+
+**Meanings Cache (1 Stunde):**
+- Domänenwissen ändert sich gelegentlich → kurze TTL
+- Vermeidet wiederholtes File-Reading und JSON-Parsing
+
+**Query Cache (5 Minuten):**
+- Ergebnisse ändern sich potenziell häufig → kurze TTL
+- Komplette Response-Objekte für sofortige Rückgabe
+- MD5-Hash als Key: `{question}_{database}`
+
+**Session Cache (1 Stunde):**
+- Paging-Sessions für konsistente Navigation
+- UUID-basiert für parallele User-Sessions
+
+### Monitoring & Management
+
+**Cache-Status Endpoint:**
+```python
+@app.get("/cache-status")
+async def cache_status():
+    return {
+        "meanings_cache": {"size": len(meanings_cache), "ttl": 3600},
+        "query_cache": {"size": len(query_cache), "ttl": 300},
+        "session_cache": {"size": len(query_session_cache), "ttl": 3600},
+        "schema_cache": get_cached_schema.cache_info()
+    }
+```
+
+**Cache-Hit Logging:**
+- Backend loggt "✅ Cache Hit - verwende gecachtes Ergebnis"
+- Monitoring der Cache-Effizienz möglich
+
+---
 # Appendix A – Rationale & Learnings (BSL vs RAG)
 
 ## A1) Determinismus & Auditability
