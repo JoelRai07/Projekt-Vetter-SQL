@@ -373,7 +373,7 @@ Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in ei
 
 ### ADR-004: Migration zu BSL-first Single-Database Architektur
 
-**[short title of solved problem and solution]**: BSL-first statt RAG/ReAct für stabile, erklärbare SQL-Generierung
+**BSL-First**: BSL-first statt RAG/ReAct für stabile, erklärbare SQL-Generierung
 **Status**: accepted
 **Deciders**: Tim Kühne, Dominik Ruoff, Joel Martinez, Umut Polat, Sören Frank
 **Date**: 12.01.2026
@@ -381,7 +381,7 @@ Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in ei
 
 #### Context and Problem Statement
 
-Die initiale Text2SQL-Architektur (Version 6.0.0-7.0.0) basierte auf RAG (Retrieval Augmented Generation) mit ReAct-Loop und ChromaDB als Vector Store. Bei der Evaluation mit 10 Testfragen zeigten sich kritische Probleme:
+Die initiale Text2SQL-Architektur (Version 1.0.0-7.0.0) basierte auf RAG (Retrieval Augmented Generation) mit ReAct-Loop und ChromaDB als Vector Store. Bei der Evaluation mit 10 Testfragen zeigten sich kritische Probleme:
 
 1. **Identity Leakage**: CU und CS Identifier wurden inkonsistent verwendet (Q1-Q5, Q9)
 2. **Aggregation Failure**: GROUP BY fehlte bei Aggregationsfragen (Q4)
@@ -457,7 +457,7 @@ Chosen option: **"Option 3: BSL-first"**, because es erfüllt alle kritischen An
 
 ### ADR-005: Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger
 
-**[short title of solved problem and solution]**: Heuristische Fragetyp-Erkennung mit Keyword-Triggern für BSL-Regel-Verstärkung
+**Heuristische Fragen**: Heuristische Fragetyp-Erkennung mit Keyword-Triggern für BSL-Regel-Verstärkung
 **Status**: accepted
 **Deciders**: Tim Kühne, Dominik Ruoff, Joel Martinez
 **Date**: 12.01.2026
@@ -565,7 +565,7 @@ Diese Funktionen geben nur `True/False` zurück und generieren **keine SQL**, so
 
 ### ADR-006: Consistency Validation (mehrstufig)
 
-**[short title of solved problem and solution]**: 2-Ebenen Validierung (Safety + LLM-based Semantik) für robuste SQL-Qualität
+**Validierung der SQL**: 2-Ebenen Validierung (Safety + LLM-based Semantik) für robuste SQL-Qualität
 **Status**: accepted
 **Deciders**: Tim Kühne, Joel Martinez, Sören Frank
 **Date**: 12.01.2026
@@ -977,12 +977,6 @@ graph TD
 3. **Performance-Tuning**: Basierend auf Produktivierungs-Erfahrungen optimieren
 4. **User Testing**: Mit echten Nutzern Feedback sammeln und umsetzen
 5. **Open Source**: Überlegen, Teile des Systems als Open Source zu veröffentlichen
-
----
-
-## 📞 Kontakt & Demo
-
-**Letztes Update**: Januar 2026
 
 ---
 
