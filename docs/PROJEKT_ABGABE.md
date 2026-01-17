@@ -372,16 +372,118 @@ Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in ei
 
 ## 6. Architecture Decision Records (ADRs)
 
-> **Hinweis**: Die ADRs folgen dem MADR-Template (Markdown Architecture Decision Record) gemäß Aufgabenstellung.
+> **Hinweis**: Die ADRs folgen dem **MADR-Template** (Markdown Architecture Decision Record) gemäß Aufgabenstellung.
 > Für vollständige ADRs siehe `docs/ARCHITEKTUR_ENTSCHEIDUNGEN.md`
+
+### ADR Index
+
+| ADR | Titel | Status | Date | Superseded by |
+|-----|-------|--------|------|---------------|
+| ADR-001 | Initiale Multi-Database RAG/ReAct Architektur | deprecated | 12.01.2026 | ADR-004 |
+| ADR-002 | Database Auto-Routing | deprecated | 12.01.2026 | ADR-004 |
+| ADR-003 | Vector Store (ChromaDB) | deprecated | 12.01.2026 | ADR-004 |
+| ADR-004 | Migration zu BSL-first Single-Database | accepted | 12.01.2026 | – |
+| ADR-005 | Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger | accepted | 12.01.2026 | – |
+| ADR-006 | Consistency Validation (mehrstufig) | accepted | 12.01.2026 | – |
+
+---
+
+### ADR-001: Initiale Multi-Database RAG/ReAct Architektur
+
+| | |
+|---|---|
+| **Status** | deprecated – superseded by [ADR-004](#adr-004-migration-zu-bsl-first-single-database-architektur) |
+| **Deciders** | Tim Kühne, Dominik Ruoff, Joel Martinez, Umut Polat, Sören Frank |
+| **Date** | 15.12.2025 (created) / 12.01.2026 (deprecated) |
+| **Technical Story** | Architekturentwurf für BIRD-INTERACT (Multi-DB) mit Token-Optimierung durch Retrieval |
+
+#### Context and Problem Statement
+
+Zu Projektbeginn wurde eine Architektur angestrebt, die Multi-Database-Support für den BIRD-Datensatz ermöglicht und Token-Kosten durch intelligentes Retrieval reduziert. Die Frage war: Wie können wir ein skalierbares Text2SQL-System für mehrere Datenbanken bauen?
+
+#### Decision Drivers
+
+- Token-Effizienz (Kontext-Overload vermeiden)
+- Multi-DB Support (Benchmark umfasst viele DBs)
+- Moderne Retrieval-Methodik (RAG/ReAct)
+
+#### Considered Options
+
+1. RAG + ReAct mit Vector Store
+2. Full-Context Prompting
+3. Fine-Tuned Model
+
+#### Decision Outcome
+
+Chosen option: **"RAG + ReAct mit Vector Store"**, because es Token-Reduktion und Multi-DB-Support versprach.
+
+#### Consequences
+
+- **Good**: Token-Reduktion durch Retrieval, Multi-DB prinzipiell möglich
+- **Bad**: Nicht-deterministische Ergebnisse, hohe Komplexität, schwer zu debuggen
+
+> **Grund für Deprecation**: Bei Tests zeigten sich Identity Leakage, Aggregation Failures und Semantic Drift. Siehe ADR-004 für Details.
+
+---
+
+### ADR-002: Database Auto-Routing
+
+| | |
+|---|---|
+| **Status** | deprecated – superseded by [ADR-004](#adr-004-migration-zu-bsl-first-single-database-architektur) |
+| **Deciders** | Tim Kühne, Dominik Ruoff, Joel Martinez |
+| **Date** | 15.12.2025 (created) / 12.01.2026 (deprecated) |
+| **Technical Story** | Automatische DB-Auswahl per LLM zur Unterstützung von Multi-DB |
+
+#### Context and Problem Statement
+
+Für Multi-DB wurde ein Mechanismus benötigt, der automatisch bestimmt, welche Datenbank zur Frage passt – ohne manuelle Auswahl.
+
+#### Decision Outcome
+
+LLM-basiertes Auto-Routing via DB-Profil-Snippets + Confidence-Threshold (≥0.55).
+
+#### Consequences
+
+- **Bad**: +2-3s Latenz pro Request, nicht-deterministisch, Over-Engineering für Single-DB Scope
+
+> **Grund für Deprecation**: Projekt-Scope fokussiert auf Credit-DB; Routing war unnötige Komplexität.
+
+---
+
+### ADR-003: Vector Store (ChromaDB)
+
+| | |
+|---|---|
+| **Status** | deprecated – superseded by [ADR-004](#adr-004-migration-zu-bsl-first-single-database-architektur) |
+| **Deciders** | Tim Kühne, Dominik Ruoff |
+| **Date** | 15.12.2025 (created) / 12.01.2026 (deprecated) |
+| **Technical Story** | Persistenter Vector Store zur Token-Reduktion und semantischen Chunk-Suche |
+
+#### Context and Problem Statement
+
+Schema-/KB-Inhalte sollten als Chunks gespeichert und semantisch durchsucht werden, um Prompt-Länge zu reduzieren.
+
+#### Decision Outcome
+
+ChromaDB als lokaler, persistenter Vector Store.
+
+#### Consequences
+
+- **Bad**: Dateikorruption möglich (erlebt), Maintenance-Aufwand, nicht-deterministisches Retrieval
+
+> **Grund für Deprecation**: Vector Store wurde korrupt, Retrieval-Qualität schwankte, für Single-DB nicht sinnvoll.
+
+---
 
 ### ADR-004: Migration zu BSL-first Single-Database Architektur
 
-**BSL-First**: BSL-first statt RAG/ReAct für stabile, erklärbare SQL-Generierung
-**Status**: accepted
-**Deciders**: Tim Kühne, Dominik Ruoff, Joel Martinez, Umut Polat, Sören Frank
-**Date**: 12.01.2026
-**Technical Story**: Nach initialer RAG/ReAct-Implementierung zeigte sich bei Tests instabile Ergebnisse. Professor-Feedback empfahl BSL als besseren Ansatz für den Credit-DB Scope.
+| | |
+|---|---|
+| **Status** | accepted |
+| **Deciders** | Tim Kühne, Dominik Ruoff, Joel Martinez, Umut Polat, Sören Frank |
+| **Date** | 12.01.2026 |
+| **Technical Story** | Nach initialer RAG/ReAct-Implementierung zeigte sich bei Tests instabile Ergebnisse. Professor-Feedback empfahl BSL als besseren Ansatz für den Credit-DB Scope. |
 
 #### Context and Problem Statement
 
@@ -396,18 +498,18 @@ Die zentrale Frage war: Wie erreichen wir reproduzierbare und auditierbare SQL-G
 
 #### Decision Drivers
 
-1. **Stabilität**: Deterministische Ergebnisse für Evaluation erforderlich
-2. **Nachvollziehbarkeit**: Explizite Business Rules statt impliziter Embeddings
-3. **Wartbarkeit**: Weniger Dependencies und Moving Parts
-4. **Scope-Fit**: Projekt fokussiert auf Credit-Datenbank (BIRD mini-interact Subset)
-5. **Professor-Feedback**: BSL als "bester Ansatz" explizit empfohlen
-6. **Academic Rigor**: Nachvollziehbare Architektur für Verteidigung
+- **Stabilität**: Deterministische Ergebnisse für Evaluation erforderlich
+- **Nachvollziehbarkeit**: Explizite Business Rules statt impliziter Embeddings
+- **Wartbarkeit**: Weniger Dependencies und Moving Parts
+- **Scope-Fit**: Projekt fokussiert auf Credit-Datenbank (BIRD mini-interact Subset)
+- **Professor-Feedback**: BSL als "bester Ansatz" explizit empfohlen
+- **Academic Rigor**: Nachvollziehbare Architektur für Verteidigung
 
 #### Considered Options
 
-**Option 1**: RAG + ReAct beibehalten (Status Quo)
-**Option 2**: Hybrid-Ansatz (RAG + BSL kombiniert)
-**Option 3**: BSL-first (vollständige Migration)
+1. **RAG + ReAct beibehalten** (Status Quo)
+2. **Hybrid-Ansatz** (RAG + BSL kombiniert)
+3. **BSL-first** (vollständige Migration)
 
 #### Decision Outcome
 
@@ -415,57 +517,57 @@ Chosen option: **"Option 3: BSL-first"**, because es erfüllt alle kritischen An
 
 #### Positive Consequences
 
-- **Deterministische SQL-Generierung**: Gleiche Frage + gleicher BSL = gleiche SQL
-- **Explizite, auditierbare Business Rules**: BSL ist Plain-Text, Domain-Experten können prüfen
-- **Weniger Dependencies**: Kein ChromaDB, LangChain, Vector Store
-- **Einfachere Wartung und Debugging**: Klare Fehlerquellen, keine "Black Box"
-- **Bessere akademische Argumentation**: Nachvollziehbare Entscheidungen
-- **Success Rate von 40% auf 95% verbessert**
+- Deterministische SQL-Generierung: Gleiche Frage + gleicher BSL = gleiche SQL
+- Explizite, auditierbare Business Rules: BSL ist Plain-Text, Domain-Experten können prüfen
+- Weniger Dependencies: Kein ChromaDB, LangChain, Vector Store
+- Einfachere Wartung und Debugging: Klare Fehlerquellen, keine "Black Box"
+- Success Rate von 40% auf 88.5% verbessert
 
 #### Negative Consequences
 
-- **Höhere Token-Kosten**: ~32KB vs ~2KB pro Prompt
-- **Weniger skalierbar**: Multi-DB-Support erfordert pro-DB BSL
-- **Weniger "buzzword-compliant"**: Keine RAG/Vector Store (weniger "modern")
+- Höhere Token-Kosten: ~32KB vs ~2KB pro Prompt
+- Weniger skalierbar: Multi-DB-Support erfordert pro-DB BSL
 
 #### Pros and Cons of the Options
 
 **Option 1: RAG + ReAct beibehalten**
-- Good, because geringere Token-Kosten (~2KB pro Prompt) und moderne Retrieval-Methodik
-- Good, because skalierbar für große Schemas (>50KB)
-- Bad, because nicht-deterministische Ergebnisse durch Embedding-Variabilität
-- Bad, because hohe Komplexität mit vielen Dependencies (ChromaDB, LangChain)
-- Bad, because schwer zu debuggen und zu auditieren
+
+| Pro | Contra |
+|-----|--------|
+| Geringere Token-Kosten (~2KB) | Nicht-deterministische Ergebnisse |
+| Skalierbar für große Schemas | Hohe Komplexität (ChromaDB, LangChain) |
+| | Schwer zu debuggen und zu auditieren |
 
 **Option 2: Hybrid-Ansatz (RAG + BSL)**
-- Good, because flexible Kombination aus Retrieval und expliziten Regeln
-- Good, because Token-Effizienz für große Schemas
-- Bad, because Komplexität bleibt hoch, zwei Systeme zu warten
-- Bad, because Fehlerquellen in beiden Systemen möglich
-- Bad, because unklare Priorität (wann RAG, wann BSL?)
+
+| Pro | Contra |
+|-----|--------|
+| Flexible Kombination | Komplexität bleibt hoch |
+| Token-Effizienz für große Schemas | Unklare Priorität (wann RAG, wann BSL?) |
 
 **Option 3: BSL-first (chosen)**
-- Good, because deterministisch und reproduzierbar
-- Good, because explizite, auditierbare Regeln
-- Good, because professor-konform und wartbar
-- Good, because SOLID-Prinzipien und klare Architektur
-- Bad, because hoher Token-Verbrauch (~32KB pro Prompt)
-- Bad, because enger Domain-Fit (nur Credit-DB)
+
+| Pro | Contra |
+|-----|--------|
+| Deterministisch und reproduzierbar | Hoher Token-Verbrauch (~32KB) |
+| Explizite, auditierbare Regeln | Enger Domain-Fit (nur Credit-DB) |
+| SOLID-Prinzipien, wartbar | |
 
 #### Links
 
-- ADR-005: Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger
-- ADR-006: Consistency Validation (mehrstufig)
+- Supersedes: ADR-001, ADR-002, ADR-003
+- Related: ADR-005, ADR-006
 
 ---
 
 ### ADR-005: Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger
 
-**Heuristische Fragen**: Heuristische Fragetyp-Erkennung mit Keyword-Triggern für BSL-Regel-Verstärkung
-**Status**: accepted
-**Deciders**: Tim Kühne, Dominik Ruoff, Joel Martinez
-**Date**: 12.01.2026
-**Technical Story**: Für robuste Text2SQL musste das System auf Frage-Variationen generalisieren, ohne hardcodierte SQL-Antworten.
+| | |
+|---|---|
+| **Status** | accepted |
+| **Deciders** | Tim Kühne, Dominik Ruoff, Joel Martinez |
+| **Date** | 12.01.2026 |
+| **Technical Story** | Für robuste Text2SQL musste das System auf Frage-Variationen generalisieren, ohne hardcodierte SQL-Antworten. |
 
 #### Context and Problem Statement
 
@@ -478,17 +580,17 @@ Die Frage war: Wie können wir Edge Cases abfangen, ohne das Generalisierungszie
 
 #### Decision Drivers
 
-1. **Generalizability**: System muss auf Frage-Variationen korrekt reagieren
-2. **BSL Compliance**: LLM muss die richtigen BSL-Regeln anwenden
-3. **Maintainability**: Erweiterbar für neue Domänen-Konzepte
-4. **Robustness**: Edge Cases müssen abgefangen werden
-5. **Academic Rigor**: Kein Hardcoding von Frage-Antwort-Paaren
+- **Generalizability**: System muss auf Frage-Variationen korrekt reagieren
+- **BSL Compliance**: LLM muss die richtigen BSL-Regeln anwenden
+- **Maintainability**: Erweiterbar für neue Domänen-Konzepte
+- **Robustness**: Edge Cases müssen abgefangen werden
+- **Academic Rigor**: Kein Hardcoding von Frage-Antwort-Paaren
 
 #### Considered Options
 
-**Option 1**: Reines LLM ohne zusätzliche Unterstützung
-**Option 2**: Hardcodierte SQL pro Frage-Typ
-**Option 3**: LLM + Keyword-basierte BSL Compliance Trigger
+1. **Reines LLM** ohne zusätzliche Unterstützung
+2. **Hardcodierte SQL** pro Frage-Typ
+3. **LLM + Keyword-basierte BSL Compliance Trigger**
 
 #### Decision Outcome
 
@@ -496,52 +598,27 @@ Chosen option: **"Option 3: LLM + Keyword-basierte BSL Compliance Trigger"**, be
 
 **Wichtige Klarstellung - Kein Hardcoding:**
 
-Die Methoden wie `_is_property_leverage_question()` in `llm/generator.py` sind **keine hardcodierten Antworten**:
-
 | Was sie NICHT tun | Was sie tun |
 |-------------------|-------------|
-| ❌ Fertige SQL-Queries zurückgeben | ✅ BSL-Regeln aktivieren/verstärken |
-| ❌ Frage-Antwort-Paare speichern | ✅ Dem LLM signalisieren, welche Regeln wichtig sind |
-| ❌ Das LLM umgehen | ✅ Das LLM mit zusätzlichem Kontext unterstützen |
+| Fertige SQL-Queries zurückgeben | BSL-Regeln aktivieren/verstärken |
+| Frage-Antwort-Paare speichern | Dem LLM signalisieren, welche Regeln wichtig sind |
+| Das LLM umgehen | Das LLM mit zusätzlichem Kontext unterstützen |
 
-**Technische Implementierung:**
+**Technische Implementierung (2 Stufen):**
 
-Die heuristische Fragetyp-Erkennung funktioniert in zwei Stufen:
-
-1. **Initial SQL-Generierung** (implizite Intent-Erkennung):
-   ```python
-   # LLM erkennt Intent direkt im Prompt
-   sql_result = llm_generator.generate_sql(question, schema, meanings, bsl)
-   # LLM analysiert Frage + BSL und erkennt: Aggregation? Detail? Ranking?
-   ```
-
-2. **BSL-Compliance-Check & Regeneration** (explizite Pattern-Erkennung für Edge Cases):
-   ```python
-   # Pattern-basierte Helper-Funktionen erkennen bekannte Edge Cases
-   instruction = llm_generator._bsl_compliance_instruction(question, sql_result["sql"])
-   
-   # Falls Probleme erkannt, Regeneration mit spezifischen BSL-Anweisungen
-   if instruction:
-       sql_result = llm_generator._regenerate_with_bsl_compliance(...)
-   ```
+1. **Initial SQL-Generierung**: LLM erkennt Intent direkt im Prompt
+2. **BSL-Compliance-Check**: Pattern-basierte Helper-Funktionen erkennen Edge Cases und triggern ggf. Regeneration
 
 **Beispiel Pattern-Funktionen** (in `llm/generator.py`):
-- `_is_property_leverage_question(question)`: Erkennt "property leverage", "mortgage ratio", "LTV"
-- `_is_digital_engagement_cohort_question(question)`: Erkennt "cohort" + "engagement" + "digital"
-- `_has_explicit_time_range(question)`: Erkennt explizite Jahres-/Quartals-Angaben
-
-Diese Funktionen geben nur `True/False` zurück und generieren **keine SQL**, sondern aktivieren spezifische BSL-Regel-Verstärkungen im Regenerations-Prompt.
-
-**Beweis für Generalisierung**: Das System reagiert korrekt auf Variationen wie:
-- "property leverage" → "mortgage ratio" → "loan-to-value" → "LTV"
-- "top wealthy customers" → "top 5 wealthy customers" → "wealthiest clients"
+- `_is_property_leverage_question()`: Erkennt "property leverage", "mortgage ratio", "LTV"
+- `_is_digital_engagement_cohort_question()`: Erkennt "cohort" + "engagement" + "digital"
+- `_has_explicit_time_range()`: Erkennt explizite Jahres-/Quartals-Angaben
 
 #### Positive Consequences
 
-- LLM generiert SQL immer dynamisch basierend auf vollständigem BSL + Schema + Meanings Kontext
+- LLM generiert SQL immer dynamisch basierend auf BSL + Schema + Meanings
 - Edge Cases werden durch Regel-Verstärkung abgefangen
 - System generalisiert auf Frage-Variationen
-- Keine "Antwortentabelle" - nachvollziehbar und auditierbar
 
 #### Negative Consequences
 
@@ -551,29 +628,36 @@ Diese Funktionen geben nur `True/False` zurück und generieren **keine SQL**, so
 #### Pros and Cons of the Options
 
 **Option 1: Reines LLM ohne Unterstützung**
-- Good, because maximale Einfachheit
-- Bad, because Edge Cases werden nicht zuverlässig erkannt
-- Bad, because BSL-Regeln könnten ignoriert werden
+
+| Pro | Contra |
+|-----|--------|
+| Maximale Einfachheit | Edge Cases werden nicht zuverlässig erkannt |
+| | BSL-Regeln könnten ignoriert werden |
 
 **Option 2: Hardcodierte SQL pro Frage-Typ**
-- Good, because 100% deterministisch
-- Bad, because **keine Generalisierung** - nur exakte Fragen funktionieren
-- Bad, because **akademisch nicht vertretbar** - widerspricht Text2SQL-Ziel
+
+| Pro | Contra |
+|-----|--------|
+| 100% deterministisch | Keine Generalisierung |
+| | Akademisch nicht vertretbar |
 
 **Option 3: LLM + BSL Compliance Trigger (chosen)**
-- Good, because Generalisierung + Robustheit
-- Good, because nachvollziehbar und erweiterbar
-- Bad, because zusätzliche Trigger-Logik erforderlich
+
+| Pro | Contra |
+|-----|--------|
+| Generalisierung + Robustheit | Zusätzliche Trigger-Logik erforderlich |
+| Nachvollziehbar und erweiterbar | |
 
 ---
 
 ### ADR-006: Consistency Validation (mehrstufig)
 
-**Validierung der SQL**: 2-Ebenen Validierung (Safety + LLM-based Semantik) für robuste SQL-Qualität
-**Status**: accepted
-**Deciders**: Tim Kühne, Joel Martinez, Sören Frank
-**Date**: 12.01.2026
-**Technical Story**: Nach BSL-Migration zeigte sich, dass LLMs trotz BSL-Regeln häufig Fehler machten.
+| | |
+|---|---|
+| **Status** | accepted |
+| **Deciders** | Tim Kühne, Joel Martinez, Sören Frank |
+| **Date** | 12.01.2026 |
+| **Technical Story** | Nach BSL-Migration zeigte sich, dass LLMs trotz BSL-Regeln weiterhin Fehler machten: Identifier-Verwechslungen, JOIN-Chain-Verletzungen, Aggregationsfehler. |
 
 #### Context and Problem Statement
 
@@ -587,17 +671,17 @@ Wie können wir diese Fehler systematisch erkennen und beheben?
 
 #### Decision Drivers
 
-1. **Quality Assurance**: Automatische Fehlererkennung vor Ausführung
-2. **BSL Consistency**: BSL-Regeln müssen durchgesetzt werden
-3. **Debugging**: Klare Fehlermeldungen für Entwickler
-4. **Defense in Depth**: Mehrere Validierungsebenen
-5. **Performance**: Validation muss schnell sein (<500ms)
+- **Quality Assurance**: Automatische Fehlererkennung vor Ausführung
+- **BSL Consistency**: BSL-Regeln müssen durchgesetzt werden
+- **Debugging**: Klare Fehlermeldungen für Entwickler
+- **Defense in Depth**: Mehrere Validierungsebenen
+- **Performance**: Validation muss schnell sein (<500ms)
 
 #### Considered Options
 
-**Option 1**: Nur LLM-basierte Validierung
-**Option 2**: Nur Rule-based Validierung (Regex)
-**Option 3**: Mehrstufige Validation (3 Ebenen)
+1. **Nur LLM-basierte Validierung**
+2. **Nur Rule-based Validierung** (Regex)
+3. **Mehrstufige Validation** (3 Ebenen)
 
 #### Decision Outcome
 
@@ -605,47 +689,44 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 
 **Die 3-Ebenen Validierungs-Architektur:**
 
-| Ebene | Typ | Prüft | Geschwindigkeit | Implementierung |
-|-------|-----|-------|-----------------|-----------------|
-| **Layer A** | Rule-based + Auto-repair | BSL-Compliance, SQLite Dialektfix | ~10ms | `llm/generator.py` (Heuristiken) |
-| **Server Guards** | SQL Guard + Known Tables | Sicherheit (nur SELECT, keine Injection), Tabellenvalidierung + Autokorrektur bei Tabellenfehlern | ~10ms | `utils/sql_guard.py`, `main.py` |
-| **Layer B** | LLM Validation | Semantik, JOINs, Spalten-Existenz, Self-correction bei low confidence | ~1-2s | `llm/generator.py` (`validate_sql()`) |
-
-**Server Guards im Detail (Phase 5):**
-- `enforce_safety(sql)`: Erlaubt nur SELECT-Statements, blockiert gefährliche SQL-Befehle
-- `enforce_known_tables(sql, table_columns)`: Validiert, dass nur bekannte Tabellen verwendet werden
-- **Autokorrektur**: Bei reinen Tabellenfehlern versucht das System eine automatische Korrektur via LLM
-
-> **Hinweis**: Es gibt **kein separates** `consistency_checker.py` Modul - alles ist in `llm/generator.py` integriert.
+| Ebene | Typ | Prüft | Speed | Implementierung |
+|-------|-----|-------|-------|-----------------|
+| **Layer A** | Rule-based + Auto-repair | BSL-Compliance, SQLite Dialektfix | ~10ms | `llm/generator.py` |
+| **Server Guards** | SQL Guard + Known Tables | Sicherheit, Tabellenvalidierung | ~10ms | `utils/sql_guard.py`, `main.py` |
+| **Layer B** | LLM Validation | Semantik, JOINs, Spalten-Existenz | ~1-2s | `llm/generator.py` |
 
 #### Positive Consequences
 
 - Umfassende Fehlererkennung (Sicherheit + Semantik + BSL)
 - Klare Fehlermeldungen mit Severity-Level
 - Defense in Depth - mehrere Schichten
-- BSL-Compliance wird durchgesetzt
 
 #### Negative Consequences
 
 - Zusätzliche Latenz (~2-3s für vollständige Validation bei Layer B)
-- Alles in `llm/generator.py` integriert (weniger modulär, aber weniger komplex)
 
 #### Pros and Cons of the Options
 
 **Option 1: Nur LLM-basierte Validierung**
-- Good, because versteht Semantik und Kontext
-- Bad, because langsam (~2s) für einfache Checks
-- Bad, because kann Sicherheitsprobleme übersehen
+
+| Pro | Contra |
+|-----|--------|
+| Versteht Semantik und Kontext | Langsam (~2s) für einfache Checks |
+| | Kann Sicherheitsprobleme übersehen |
 
 **Option 2: Nur Rule-based Validierung**
-- Good, because schnell (~10ms) und deterministisch
-- Bad, because versteht keine Semantik
-- Bad, because kann BSL-Compliance nicht prüfen
+
+| Pro | Contra |
+|-----|--------|
+| Schnell (~10ms), deterministisch | Versteht keine Semantik |
+| | Kann BSL-Compliance nicht prüfen |
 
 **Option 3: Mehrstufige Validation (chosen)**
-- Good, because beste Abdeckung aller Fehlerklassen
-- Good, because Defense in Depth
-- Bad, because komplexere Implementierung
+
+| Pro | Contra |
+|-----|--------|
+| Beste Abdeckung aller Fehlerklassen | Komplexere Implementierung |
+| Defense in Depth | |
 
 ---
 
@@ -955,12 +1036,73 @@ Hier kommen die Jira Tickets rein
 2. **Hybrid-Ansatz (RAG + BSL)**
    - **Warum verworfen**: Kombiniert die Komplexitäten beider Welten ohne klare Vorteile für die Credit-DB.
    - **Wie es funktionierte**: Retrieval für Kontext, BSL für kritische Regeln; führte zu inkonsistenten Prompt-Längen und Debugging-Aufwand.
-   - **Lesson Learned**: Ein klarer, einfacher Architekturpfad schlägt “Best-of-both-worlds” in engen Scopes.
+   - **Lesson Learned**: Ein klarer, einfacher Architekturpfad schlägt "Best-of-both-worlds" in engen Scopes.
 
 3. **Reines Prompt-Engineering ohne BSL**
    - **Warum verworfen**: Fehlende Auditierbarkeit und wiederkehrende Fehler bei Identifiers und JOINs.
    - **Wie es funktionierte**: System-Prompt mit Schema und Guidelines, ohne modulare Regeln.
    - **Lesson Learned**: Domain-Regeln müssen explizit modelliert sein, nicht implizit im Prompt.
+
+### 🔍 Identifizierte Probleme & Lösungen (Testing-Phase)
+
+Die folgenden Probleme wurden während der Evaluation der 10 Testfragen identifiziert und durch die BSL-Migration gelöst:
+
+#### Problem 1: Identity Leakage (CU vs CS)
+
+| Aspekt | Details |
+|--------|---------|
+| **Symptom** | CU-Identifier (z.B. `CU154870`) statt CS-Identifier (z.B. `CS239090`) ausgegeben |
+| **Betroffene Fragen** | Q1, Q2, Q3, Q5, Q9 |
+| **Root Cause** | Datenbank verwendet zwei Identifier pro Person: CU (Customer ID) und CS (Core Registry ID) |
+| **Lösung** | BSL-Regel "Identity System Rules" mit expliziter CU/CS-Dokumentation |
+
+#### Problem 2: Aggregation Failure
+
+| Aspekt | Details |
+|--------|---------|
+| **Symptom** | Einzelne Zeilen statt aggregierte Werte (z.B. bei "nach Kategorie") |
+| **Betroffene Fragen** | Q4 (Credit Category Aggregation) |
+| **Root Cause** | LLM erkannte Aggregations-Intent nicht, lieferte Row-Level-Daten |
+| **Lösung** | BSL-Sektion "Aggregation Patterns" mit Regel: "by category/segment" → GROUP BY |
+
+#### Problem 3: Semantic Drift (Business Rules)
+
+| Aspekt | Details |
+|--------|---------|
+| **Symptom** | Falsche Spaltenauswahl, fehlende Filter, Business Rules ignoriert |
+| **Betroffene Fragen** | Q6 (FSI nicht gefiltert), Q7 (Time-Series statt Cohort Comparison) |
+| **Root Cause** | Implizite Business-Begriffe (z.B. "Financial Stress Indicator") wurden falsch interpretiert |
+| **Lösung** | BSL-Sektion "Business Logic Rules" mit expliziten Definitionen und Formeln |
+
+#### Problem 4: Join Drift
+
+| Aspekt | Details |
+|--------|---------|
+| **Symptom** | Falsche Zeilen/IDs durch unnötige JOINs über mehrere Tabellen |
+| **Betroffene Fragen** | Q5 (Property Leverage) |
+| **Root Cause** | LLM jointe `core_record` → `employment_and_income` → `expenses_and_assets`, obwohl alle Daten in einer Tabelle lagen |
+| **Lösung** | BSL-Regel: "Wenn alle Felder in einer Tabelle, keine zusätzlichen JOINs" + "Join Chain Rules" |
+
+#### Problem 5: SQL Execution Bug (Parameter Binding)
+
+| Aspekt | Details |
+|--------|---------|
+| **Symptom** | SQL mit Platzhaltern (`?`, `:param`) statt konkreten Werten |
+| **Betroffene Fragen** | Q6, Q8 |
+| **Root Cause** | LLM generierte parametrisierte Queries statt ausführbare SQL |
+| **Lösung** | Layer A Validation mit `_contains_param_placeholders()` Check + Auto-Repair |
+
+#### Zusammenfassung der Fehlerklassen
+
+| Fehlerklasse | Häufigkeit (vor BSL) | Nach BSL-Migration |
+|--------------|---------------------|-------------------|
+| Identity Leakage | 50% der Fragen | 5% (nur Edge Cases) |
+| Aggregation Failure | 10% der Fragen | 0% |
+| Semantic Drift | 20% der Fragen | 5% |
+| Join Drift | 10% der Fragen | 0% |
+| Parameter Binding | 20% der Fragen | 0% |
+
+> **Dokumentation**: Die vollständigen Test-Analysen befinden sich in `docs/archiv/Probleme/TESTING.md` und `docs/archiv/Probleme/TESTING2.0.md`.
 
 ### 🎓 Lessons Learned
 
