@@ -247,7 +247,7 @@ export default function App() {
   return (
     <div className={`app ${isDark ? "dark" : "light"}`}>
       <header className="header">
-        <div className="brand">Projekt-Vetter-Version-1.0.1</div>
+        <div className="brand">Projekt-Vetter-Version-X.0.0</div>
         <button
           type="button"
           className="theme-btn"
