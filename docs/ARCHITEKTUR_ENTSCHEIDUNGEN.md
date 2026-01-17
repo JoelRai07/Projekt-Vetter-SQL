@@ -1,316 +1,259 @@
-# Architecture Decision Records (ADRs) - Text2SQL Projekt
+# Architecture Decision Records (ADRs) – Text2SQL Projekt
 
 ## Ziel dieses Dokuments
-Dieses Dokument enthält alle wichtigen Architektur-Entscheidungen (Architecture Decision Records) des Text2SQL-Projekts. Es folgt dem **MADR-Standard** (Markdown Architecture Decision Record) und dokumentiert die vollständige Entwicklungsgeschichte von der initialen Multi-Database-RAG-Architektur bis zur aktuellen BSL-first Single-Database-Architektur.
+Dieses Dokument enthält die zentralen Architekturentscheidungen (Architecture Decision Records) des Text2SQL-Projekts.
+Es orientiert sich am **MADR-Standard** und dokumentiert die Entwicklung von der initialen Multi-DB RAG/ReAct Architektur
+bis zur aktuellen **BSL-first Single-Database** Architektur.
 
-**Status**: Dokumentation auf aktuellem Stand (Januar 2026)  
-**Version**: X.0.0 (BSL-first mit modularen Regeln)  
+**Status**: Stand Januar 2026  
+**Version**: 9.0.0 (Abgabe) – Architektur: BSL-first  
 **Scope**: Credit-Datenbank (BIRD mini-interact Subset)
 
 ---
 
-## ADR-001: Initiale Multi-Database RAG/ReAct Architektur
-
-**Status**: deprecated  
-**Deciders**: Projektteam  
-**Date**: 2024-10-15  
-**Technical Story**: Initialer Setup für BIRD-INTERACT Benchmark
-
-### Context and Problem Statement
-Zu Projektbeginn wurde eine Architektur benötigt, die:
-- Multi-Database-Support für den vollständigen BIRD-Datensatz ermöglicht
-- Token-Kosten durch intelligentes Retrieval reduziert
-- Skalierbar für zukünftige Erweiterungen ist
-- Moderne RAG/ReAct-Ansätze nutzt
-
-### Decision Drivers
-1. **Token-Effizienz**: BIRD-Datensätze haben große Schemas (50+ KB)
-2. **Multi-DB Support**: BIRD unterstützt viele verschiedene Datenbanken
-3. **Modern Tech Stack**: RAG und ReAct als State-of-the-Art Ansätze
-4. **Scalability**: Architektur sollte für zukünftige Erweiterungen geeignet sein
-
-### Considered Options
-**Option 1: Full Schema Approach**
-- Good: Einfach zu implementieren, deterministisch
-- Bad: Hohe Token-Kosten, nicht skalierbar
-
-**Option 2: RAG + ReAct (chosen)**
-- Good: Token-effizient (~2KB vs 50KB), modern, skalierbar
-- Bad: Komplex, nicht-deterministisch, viele Dependencies
-
-**Option 3: Hybrid-Ansatz**
-- Good: Balance zwischen Effizienz und Stabilität
-- Bad: Implementierungskomplexität
-
-### Decision Outcome
-Chosen option: **RAG + ReAct**, because:
-- Erfüllt alle Anforderungen (Multi-DB, Token-Effizienz, Skalierbarkeit)
-- Nutzt moderne Architektur-Patterns
-- Ermöglicht intelligente Retrieval-Strategien
-
-### Positive Consequences
-- Token-Reduktion um ~60% durch semantisches Retrieval
-- Multi-Database-Support durch automatisches Routing
-- Moderne Technologie-Stack (ChromaDB, LangChain)
-- Intelligente Context-Aggregation durch ReAct-Schleife
-
-### Negative Consequences
-- Nicht-deterministische Ergebnisse durch Embedding-Variabilität
-- Hohe Komplexität mit vielen Moving Parts
-- Zusätzliche Dependencies (ChromaDB, LangChain)
-- Wartungsaufwand für Vector Store
+## Konventionen (wichtig für Konsistenz)
+- **Date** = Datum der Entscheidung (accepted/deprecated)
+- **Originally implemented** (optional) = Zeitraum/Datum der ersten Umsetzung
+- **Superseded by** = ADR, die diese Entscheidung ersetzt
+- „Rationale/Warum“ wird **kurz** in ADRs gehalten und bei Bedarf auf **Appendix A** verwiesen.
 
 ---
 
-#### 1. Database Auto-Routing
-- **Konzept**: LLM waehlt automatisch die passende Datenbank basierend auf 
-  Profil-Snippets (Schema-Ausschnitte, KB-Ausschnitte, Meanings-Ausschnitte)
-- **Flow**: 
-  - System erstellt DB-Profile fuer jede verfuegbare Datenbank
-  - LLM bewertet: "Welche DB passt zur Frage?"
-  - Confidence >= 0.55? → DB wird ausgewaehlt
-  - Confidence < 0.55? → Ambiguity-Result, Routing fehlgeschlagen
-- **Ziel**: Flexibilität bei Multi-DB-Szenarien
-- **Probleme**: 
-  - Zusaetzliche 2-3 Sekunden Latenz pro Request
-  - Nicht-deterministische Ergebnisse (unterschiedliche DB-Auswahl bei gleicher Frage)
-  - Komplexe Fehlerbehandlung (was passiert bei niedriger Confidence?)
+## ADR Index
 
-#### 2. ReAct + RAG (Retrieval Augmented Generation)
-- **Konzept**: Mehrstufige Schleife (THINK → ACT → OBSERVE → REASON) mit 
-  semantischem Retrieval
-- **Technologie-Stack**:
-  - **Vector Store**: ChromaDB (lokal persistent)
-  - **Embeddings**: OpenAI text-embedding-3-small
-  - **Retrieval**: Semantische Suche nach relevanten Schema/KB-Chunks
-- **Flow**:
-  1. **THINK**: LLM analysiert Frage, identifiziert benoetigte Informationen
-  2. **ACT**: System generiert Search Queries, durchsucht Vector Store
-  3. **OBSERVE**: System sammelt Top-K relevante Chunks (Schema, KB, Meanings)
-  4. **REASON**: LLM prüft: "Genug Info? Oder weitere Retrieval-Runde?"
-  5. Wiederholung bis genug Kontext vorhanden
-  6. **SQL Generation**: SQL wird mit nur relevanten Chunks generiert
-- **Vorteile**:
-  - Token-Ersparnis: ~60% weniger Tokens (nur relevante Chunks statt volles Schema)
-  - Theoretisch bessere Genauigkeit durch fokussierten Kontext
-- **Probleme**:
-  - Nicht-deterministisch: Retrieval-Ergebnisse variieren je nach Embedding-Qualität
-  - Zusaetzliche Latenz: 2-4 Iterationen × (Embedding + Retrieval + LLM-Call)
-  - Komplexe Fehlerquellen: Vector Store Korruption, Embedding-Variabilität
-  - Wartbarkeit: ChromaDB + LangChain als zusaetzliche Dependencies
+| ADR | Titel | Status | Date | Superseded by |
+|-----|-------|--------|------|---------------|
+| 001 | Initiale Multi-Database RAG/ReAct Architektur | deprecated | 12.01.2026 | ADR-004 |
+| 002 | Alte Routing Architektur (Database Auto-Routing) | deprecated | 12.01.2026 | ADR-004 |
+| 003 | Vector Store (ChromaDB) | deprecated | 12.01.2026 | ADR-004 |
+| 004 | Migration zu BSL-first Single-Database | accepted | 14.01.2026 | – |
+| 005 | Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger | accepted | 14.01.2026 | – |
+| 006 | Consistency Validation (mehrstufig) | accepted | 14.01.2026 | – |
 
-#### 3. Vector Store (ChromaDB)
-- **Zweck**: Persistente Speicherung von Embeddings fuer Schema/KB-Chunks
-- **Struktur**: Lokales Verzeichnis `vector_store/` mit persistenter Datenbank
-- **Probleme**:
-  - Dateikorruption moeglich (erlebt im Projekt)
-  - Zusaetzlicher Maintenance-Overhead
-  - Indexierung bei Schema-Aenderungen notwendig
+---
 
-### Ziele der alten Architektur
-1. **Token-Reduktion**: Relevante Schema-/KB-Chunks statt vollstaendiges Schema
-2. **Hoehere Genauigkeit**: Fokussierter Kontext soll bessere SQL-Qualität liefern
-3. **Skalierung**: Multi-Database-Support fuer zukuenftige Erweiterungen
-4. **Kostenoptimierung**: Weniger Tokens = niedrigere API-Kosten
+# Phase 1 – Legacy Multi-DB (deprecated)
 
-## ADR-002: Migration zu BSL-first Single-Database Architektur
+## ADR-001: Initiale Multi-Database RAG/ReAct Architektur
+
+**Status**: deprecated (superseded by ADR-004)  
+**Deciders**: Projektteam  
+**Date**: 17.12.25-12.01.2026 (Created/Deprecated)  
+**Originally implemented**: ca. 15.12.2025 (erste Umsetzung)  
+**Technical Story**: Architekturentwurf für BIRD-INTERACT (Multi-DB) mit Token-Optimierung durch Retrieval
+
+### Context and Problem Statement
+Zu Projektbeginn wurde eine Architektur angestrebt, die:
+- Multi-Database-Support für den vollständigen BIRD-Datensatz ermöglicht *(anfängliche Annahme)*
+- Token-Kosten durch intelligentes Retrieval reduziert (große Schemas/KB)
+- skalierbar für zukünftige Erweiterungen ist
+- moderne RAG/ReAct-Ansätze nutzt
+- möglichst alle Evaluationsfragen korrekt beantwortet und auch ähnliche Fragen generalisiert
+
+Im Projektverlauf zeigte sich:
+- Abgabe-Scope fokussiert faktisch auf **eine** DB (Credit)
+- Multi-DB/Retrieval steigerten Komplexität und Instabilität stärker als den Nutzen
+
+### Decision Drivers
+1. Token-Effizienz (Kontext-Overload vermeiden)
+2. Multi-DB Support (Benchmark umfasst viele DBs)
+3. Modern Tech Stack (RAG/ReAct)
+4. Skalierung & Generalisierung
+
+### Decision Outcome
+**RAG + ReAct** wurde gewählt, weil es die damaligen Ziele (Multi-DB + Token-Reduktion + Skalierung) am besten abdeckte.
+
+### Consequences
+**Positive**
+- Token-Reduktion durch Retrieval (Chunks statt Full-Schema)
+- Multi-DB Support prinzipiell möglich
+
+**Negative**
+- Nicht-deterministische Ergebnisse (Retrieval variiert → SQL variiert)
+- Hohe Komplexität (viele moving parts)
+- Auditability/Wartbarkeit schwierig
+
+### Superseded by
+- **ADR-004: Migration zu BSL-first Single-Database Architektur**
+
+---
+
+## ADR-002: Alte Routing Architektur (Database Auto-Routing)
+
+**Status**: deprecated (superseded by ADR-004)  
+**Deciders**: Projektteam  
+**Date**: 17.12.25-12.01.2026 (Created/Deprecated) 
+**Originally implemented**: ca. 15.12.2025  
+**Technical Story**: Automatische DB-Auswahl per LLM zur Unterstützung von Multi-DB im BIRD-Setup
+
+### Context and Problem Statement
+Für Multi-DB wurde ein Mechanismus benötigt, der automatisch bestimmt, welche Datenbank zur Frage passt – ohne manuelle Auswahl.
+
+### Decision Outcome
+LLM-basiertes Auto-Routing via DB-Profil-Snippets + Confidence.
+
+### Implementation Notes (historisch)
+- DB-Profile: Schema-/KB-/Meanings-Snippets je DB
+- LLM bestimmt DB + Confidence
+- Confidence ≥ 0.55 → DB ausgewählt
+- Confidence < 0.55 → Ambiguity-Result
+
+### Consequences
+**Negative**
+- +2–3 Sekunden Latenz pro Request
+- Nicht-deterministisch (DB-Auswahl variiert)
+- Komplexe Fehlerbehandlung, im Abgabe-Scope Overengineering
+
+### Superseded by
+- **ADR-004**
+
+---
+
+## ADR-003: Vector Store (ChromaDB)
+
+**Status**: deprecated (superseded by ADR-004)  
+**Deciders**: Projektteam  
+**Date**: 17.12.25-12.01.2026 (Created/Deprecated)  
+**Originally implemented**: ca. 15.12.2025  
+**Technical Story**: Persistenter Vector Store zur Token-Reduktion und semantischen Chunk-Suche
+
+### Context and Problem Statement
+Schema-/KB-Inhalte sollten als Chunks gespeichert und semantisch durchsucht werden, um Prompt-Länge zu reduzieren.
+
+### Decision Outcome
+ChromaDB als lokaler, persistenter Vector Store (`vector_store/`).
+
+### Consequences
+**Negative**
+- Dateikorruption möglich (erlebt) → schlechte Reproduzierbarkeit
+- Maintenance (Re-Indexing/Versionierung)
+- Nicht-deterministisches Retrieval → SQL-Qualität schwankt
+- Im Single-DB Scope nicht mehr sinnvoll
+
+### Superseded by
+- **ADR-004**
+
+---
+
+# Phase 2 – Migration (accepted)
+
+## ADR-004: Migration zu BSL-first Single-Database Architektur
 
 **Status**: accepted  
 **Deciders**: Projektteam, Professor-Feedback  
-**Date**: 2025-01-14  
-**Technical Story**: Stabilisierung und Scope-Anpassung nach Projekt-Feedback
+**Date**: 12.01.2026  
+**Technical Story**: Stabilisierung & Scope-Anpassung nach Evaluation
 
 ### Context and Problem Statement
-Nach ersten Implementierungen zeigten sich kritische Probleme:
-- **Nicht-deterministische Ergebnisse**: Gleiche Fragen produzierten unterschiedliche SQL
-- **Hohe Komplexität**: Viele Dependencies und Fehlerquellen
-- **Scope-Mismatch**: Projekt nutzt faktisch nur Credit-Datenbank
-- **Professor-Feedback**: "Es geht nur um die Credit-DB und BSL wäre ein besserer Ansatz"
-
-### Decision Drivers
-1. **Stabilität**: Deterministische Ergebnisse für Evaluation erforderlich
-2. **Nachvollziehbarkeit**: Explizite Business Rules statt impliziter Embeddings
-3. **Wartbarkeit**: Weniger Dependencies und Moving Parts
-4. **Scope-Fit**: Projekt fokussiert auf Credit-Datenbank
-5. **Professor-Feedback**: BSL als "bester Ansatz" empfohlen
-6. **Academic Rigor**: Nachvollziehbare Architektur für Verteidigung
-
-### Considered Options
-**Option 1: RAG + ReAct beibehalten**
-- Good: Token-Effizienz (~2KB vs 32KB), modern
-- Bad: Nicht-deterministisch, hohe Komplexität, schwer debugbar
-
-**Option 2: Hybrid-Ansatz (RAG + BSL)**
-- Good: Flexibilität für große Schemas, Token-Effizienz
-- Bad: Komplexität bleibt, Fehlerquellen
-
-**Option 3: BSL-first Single-DB (chosen)**
-- Good: Deterministisch, explizite Regeln, wartbar, professor-konform
-- Bad: Höherer Token-Verbrauch (~32KB), weniger "modern"
+Nach ersten Implementierungen zeigten sich:
+- Nicht-deterministische Ergebnisse (gleiche Frage → unterschiedliche SQL)
+- Hohe Komplexität & viele Fehlerquellen
+- Scope-Mismatch: faktisch Credit-DB-only
+- Professor-Feedback: Fokus Credit-DB; BSL sei geeigneter
 
 ### Decision Outcome
-Chosen option: **BSL-first Single-Database**, because:
-- Erfüllt alle kritischen Anforderungen (Stabilität, Nachvollziehbarkeit, Wartbarkeit)
-- Implementiert Professor-Feedback direkt
-- Reduziert Komplexität signifikant
-- Bessere Grundlage für akademische Verteidigung
-- Scope-fit für Credit-DB-Fokus
+**BSL-first Single-DB** wurde gewählt.
 
-### Positive Consequences
-- **Deterministische SQL-Generierung**: Gleiche Frage = gleiche SQL
-- **Explizite Business Rules**: BSL macht Regeln auditierbar
-- **Weniger Dependencies**: Kein ChromaDB, LangChain entfernt
-- **Einfachere Wartung**: Plain-Text BSL statt Vector Store
-- **Bessere Debugbarkeit**: Klare Fehlerquellen
-- **Academic Alignment**: Professor-Feedback umgesetzt
+### Consequences
+**Positive**
+- bessere Nachvollziehbarkeit (Regeln explizit)
+- weniger Dependencies (ChromaDB/LangChain weg)
+- Debugging einfacher, Stabilität höher
 
-### Negative Consequences
-- **Höhere Token-Kosten**: ~32KB vs ~2KB pro Prompt
-- **Weniger skalierbar**: Multi-DB-Support entfernt
-- **Weniger "buzzword-compliant"**: Keine RAG/Vector Store
+**Negative**
+- höhere Token-Kosten (Full Schema + Meanings + BSL)
+- Multi-DB Support entfernt
+
+### Notes
+Ausführliche Begründung siehe **Appendix A: Rationale (BSL vs RAG)**.
 
 ---
 
+# Phase 3 – Stabilisierung (accepted)
 
-## ADR-003: Dynamische Intent-Erkennung mit BSL Compliance Triggern
+## ADR-005: Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger
 
-**Status**: accepted (vollständig umgesetzt)
-**Deciders**: Projektteam
-**Date**: 2025-01-14
-**Technical Story**: Generalisierung und robuste SQL-Generierung
+**Status**: accepted (vollständig umgesetzt)  
+**Deciders**: Projektteam  
+**Date**: 12.01.2026  
+**Technical Story**: Generalisierung + Edge-Case Stabilisierung ohne Hardcoding
 
 ### Context and Problem Statement
-Für eine robuste Text2SQL-Pipeline war eine Strategie erforderlich, die:
-- Das LLM bei der korrekten Anwendung von BSL-Regeln unterstützt
-- Auf Variationen von Fragen generalisiert
-- Keine fertigen SQL-Antworten pro Frage enthält
-
-### Decision Drivers
-1. **Generalizability**: System muss auf Frage-Variationen korrekt reagieren
-2. **BSL Compliance**: LLM muss die richtigen BSL-Regeln anwenden
-3. **Maintainability**: Erweiterbar für neue Domänen-Konzepte
-4. **Robustness**: Edge Cases müssen abgefangen werden
+Für robuste Text2SQL-Generierung musste das System:
+- BSL-Regeln zuverlässig anwenden
+- auf Variationen von Fragen generalisieren
+- ohne feste Frage→SQL Paare auskommen
 
 ### Decision Outcome
-Chosen option: **LLM-basierte Intent-Erkennung mit Keyword-basierten BSL Compliance Triggern**, because:
-- LLM generiert SQL dynamisch basierend auf BSL-Regeln
-- Keyword-Trigger (z.B. `_is_property_leverage_question()`) verstärken relevante BSL-Regeln für Edge Cases
-- Keine fertigen SQL-Lösungen - das LLM generiert immer dynamisch
+**Keyword/Heuristik-basierte Fragetyp-Erkennung** plus **BSL-Compliance-Regeln**.
+Wenn die erste SQL nicht compliant ist, wird gezielt eine **Regeneration** ausgelöst.
 
-### Wichtige Klarstellung: Kein Hardcoding
+### Implementation Evidence (im Code)
+- Fragetyp-Checks: z.B. `_is_property_leverage_question`, `_is_credit_classification_summary_question`, `_has_explicit_time_range`
+- Compliance-Bewertung: `_bsl_compliance_instruction(question, sql)`
+- Regeneration bei Verstoß: `_regenerate_with_bsl_compliance(...)`
 
-Die Methoden wie `_is_property_leverage_question()` in `llm/generator.py` sind **keine hardcodierten Antworten**:
-
-| Was sie NICHT tun | Was sie tun |
-|-------------------|-------------|
-| ❌ Fertige SQL-Queries zurückgeben | ✅ BSL-Regeln aktivieren/verstärken |
-| ❌ Frage-Antwort-Paare speichern | ✅ Dem LLM signalisieren, welche Regeln wichtig sind |
-| ❌ Das LLM umgehen | ✅ Das LLM mit zusätzlichem Kontext unterstützen |
-
-**Beweis für Generalisierung**: Das System reagiert korrekt auf Variationen wie:
-- "property leverage" → "mortgage ratio" → "loan-to-value" → "LTV"
-- "top wealthy customers" → "top 5 wealthy customers" → "wealthiest clients"
-
-Das LLM generiert in jedem Fall die SQL dynamisch basierend auf dem vollständigen BSL + Schema + Meanings Kontext.
+### Consequences
+- Weniger typische Fehler (Aggregation vs Detail, CU vs CS, Cohort-Fehler)
+- Kein Hardcoding von SQL, sondern „Policy/Compliance“-Schicht
 
 ---
 
-## ADR-004: Implementierung von Consistency Validation
+## ADR-006: Consistency Validation (mehrstufig)
 
 **Status**: accepted  
 **Deciders**: Projektteam  
-**Date**: 2025-01-14  
-**Technical Story**: Qualitätssicherung und Fehlervermeidung
+**Date**: 12.01.2026  
+**Technical Story**: Qualitätssicherung, Fehlervermeidung, bessere Debugbarkeit
 
 ### Context and Problem Statement
-Nach BSL-Migration zeigte sich, dass LLMs trotz BSL-Regeln häufig Fehler machten:
+Trotz BSL treten in der Praxis wiederkehrende Fehler auf:
 - Identifier-Verwechslungen (CU vs CS)
-- JOIN-Chain-Verletzungen
-- Aggregationsfehler
+- falsche JOIN-Chain / fehlende Zwischentabellen
+- falscher Detailgrad (Summary vs Row-level)
 - JSON-Feld-Qualifizierungsprobleme
-
-### Decision Drivers
-1. **Quality Assurance**: Automatische Fehlererkennung
-2. **Consistency**: BSL-Regeln durchsetzen
-3. **Debugging**: Klare Fehlermeldungen
-4. **Robustness**: Mehrstufige Validierung
-5. **Academic Rigor**: Nachvollziehbare Qualitätssicherung
+- SQL-Dialekt-Fallen (z.B. UNION + ORDER BY in SQLite)
 
 ### Decision Outcome
-Chosen option: **Mehrstufige Consistency Validation**, because:
-- Bietet umfassende Fehlererkennung
-- Enthält BSL-Compliance-Checks
-- Liefert klare Fehlermeldungen
-- Ist erweiterbar für neue Validierungsregeln
+Einführung einer **mehrstufigen Validation**, um typische Fehler früh zu erkennen und
+gezielt zu korrigieren.
+
+### Validation Layers (empfohlen so zu dokumentieren)
+- **Layer A (deterministisch / rule-based):**
+  - SQL Guard / Placeholder-Checks (`_contains_param_placeholders`)
+  - UNION/ORDER Fix (`_fix_union_order_by`)
+  - Fragetyp-spezifische Konsistenzregeln (über ADR-005 Trigger + Compliance Instruction)
+- **Layer B (LLM-Validation optional):**
+  - Semantische Validierung gegen Schema (Funktion `validate_sql(...)`)
+  - Optionaler Correction-Loop (`generate_sql_with_correction(...)`)
+
+### Consequences
+- Höhere Robustheit und bessere Fehlermeldungen (Debugging)
+- Zusätzliche Latenz möglich, wenn Layer B (LLM Validation) aktiv genutzt wird
+- Validierungsschicht bleibt erweiterbar (neue Regeln = neue Checks)
 
 ---
 
-**BSL-Lösung**:
-- **Explizite Regeln**: BSL macht fachliche Regeln explizit und auditierbar
-- **Reproduzierbar**: Gleiche Frage + gleicher BSL = gleiche SQL (deterministisch)
-- **Nachvollziehbar**: Regeln sind in Plain-Text dokumentiert, nicht in Embeddings
-  versteckt
+# Appendix A – Rationale & Learnings (BSL vs RAG)
 
-**Architektur-Perspektive**:
-- **Determinismus**: Kritisch fuer Production-Systeme und Evaluation
-- **Auditability**: Business Rules muessen pruefbar sein (wichtig fuer Compliance)
+## A1) Determinismus & Auditability
+- BSL macht Regeln explizit und prüfbar (Auditability)
+- Retrieval-basierte Regeln sind implizit im Kontext und schwer reproduzierbar
+- Für Evaluation/Abgabe ist Reproduzierbarkeit wichtiger als Token-Optimierung
 
-### 3) Wartbarkeit & Einfachheit
+## A2) Wartbarkeit & Einfachheit
+- RAG/ReAct bringt zusätzliche Dependencies und Failure Points (Vector Store, Embeddings, Re-Indexing)
+- BSL ist Plain-Text (`credit_bsl.txt`) und leichter zu pflegen/zu reviewen
+- Weniger Komponenten = weniger Debug- und Maintenance-Aufwand
 
-**Komplexitaets-Probleme der alten Architektur**:
-- **Zusaetzliche Dependencies**: LangChain, ChromaDB als zusaetzliche Failure Points
-- **Vector Store Maintenance**: 
-  - Lokale Persistenz (`vector_store/`) kann korrupt werden
-  - Re-Indexierung bei Schema-Aenderungen notwendig
-  - Debug-Aufwand bei Retrieval-Problemen
-- **Mehr Moving Parts**: 
-  - Routing-Logik
-  - ReAct-Loop-Logik
-  - Vector Store Management
-  - Embedding-Generierung
-- **Fehlerquellen**: Mehr Komponenten = mehr Möglichkeiten fuer Fehler
-
-**BSL-Lösung**:
-- **Einfache Dateien**: BSL ist Plain-Text (`credit_bsl.txt`), leicht zu editieren
-- **Keine Dependencies**: Kein Vector Store, keine LangChain-Abhängigkeiten
-- **Direkter Flow**: Schema + Meanings + BSL → SQL (einfacher zu verstehen)
-- **Wartbarkeit**: BSL-Regeln koennen direkt editiert werden, keine Re-Indexierung
-
-**Architektur-Perspektive**:
-- **Simplicity**: Einfache Architekturen sind wartbarer
-- **Maintainability**: Weniger Komponenten = weniger Maintenance-Overhead
-- **Reliability**: Weniger Failure Points = hoehere Zuverlässigkeit
-
-### 4) BSL als besserer Ansatz
-
-**Warum BSL statt RAG?**:
-
-**RAG-Ansatz (alte Architektur)**:
-- Regeln sind implizit in KB/Schema versteckt
-- LLM muss Regeln aus Kontext ableiten (fehleranfaellig)
-- Retrieval kann relevante Regeln verpassen
-- Nicht-deterministisch
-
-**BSL-Ansatz (neue Architektur)**:
-- **Explizite Regeln**: Identity System (CU vs CS), Aggregation Patterns, Business Rules
-  sind explizit dokumentiert
-- **Hoechste Prioritaet im Prompt**: BSL wird zuerst im Prompt platziert
-- **Auditierbar**: Regeln sind in Plain-Text, koennen von Domain-Experten geprueft werden
-- **Deterministisch**: Gleiche BSL-Regeln = konsistente SQL-Generierung
-- **Klarer Scope**: BSL fokussiert auf kritische fachliche Regeln (Identity, Aggregation,
-  Business Logic)
-
-**BSL-Inhalt** (generiert aus KB + Meanings):
-- **Identity System Rules**: Customer ID = CS (coreregistry), clientref (CU) nur bei expliziter Anfrage
-- **Aggregation Detection**: Wann GROUP BY, wann ORDER BY + LIMIT
-- **Business Logic Rules**: Financially Vulnerable, High-Risk, Digital Native, etc.
-- **JSON Field Rules**: Korrekte Tabellen-Qualifizierung fuer JSON-Extraktion
-- **Join Chain Rules**: Strikte Foreign-Key-Chain (nie Tabellen ueberspringen)
-
-**Architektur-Perspektive**:
-- **Separation of Concerns**: Business Rules (BSL) getrennt von Schema (strukturelle Info)
-- **Explicit is Better than Implicit**: Regeln sind explizit, nicht implizit im Embedding
-- **Domain-Driven Design**: BSL ist eine Domain-Schicht, die fachliche Regeln kodifiziert
+## A3) Warum BSL im Projekt besser passte
+- klarer Scope (Credit-DB) → Full Context + BSL ist vertretbar
+- BSL priorisiert kritische Regeln:
+  - Identity System (CS vs CU)
+  - Aggregation Patterns
+  - Business Rules (Segmente/Metriken)
+  - JSON Field Rules
+  - Join Chain Rules
 
 ---
 
@@ -337,7 +280,7 @@ Die aktuelle Architektur ist das Ergebnis der oben dokumentierten Entscheidungen
 
 ### BSL-Sektionen (in generierter `credit_bsl.txt`)
 
-Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in einer einzigen Textdatei** (`credit_bsl.txt`) gespeichert - nicht als separate Python-Module:
+Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in einer einzigen Textdatei** (`credit_bsl.txt`) gespeichert:
 
 1. **Identity System Rules**
    - CU vs CS Identifier System
@@ -383,19 +326,19 @@ Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in ei
 - **Ambiguity Detection**: Parallele Prüfung auf Mehrdeutigkeit durch separaten LLM-Call (`check_ambiguity()`)
 
 **Phase 3: BSL-Generierung**
-- **Modulare Regel-Extraktion**: 6 separate Module
 - **Dynamische Regel-Generierung**: Aus KB + Meanings
 - **Override-Integration**: Manuelles System-Korrekturen
 
 **Phase 4: SQL-Generierung (BSL-first)**
 - **Prompt-Struktur**: BSL → Schema → Meanings → Frage
-- **Deterministische Generierung**: Temperature=0.2
+- **Deterministische Generierung**: Temperature=0.0
 - **Intent-Integration**: SQL-Hints berücksichtigen
 
 **Phase 5: Consistency Validation**
 - **Level 1**: SQL Guard (Regex-basiert, Safety)
 - **Level 2**: LLM Validation (Semantik, JOINs, BSL)
 - **Level 3**: BSL Consistency Checker (Identifier, Aggregation)
+- **Level 4 (Falls notwendig)**: Self Correction Loop
 
 **Phase 6: Query Execution & Paging**
 - **SQLite Execution**: Deterministische Ausführung
@@ -492,7 +435,7 @@ und enthaelt die wichtigsten Business Rules.
    - Aber: Einfacher, stabiler, nachvollziehbarer
 
 4. **Manuelle BSL-Pflege**
-   - BSL muss bei Schema-Änderungen regeneriert werden
+   - BSL muss bei Schema-Änderungen regeneriert werden (Dies kann aber einfach gelöst werden)
    - Aber: Automatisiert durch `bsl_builder.py`
 
 ### Bewertungs-Matrix (Architektur-Kriterien)
@@ -605,7 +548,7 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
 ## Lessons Learned & Reflektion
 
 ### Was gut funktioniert hat
-1. **Frühes Professor-Feedback**: BSL-Ansatz war entscheidend für Erfolg
+1. **Professor-Feedback**: BSL-Ansatz war entscheidend für Erfolg
 2. **Deterministische Ergebnisse**: Reproduzierbarkeit für Evaluation entscheidend
 3. **Explicit over Implicit**: BSL-Regeln sind besser als implizite Embeddings
 4. **Scope-Fit**: Single-DB-Fokus vermeidet Over-Engineering
@@ -668,7 +611,7 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
    - Neu: `backend/bsl_builder.py` (BSL-Generator)
    - Neu: `backend/mini-interact/credit/credit_bsl.txt` (generierte BSL)
    - Neu: BSL-Loading in `utils/context_loader.py`
-   - Neu: BSL im SQL-Generation-Prompt (hoechste Priorität)
+   - Neu: BSL im SQL-Generation-Prompt (höchste Priorität)
 
 2. **Context Loading**
    - Änderung: BSL wird geladen (zusätzlich zu Schema, Meanings, KB)
@@ -723,7 +666,7 @@ sql = generate_sql(question, schema, meanings, bsl)  # Direkt, kein ReAct
 | Kriterium | Alte Architektur | Neue Architektur | Gewinner |
 |-----------|------------------|------------------|----------|
 | **Komplexität** | Hoch (Routing + ReAct + RAG) | Niedrig (BSL-first) | Neue |
-| **Stabilitaet** | Niedrig (nicht-deterministisch) | Hoch (deterministisch) | Neue |
+| **Stabilität** | Niedrig (nicht-deterministisch) | Hoch (deterministisch) | Neue |
 | **Wartbarkeit** | Niedrig (viele Dependencies) | Hoch (einfache Dateien) | Neue |
 | **Token-Kosten** | Niedrig (~2 KB pro Prompt) | Hoch (~32 KB pro Prompt) | Alte |
 | **Debugbarkeit** | Niedrig (Black Box) | Hoch (explizite Regeln) | Neue |
@@ -736,7 +679,7 @@ Token-Kosten sind akzeptabel für Credit-DB-Scope.
 
 ---
 
-## Ausblick (falls spaeter nötig)
+## Ausblick (falls später nötig)
 
 ### Mögliche zukuenftige Erweiterungen
 
