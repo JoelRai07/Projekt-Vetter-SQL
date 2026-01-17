@@ -328,11 +328,18 @@ sequenceDiagram
 
 ```mermaid
 erDiagram
-    CORE_RECORD ||--|| EMPLOYMENT_AND_INCOME : coreregistry = emplcoreref
-    EMPLOYMENT_AND_INCOME ||--|| EXPENSES_AND_ASSETS : emplcoreref = exemplref
-    EXPENSES_AND_ASSETS ||--|| BANK_AND_TRANSACTIONS : exemplref = bankexpref
-    BANK_AND_TRANSACTIONS ||--|| CREDIT_AND_COMPLIANCE : bankexpref = compbankref
-    CREDIT_AND_COMPLIANCE ||--|| CREDIT_ACCOUNTS_AND_HISTORY : compbankref = histcompref
+    CORE_RECORD
+    EMPLOYMENT_AND_INCOME
+    EXPENSES_AND_ASSETS
+    BANK_AND_TRANSACTIONS
+    CREDIT_AND_COMPLIANCE
+    CREDIT_ACCOUNTS_AND_HISTORY
+
+    CORE_RECORD ||--|| EMPLOYMENT_AND_INCOME : "coreregistry = emplcoreref"
+    EMPLOYMENT_AND_INCOME ||--|| EXPENSES_AND_ASSETS : "emplcoreref = exemplref"
+    EXPENSES_AND_ASSETS ||--|| BANK_AND_TRANSACTIONS : "exemplref = bankexpref"
+    BANK_AND_TRANSACTIONS ||--|| CREDIT_AND_COMPLIANCE : "bankexpref = compbankref"
+    CREDIT_AND_COMPLIANCE ||--|| CREDIT_ACCOUNTS_AND_HISTORY : "compbankref = histcompref"
 ```
 
 ### BSL (Business Semantics Layer)
@@ -442,44 +449,6 @@ erDiagram
 - **Token-Verbrauch**: ~32KB pro Query
 - **Cache-Hit-Rate**: 87% (Schema), 72% (BSL)
 - **Validation-Time**: <500ms für Consistency Checks
-
----
-
-## 🏢 Projektorganisation
-
-### Team-Struktur
-```
-Projektteam (5 Personen)
-├── Project Lead (Tim Kühne)
-│   └── Gesamtprojekt-Koordination, Architektur
-├── Backend-Entwicklung (2 Personen)
-│   ├── Dominik Ruoff: LLM Integration, Database Management
-│   └── Joel Martinez: API Development, Performance
-├── Frontend-Entwicklung (1 Person)
-│   └── Umut Polat: React UI, User Experience
-└── QA & Dokumentation (1 Person)
-    └── Sören Frank: Testing, Dokumentation, Deployment
-```
-
-### Arbeitspakete & Tickets
-
-| Arbeitspaket | Verantwortlich | Status | Aufwand |
-|--------------|----------------|----------|----------|
-| AP-001: Frontend Setup | Frontend-Entwickler | ✅ Abgeschlossen | 16h |
-| AP-002: Backend API | Backend-Entwickler | ✅ Abgeschlossen | 24h |
-| AP-003: BSL Implementierung | Architekt | ✅ Abgeschlossen | 20h |
-| AP-004: Consistency Checker | Architekt | ✅ Abgeschlossen | 12h |
-| AP-005: Integration & Testing | Gesamtes Team | ✅ Abgeschlossen | 8h |
-| AP-006: Dokumentation | Architekt | ✅ Abgeschlossen | 16h |
-
-### Zeitliche Planung
-
-```
-Woche 1-2: Grundarchitektur (Frontend + Backend)
-Woche 3: BSL-Entwicklung + Integration
-Woche 4: Consistency Checks + Testing
-Woche 5: Dokumentation + Vorbereitung Präsentation
-```
 
 ---
 
