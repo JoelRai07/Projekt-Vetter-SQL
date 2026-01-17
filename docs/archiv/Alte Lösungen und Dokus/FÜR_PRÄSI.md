@@ -64,7 +64,7 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 | Q6-Q10 | Various | ✅ 100% | Multiple BSL Rules |
 
 ### Validation Performance
-- **Identifier Consistency**: 95% (1 Fehler bei Q5)
+- **Identifier Consistency**: 95% (1 Fehler bei Q5 und Q10)
 - **JOIN Chain Validation**: 100%
 - **Aggregation Logic**: 100%
 - **Overall Response Time**: 3.2 Sekunden

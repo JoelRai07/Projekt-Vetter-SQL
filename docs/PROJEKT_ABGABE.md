@@ -669,7 +669,7 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 ### 🎯 Validierungs-Performance
 
 **Manuelle Evaluationsergebnisse (basierend auf 10 Testfragen):**
-- **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q5)
+- **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q5 und Q10)
 - **Mehr ausgegebene Spalten als gefragt**: 95% Korrektheit (1 Fehler bei Q6)
 - **JOIN Chain Validation**: 100% Korrektheit
 - **Aggregation Logic**: 100% Korrektheit

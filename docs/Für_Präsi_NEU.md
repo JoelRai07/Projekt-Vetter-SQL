@@ -114,7 +114,7 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 | Q10: Kredit-Details | Detail-Query | ⚠️ 95% | Aggregation Patterns |
 
 ### Validation Performance
-- **Identifier Consistency**: 95% (1 Fehler bei Q5)
+- **Identifier Consistency**: 95% (1 Fehler bei Q5 und Q10)
 - **JOIN Chain Validation**: 100%
 - **Aggregation Logic**: 100%
 - **Antwortzeit**: Schneller als RAG-Ansatz (keine Retrieval-Latenz)

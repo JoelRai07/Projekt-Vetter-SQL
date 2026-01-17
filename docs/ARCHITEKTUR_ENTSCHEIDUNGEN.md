@@ -565,7 +565,7 @@ Die Nachteile (Token-Kosten, Skalierbarkeit) sind für den aktuellen Projekt-Sco
 ### Validierungs-Performance
 
 **Consistency Checker Results:**
-- **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q5)
+- **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q5 und Q10)
 - **JOIN Chain Validation**: 100% Korrektheit
 - **Aggregation Logic**: 100% Korrektheit
 - **BSL Compliance**: 98% Korrektheit
