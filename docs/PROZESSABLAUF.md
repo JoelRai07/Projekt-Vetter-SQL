@@ -3,7 +3,7 @@
 > **Stand:** Januar 2026  
 > **Scope:** **Credit-DB (mini-interact / BIRD Subset)**  
 > **Backend:** **FastAPI** (`backend/main.py`)  
-> **LLM-Integration:** OpenAI ChatCompletions via `OpenAIGenerator` (`backend/llm/generator.py`)  
+> **LLM-Integration:** GPT-5.2 via `OpenAIGenerator` (`backend/llm/generator.py`)  
 > **Wichtiger Hinweis zur BSL-Generierung:** `bsl_builder.py` ist ein **Build-/Maintenance-Tool** (offline/on-demand) und **kein** Request-Step im API-Flow.
 
 ---
@@ -67,7 +67,7 @@ graph TB
   end
 
   subgraph "External Services"
-    LLM[OpenAI ChatCompletions Model]
+    LLM[GPT-5.2 Model]
   end
 
   ORCH -->|load| KB

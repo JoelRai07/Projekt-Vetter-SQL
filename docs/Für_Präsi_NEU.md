@@ -32,13 +32,17 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
             6-Phasen Pipeline (BSL-first)
 ```
 
-### Die 6 Phasen
-1. **Context Loading** - Schema + Meanings + BSL (~10ms cached)
-2. **Intent-Erkennung** - System erkennt, was der User will (vereinfacht erklärt unten)
-3. **BSL-Generierung** - 6 modulare Regel-Module
-4. **SQL-Generierung** - BSL-first, deterministisch
-5. **Consistency Validation** - 2-Level (Safety + Semantics)
-6. **Query Execution** - Mit Paging + Sessions
+### Der Request-Flow (Phasen)
+1. **Context Loading** - Schema + Meanings + BSL werden geladen (~10ms cached)
+2. **Parallelisierung** - Ambiguity Detection + SQL-Generierung parallel
+3. **SQL-Generierung (BSL-first)** - LLM generiert SQL mit integrierter Intent-Erkennung + Layer A (rule-based Compliance)
+4. **Optional: Self-Correction Loop** - Bei niedriger Confidence (Layer B)
+5. **Server-Side Guards** - Safety (`enforce_safety`) + Known-Table Validation
+6. **LLM SQL Validation** - Zusätzliche Prüfung + ggf. Korrektur
+7. **Query Execution** - Mit Paging + Sessions
+8. **Result Summarization** - Zusammenfassung der Ergebnisse
+
+> **Wichtig**: Es gibt keine separate "Question Classification" Phase. Die Intent-Erkennung ist in `llm/generator.py` integriert (implizit durch LLM + explizite Pattern-Checks für Edge Cases).
 
 ### BSL-Sektionen (in generierter `credit_bsl.txt`)
 1. **Identity System Rules** - CU vs CS Identifier System
@@ -114,22 +118,20 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 
 ## 🔄 Architektur-Historie (ADRs)
 
-### ADR-001: RAG/ReAct → BSL-first Migration
-**Problem**: Nicht-deterministische Ergebnisse, hohe Komplexität
+### ADR-004: Migration zu BSL-first Single-Database Architektur
+**Problem**: Nicht-deterministische Ergebnisse mit RAG/ReAct, hohe Komplexität
 **Lösung**: BSL-first Single-DB-Architektur
-**Grund**: Professor-Feedback, Stabilität > Token-Effizienz
+**Grund**: Professor-Feedback, Stabilität > Token-Effizienz, Scope-Fit (Credit DB)
 
-### ADR-002: Modularisierung der BSL-Regeln
-**Problem**: Monolithische 595-Zeilen-Datei
-**Lösung**: 6 separate Module mit klaren Verantwortlichkeiten
+### ADR-005: Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger
+**Problem**: Edge Cases bei bestimmten Frage-Typen
+**Lösung**: Heuristiken → Compliance Instruction → ggf. Regeneration (keine Hardcoding)
 
-### ADR-003: Eliminierung von Hardcoding
-**Problem**: Hartcodierte Frage-Typen
-**Lösung**: Dynamische Intent-basierte Erkennung
-
-### ADR-004: Consistency Validation
+### ADR-006: Consistency Validation (mehrstufig)
 **Problem**: LLM macht trotz BSL Fehler
-**Lösung**: Mehrstufige Validation mit BSL-Compliance
+**Lösung**: Layer A (rule-based) + Layer B (LLM-based) + serverseitige Guards
+
+> **Hinweis**: Für vollständige ADRs siehe `docs/ARCHITEKTUR_ENTSCHEIDUNGEN.md`
 
 ---
 
@@ -252,63 +254,71 @@ Zeige wie query_id für Paging funktioniert
 | **Frontend** | React | Nutzer-Interface, Frage-Input, Ergebnisanzeige |
 | **Backend API** | FastAPI | Anfrage-Koordination, Pipeline-Orchestrierung |
 | **BSL Builder** | Python | Business Semantics Layer Generierung aus KB |
-| **SQL Generator** | OpenAI GPT-5.2 | SQL-Generierung mit BSL-Compliance + Intent-Erkennung |
+| **SQL Generator** | GPT-5.2 | SQL-Generierung mit BSL-Compliance + integrierte Intent-Erkennung |
 | **SQL Guard** | Python | Safety-Validierung, Injection-Prevention |
 | **Database Manager** | SQLite | Query-Ausführung, Paging, Caching |
 
 > **Hinweis**: Intent-Erkennung und Consistency Checks sind in `llm/generator.py` integriert, nicht als separate Module.
 
-### 6-Phasen Pipeline
+### Request-Flow (Phasen im API-Call)
 
-1. **Context Loading** - Schema, Knowledge Base, Meanings, BSL laden
-2. **Intent-Erkennung** - LLM versteht Frage automatisch, Pattern-Checks für Edge Cases (siehe Erklärung oben)
-3. **BSL-Generierung** - 6 Regel-Sektionen in generierter Textdatei
-4. **SQL-Generierung** - BSL-first, LLM generiert SQL mit passendem Intent (Aggregation/Ranking/Detail)
-5. **Consistency Validation** - Sicherheits-Checks + Semantik-Validierung (integriert in Generator)
-6. **Query Execution** - Mit Paging und Session-Management
+> **Wichtig**: `bsl_builder.py` ist ein **Build-/Maintenance-Tool** (offline/on-demand) und **kein** Request-Step im API-Flow. Die BSL-Datei (`credit_bsl.txt`) wird zur Laufzeit nur geladen, nicht generiert.
 
-### Datenfluss
+1. **Context Loading** - Schema, Meanings, KB, BSL werden geladen (cached)
+2. **Parallelisierung** - Ambiguity Detection + SQL-Generierung parallel
+3. **SQL-Generierung (BSL-first)** - LLM generiert SQL mit integrierter Intent-Erkennung + Layer A (rule-based Compliance + Auto-Repair)
+4. **Optional: Self-Correction Loop (Layer B)** - Bei niedriger Confidence
+5. **Server-Side Guards** - `enforce_safety` + `enforce_known_tables`
+6. **LLM SQL Validation** - Zusätzliche Prüfung + ggf. Korrektur bei high severity
+7. **Query Execution** - Mit Paging und Session-Management
+8. **Result Summarization** - Zusammenfassung der Ergebnisse
+
+### Datenfluss (korrigiert)
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Frontend
-    participant API
-    participant BSL
-    participant Generator
-    participant DB
-    participant LLM
-    
-    User->>Frontend: Frage eingeben
-    Frontend->>API: POST /query (question, database, page)
-    
-    par Parallel Context Loading
-        API->>BSL: Load Knowledge Base
-        API->>API: Load Schema
-        API->>API: Load Column Meanings
-    end
-    
-    API->>BSL: Generate BSL Rules
-    BSL->>BSL: Extract modular rules
-    BSL-->>API: BSL Content
-    
-    API->>Generator: Generate SQL (mit integrierter Intent-Erkennung)
-    Generator->>LLM: BSL-first Generation + Intent Detection
-    LLM-->>Generator: SQL + Explanation
-    
-    API->>Generator: Validate SQL (integriert)
-    Generator->>LLM: SQL Validation Check
-    LLM-->>Generator: Validation Result
-    
-    API->>DB: Execute SQL with Paging
-    DB-->>API: Results + Metadata
-    
-    API->>LLM: Generate Summary
-    LLM-->>API: Natural Language Summary
-    
-    API-->>Frontend: Complete Response
-    Frontend-->>User: Display Results
+  participant User
+  participant FE as Frontend
+  participant API as FastAPI
+  participant GEN as OpenAIGenerator
+  participant DB as DatabaseManager
+  participant LLM as OpenAI
+  participant GUARD as Server Guards
+
+  User->>FE: Frage + Paging Parameter
+  FE->>API: POST /query
+
+  API->>API: Load Schema/Meanings/KB/BSL (cached)
+
+  par Parallel LLM Calls
+    API->>GEN: check_ambiguity(question, schema, kb, meanings)
+    GEN->>LLM: Ambiguity prompt
+    LLM-->>GEN: ambiguity JSON
+  and
+    API->>GEN: generate_sql(question, schema, meanings, bsl)
+    GEN->>LLM: SQL generation prompt (BSL-first)
+    LLM-->>GEN: SQL JSON
+  end
+
+  API->>API: If confidence < 0.4 -> generate_sql_with_correction()
+  API->>GUARD: enforce_safety + enforce_known_tables
+  API->>GEN: validate_sql(sql, schema)
+  GEN->>LLM: Validation prompt
+  LLM-->>GEN: validation JSON
+  API->>API: If severity high -> correction loop + re-validate
+
+  API->>DB: execute_query_with_paging
+  DB-->>API: results + paging_info
+
+  API->>GEN: summarize_results(...)
+  GEN->>LLM: Summary prompt
+  LLM-->>GEN: Summary text
+
+  API-->>FE: Response (sql, results, paging, validation, ambiguity, summary)
+  FE-->>User: Anzeige
 ```
+
+> **Hinweis**: BSL wird **nicht** bei jedem Request generiert. `bsl_builder.py` ist ein Offline-Tool. Die BSL-Datei wird nur geladen.
 
 ---
 
@@ -372,31 +382,41 @@ erDiagram
 - Copy-to-Clipboard für SQL
 - Error-Handling mit klaren Meldungen
 
-### Backend (FastAPI)
+### Backend (FastAPI – `backend/main.py`)
+
+**Orchestriert:**
+- Context Loading (Schema, Meanings, KB, BSL)
+- Parallel Ambiguity + SQL Generation
+- Confidence-based Self-correction
+- Server-side Guards
+- LLM Validation + Korrektur bei high severity
+- Execution + Paging + Query Sessions
+- Summaries + Caching
 
 **Module im Detail:**
 
-1. **BSL Builder** (`bsl_builder.py`)
-   - Generiert BSL als Textdatei mit 6 Regel-Sektionen
-   - Dynamische Regel-Extraktion aus Knowledge Base + Column Meanings
-   - Output: `credit_bsl.txt`
+1. **BSL Builder** (`bsl_builder.py`) - **Offline/On-demand Tool**
+   - Generiert `credit_bsl.txt` (Part A / Part B / Annex C)
+   - Liest: `credit_kb.jsonl`, `credit_column_meaning_base.json`, Schema
+   - **NICHT** Teil des Request-Flows!
 
-2. **SQL Generator** (`llm/generator.py`)
-   - BSL-first SQL-Generierung
-   - Intent-Erkennung: LLM versteht Frage + Pattern-Checks für Edge Cases
-   - BSL Compliance Checks (prüft bekannte Probleme, regeneriert SQL bei Bedarf)
-   - Ambiguity Detection (erkennt mehrdeutige Fragen)
+2. **LLM Generator** (`llm/generator.py`)
+   - **Layer A (rule-based + auto-repair):**
+     - Fragetyp-Heuristiken (`_is_property_leverage_question`, `_has_explicit_time_range`, …)
+     - `_bsl_compliance_instruction` → `_regenerate_with_bsl_compliance`
+     - SQLite Dialektfix (`_fix_union_order_by`)
+   - **Layer B (LLM-based):**
+     - `validate_sql`
+     - `generate_sql_with_correction`
+   - `summarize_results`
 
-3. **SQL Guard** (`utils/sql_guard.py`)
-   - Safety-Validierung (nur SELECT erlaubt)
-   - Injection-Prevention
+3. **SQL Guard** (`utils/sql_guard.py` + known tables)
+   - Security (nur SELECT), Tabellenvalidierung
 
 4. **Database Manager** (`database/manager.py`)
-   - Query-Ausführung mit SQLite
-   - Paging-Logik (LIMIT/OFFSET)
-   - Session-Management für konsistentes Paging
+   - Execution, Paging, Query-Normalisierung
 
-> **Hinweis**: Es gibt kein separates `question_classifier.py` oder `consistency_checker.py` - diese Funktionalität ist in `llm/generator.py` integriert.
+> **Hinweis**: Es gibt **keine** separaten Module wie `question_classifier.py` oder `consistency_checker.py` - alles ist in `llm/generator.py` integriert.
 
 ---
 
@@ -429,19 +449,16 @@ erDiagram
 
 ### Team-Struktur
 ```
-Projektteam (3 Personen)
+Projektteam (5 Personen)
+├── Project Lead (Tim Kühne)
+│   └── Gesamtprojekt-Koordination, Architektur
+├── Backend-Entwicklung (2 Personen)
+│   ├── Dominik Ruoff: LLM Integration, Database Management
+│   └── Joel Martinez: API Development, Performance
 ├── Frontend-Entwicklung (1 Person)
-│   ├── React UI Development
-│   ├── User Experience Design
-│   └── API Integration
-├── Backend-Entwicklung (1 Person)
-│   ├── FastAPI Development
-│   ├── LLM Integration
-│   └── Database Management
-└── Architektur & Dokumentation (1 Person)
-    ├── System Design
-    ├── BSL Development
-    └── Quality Assurance
+│   └── Umut Polat: React UI, User Experience
+└── QA & Dokumentation (1 Person)
+    └── Sören Frank: Testing, Dokumentation, Deployment
 ```
 
 ### Arbeitspakete & Tickets

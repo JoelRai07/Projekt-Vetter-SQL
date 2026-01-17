@@ -80,7 +80,7 @@ Zeige query_id für konsistentes Paging
 ### 🛠️ Technologie-Stack
 - **Frontend**: React 18+ mit TypeScript, Tailwind CSS
 - **Backend**: Python 3.11+ mit FastAPI
-- **LLM**: OpenAI GPT-5.2
+- **LLM**: GPT-5.2
 - **Datenbank**: SQLite (Credit Risk Domain)
 - **Innovation**: Business Semantics Layer (BSL)
 
@@ -113,7 +113,7 @@ graph TB
     end
     
     subgraph "External Services"
-        LLM[OpenAI GPT-5.2]
+        LLM[GPT-5.2]
     end
     
     SG --> LLM
@@ -124,47 +124,51 @@ graph TB
     DM --> CACHE
 ```
 
-### 🔄 6-Phasen Pipeline
+### 🔄 Request-Flow Pipeline
+
+> **Wichtig**: `bsl_builder.py` ist ein **Build-/Maintenance-Tool** (offline/on-demand) und **kein** Request-Step im API-Flow. Die BSL-Datei (`credit_bsl.txt`) wird zur Laufzeit nur geladen, nicht generiert.
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Frontend
-    participant API
-    participant BSL
-    participant Generator
-    participant DB
-    participant LLM
-    
-    User->>Frontend: Frage eingeben
-    Frontend->>API: POST /query (question, database, page)
-    
-    par Parallel Context Loading
-        API->>BSL: Load Knowledge Base
-        API->>API: Load Schema
-        API->>API: Load Column Meanings
-    end
-    
-    API->>BSL: Generate BSL Rules
-    BSL->>BSL: Extract modular rules
-    BSL-->>API: BSL Content
-    
-    API->>Generator: Generate SQL (mit integrierter Intent-Erkennung)
-    Generator->>LLM: BSL-first Generation + Intent Detection
-    LLM-->>Generator: SQL + Explanation
-    
-    API->>Generator: Validate SQL (integriert)
-    Generator->>LLM: SQL Validation Check
-    LLM-->>Generator: Validation Result
-    
-    API->>DB: Execute SQL with Paging
-    DB-->>API: Results + Metadata
-    
-    API->>LLM: Generate Summary
-    LLM-->>API: Natural Language Summary
-    
-    API-->>Frontend: Complete Response
-    Frontend-->>User: Display Results
+  participant User
+  participant FE as Frontend
+  participant API as FastAPI
+  participant GEN as OpenAIGenerator
+  participant DB as DatabaseManager
+  participant LLM as OpenAI
+  participant GUARD as Server Guards
+
+  User->>FE: Frage + Paging Parameter
+  FE->>API: POST /query
+
+  API->>API: Load Schema/Meanings/KB/BSL (cached)
+
+  par Parallel LLM Calls
+    API->>GEN: check_ambiguity(question, schema, kb, meanings)
+    GEN->>LLM: Ambiguity prompt
+    LLM-->>GEN: ambiguity JSON
+  and
+    API->>GEN: generate_sql(question, schema, meanings, bsl)
+    GEN->>LLM: SQL generation prompt (BSL-first)
+    LLM-->>GEN: SQL JSON
+  end
+
+  API->>API: If confidence < 0.4 -> generate_sql_with_correction()
+  API->>GUARD: enforce_safety + enforce_known_tables
+  API->>GEN: validate_sql(sql, schema)
+  GEN->>LLM: Validation prompt
+  LLM-->>GEN: validation JSON
+  API->>API: If severity high -> correction loop + re-validate
+
+  API->>DB: execute_query_with_paging
+  DB-->>API: results + paging_info
+
+  API->>GEN: summarize_results(...)
+  GEN->>LLM: Summary prompt
+  LLM-->>GEN: Summary text
+
+  API-->>FE: Response (sql, results, paging, validation, ambiguity, summary)
+  FE-->>User: Anzeige
 ```
 
 ### 📊 Komponenten & Datenfluss
@@ -172,10 +176,11 @@ sequenceDiagram
 | Komponente | Verantwortlichkeit | Datenfluss |
 |------------|-------------------|------------|
 | **React Frontend** | UI, Frage-Input, Ergebnisanzeige | HTTP → Backend |
-| **FastAPI Backend** | Pipeline-Orchestrierung | Koordiniert 6 Phasen |
-| **BSL Builder** | Business Rules Generierung | KB + Meanings → BSL |
-| **SQL Generator** | BSL-first SQL-Generierung, Intent-Erkennung (integriert), SQL-Validation (integriert) | BSL + Schema → SQL |
-| **Database Manager** | Query-Ausführung, Paging | SQL → Results |
+| **FastAPI Backend** | Pipeline-Orchestrierung, Caching, Server Guards | Koordiniert Request-Flow |
+| **BSL Builder (Offline-Tool)** | Generiert `credit_bsl.txt` aus KB + Meanings | KB + Meanings → BSL (einmalig) |
+| **LLM Generator** | BSL-first SQL-Generierung, Intent-Erkennung (integriert), SQL-Validation (integriert), Summaries | BSL + Schema → SQL |
+| **SQL Guard** | Security (nur SELECT), Tabellenvalidierung | SQL → Validated SQL |
+| **Database Manager** | Query-Ausführung, Paging, Sessions | SQL → Results |
 
 ---
 
@@ -187,54 +192,56 @@ sequenceDiagram
 flowchart TD
     A[User startet Anwendung] --> B{Frage eingeben}
     B --> C[Frontend sendet an Backend]
-    C --> D[Backend: 6-Phasen Pipeline]
-    
-    D --> E[Phase 1: Context Loading]
-    E --> F[Phase 2: Question Classification]
-    F --> G[Phase 3: BSL-Generierung]
-    G --> H[Phase 4: SQL-Generierung]
-    H --> I[Phase 5: Validation]
-    I --> J[Phase 6: Execution]
-    
-    J --> K{SQL gültig?}
+    C --> D[Backend: Request-Flow]
+
+    D --> E[Phase 1: Context Loading - Schema/Meanings/KB/BSL cached]
+    E --> F[Phase 2: Parallelisierung - Ambiguity + SQL Generation]
+    F --> G[Phase 3: SQL-Generierung BSL-first + Layer A]
+    G --> H[Phase 4: Optional Self-Correction Layer B]
+    H --> I[Phase 5: Server Guards + LLM Validation]
+    I --> J[Phase 6: Execution + Summarization]
+
+    I --> K{SQL gültig?}
     K -->|Ja| L[Query ausführen]
-    K -->|Nein| M[Fehlerkorrektur]
-    M --> H
-    
+    K -->|Nein| M[Fehlerkorrektur via LLM]
+    M --> G
+
     L --> N[Results formatieren]
     N --> O[Response an Frontend]
     O --> P[Ergebnisse anzeigen]
-    
+
     P --> Q{Paging gewünscht?}
     Q -->|Ja| R[Session-basiert Paging]
     Q -->|Nein| S[Ende]
-    
+
     R --> T[Seite 2, 3, ... laden]
     T --> P
 ```
 
 ### 🔄 Detail-Prozessablauf
 
-1. **Frage-Eingabe**: User gibt natürliche Sprache ein
-2. **Kontext-Laden**: Schema, Meanings, BSL werden geladen
-3. **BSL-Generierung**: Business Rules werden aus KB + Meanings extrahiert
-4. **SQL-Generierung mit integrierter Intent-Erkennung**: LLM generiert SQL direkt aus Frage + BSL + Schema (Intent wird implizit durch LLM erkannt)
-5. **BSL-Compliance-Checks**: Pattern-basierte Helper-Funktionen prüfen bekannte Edge Cases und triggern ggf. SQL-Regeneration mit spezifischen BSL-Anweisungen
-6. **Validierung**: Mehrstufige Prüfung (Safety + Semantics)
-7. **Ausführung**: SQL wird mit Paging ausgeführt
-8. **Ergebnis-Anzeige**: Formatierte Ergebnisse mit Zusammenfassung
+> **Wichtig**: `bsl_builder.py` ist ein **Offline/On-demand Tool** und **kein** Request-Step. Die BSL-Datei wird zur Laufzeit nur geladen.
+
+1. **Context Loading**: Schema, Meanings, KB, BSL werden geladen (cached)
+2. **Parallelisierung**: Ambiguity Detection + SQL-Generierung parallel
+3. **SQL-Generierung (BSL-first)**: LLM generiert SQL mit integrierter Intent-Erkennung + Layer A (rule-based Compliance + Auto-Repair)
+4. **Optional: Self-Correction Loop (Layer B)**: Bei niedriger Confidence
+5. **Server-Side Guards**: `enforce_safety` + `enforce_known_tables`
+6. **LLM SQL Validation**: Zusätzliche Prüfung + ggf. Korrektur bei high severity
+7. **Query Execution**: Mit Paging und Session-Management
+8. **Result Summarization**: Zusammenfassung der Ergebnisse
 
 #### Wie Intent-Erkennung in diesem Projekt funktioniert:
 
-**Kein separater Intent-Classifier**, sondern **hybride Lösung**:
+**Kein separater Intent-Classifier**, sondern **hybride Lösung in `llm/generator.py`**:
 
 1. **Implizite Intent-Erkennung**: Das LLM erkennt den Intent direkt beim SQL-Generieren (z.B. "nach Segment" → Aggregation, "top 10" → Ranking)
-2. **Pattern-basierte BSL-Compliance-Trigger**: Helper-Funktionen in `llm/generator.py` erkennen spezifische Frage-Patterns:
+2. **Pattern-basierte BSL-Compliance-Trigger (Layer A)**: Helper-Funktionen erkennen spezifische Frage-Patterns:
    - `_is_property_leverage_question()`: "property leverage", "mortgage ratio", "LTV"
    - `_is_digital_engagement_cohort_question()`: Cohort-basierte Engagement-Fragen
-   - `_is_credit_classification_details_question()`: Detail-Requests für Credit-Klassifikation
+   - `_has_explicit_time_range()`: Explizite Jahres-/Quartals-Angaben
    - Diese Trigger **aktivieren BSL-Regel-Verstärkungen**, sind aber **keine hardcodierten SQL-Antworten**
-3. **BSL-Compliance-Regeneration**: Falls Verstöße erkannt werden, wird SQL mit spezifischen BSL-Anweisungen regeneriert
+3. **BSL-Compliance-Regeneration**: `_bsl_compliance_instruction` → `_regenerate_with_bsl_compliance` bei Verstößen
 
 > **Wichtig**: Pattern-Funktionen verstärken nur relevante BSL-Regeln im Prompt. Das LLM generiert immer dynamisch SQL basierend auf vollständigem BSL + Schema + Meanings Kontext.
 
@@ -350,14 +357,15 @@ Die BSL-Regeln werden durch `bsl_builder.py` generiert und als **Sektionen in ei
 ## 6. Architecture Decision Records (ADRs)
 
 > **Hinweis**: Die ADRs folgen dem MADR-Template (Markdown Architecture Decision Record) gemäß Aufgabenstellung.
+> Für vollständige ADRs siehe `docs/ARCHITEKTUR_ENTSCHEIDUNGEN.md`
 
-### ADR-001: Migration von RAG/ReAct zu BSL-first Architektur
+### ADR-004: Migration zu BSL-first Single-Database Architektur
 
 **[short title of solved problem and solution]**: BSL-first statt RAG/ReAct für stabile, erklärbare SQL-Generierung
 **Status**: accepted
 **Deciders**: Tim Kühne, Dominik Ruoff, Joel Martinez, Umut Polat, Sören Frank
-**Date**: 2025-01-14
-**Technical Story**: Nach initialer RAG/ReAct-Implementierung (v6.0.0) zeigte sich bei Tests eine Success Rate von nur ~40% (4/10 Fragen). Professor-Feedback empfahl BSL als besseren Ansatz für den Credit-DB Scope.
+**Date**: 12.01.2026
+**Technical Story**: Nach initialer RAG/ReAct-Implementierung zeigte sich bei Tests instabile Ergebnisse. Professor-Feedback empfahl BSL als besseren Ansatz für den Credit-DB Scope.
 
 #### Context and Problem Statement
 
@@ -430,88 +438,17 @@ Chosen option: **"Option 3: BSL-first"**, because es erfüllt alle kritischen An
 
 #### Links
 
-- [TESTING.md](archiv/Probleme/TESTING.md) - Evaluation der RAG/ReAct Version
-- ADR-002: Modularisierung der BSL-Regeln
-- ADR-003: Dynamische Intent-Erkennung
-- ADR-004: Consistency Validation
+- ADR-005: Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger
+- ADR-006: Consistency Validation (mehrstufig)
 
 ---
 
-### ADR-002: Modularisierung der BSL-Regeln in 6 Sektionen
-
-**[short title of solved problem and solution]**: Aufteilung monolithischer BSL-Generierung in 6 modulare Regel-Sektionen
-**Status**: accepted
-**Deciders**: Tim Kühne, Joel Martinez, Sören Frank
-**Date**: 2025-01-14
-**Technical Story**: Die initiale BSL-Implementierung war monolithisch (595 Zeilen). Wartung und Testing waren schwierig.
-
-#### Context and Problem Statement
-
-Nach der Entscheidung für BSL-first (ADR-001) wurde die BSL-Generierung zunächst monolithisch in `bsl_builder.py` implementiert. Die Datei wuchs auf 595 Zeilen mit vermischten Verantwortlichkeiten. Fragen:
-- Wie können wir BSL-Regeln unabhängig testen und warten?
-- Wie erreichen wir Separation of Concerns?
-
-#### Decision Drivers
-
-1. **Wartbarkeit**: Einzelne Regeln müssen isoliert änderbar sein
-2. **Testbarkeit**: Unit-Tests pro Regel-Kategorie
-3. **Lesbarkeit**: Klare Struktur für neue Teammitglieder
-4. **SOLID-Prinzipien**: Single Responsibility Principle
-
-#### Considered Options
-
-**Option 1**: Monolithisch beibehalten
-**Option 2**: Modularisierung in 6 Sektionen
-**Option 3**: Separate Python-Module pro Regel-Kategorie
-
-#### Decision Outcome
-
-Chosen option: **"Option 2: Modularisierung in 6 Sektionen"**, because es die Balance zwischen Wartbarkeit und Einfachheit bietet. Die Sektionen sind Textblöcke in der generierten `credit_bsl.txt`, keine separaten Python-Module.
-
-**Die 6 BSL-Sektionen:**
-1. **Identity System Rules** - CU vs CS Identifier System
-2. **Aggregation Patterns** - GROUP BY vs ORDER BY + LIMIT
-3. **Business Logic Rules** - Financially Vulnerable, High-Risk, Digital Native
-4. **Join Chain Rules** - Strikte Foreign-Key Chain
-5. **JSON Field Rules** - JSON-Extraktionsregeln
-6. **Complex Query Templates** - Multi-Level Aggregation, CTEs
-
-#### Positive Consequences
-
-- Klare Verantwortlichkeiten pro Sektion
-- Einfachere Fehlersuche (welche Sektion ist betroffen?)
-- Bessere Dokumentation (Sektion = dokumentierte Regel-Kategorie)
-
-#### Negative Consequences
-
-- Etwas mehr Overhead bei der BSL-Generierung
-- Sektionen müssen konsistent gehalten werden
-
-#### Pros and Cons of the Options
-
-**Option 1: Monolithisch beibehalten**
-- Good, because einfach zu implementieren
-- Bad, because schwer zu warten (595+ Zeilen)
-- Bad, because keine isolierten Tests möglich
-
-**Option 2: Modularisierung in 6 Sektionen (chosen)**
-- Good, because klare Struktur und Verantwortlichkeiten
-- Good, because Textblöcke sind einfach zu verstehen
-- Bad, because Sektionen müssen manuell synchronisiert werden
-
-**Option 3: Separate Python-Module**
-- Good, because maximale Modularität und Testbarkeit
-- Bad, because Over-Engineering für den aktuellen Scope
-- Bad, because komplexere Abhängigkeiten zwischen Modulen
-
----
-
-### ADR-003: Dynamische Intent-Erkennung mit BSL Compliance Triggern
+### ADR-005: Heuristische Fragetyp-Erkennung + BSL-Compliance-Trigger
 
 **[short title of solved problem and solution]**: LLM-basierte Intent-Erkennung mit Keyword-Triggern für BSL-Regel-Verstärkung
-**Status**: accepted (vollständig umgesetzt)
+**Status**: accepted
 **Deciders**: Tim Kühne, Dominik Ruoff, Joel Martinez
-**Date**: 2025-01-14
+**Date**: 12.01.2026
 **Technical Story**: Für robuste Text2SQL musste das System auf Frage-Variationen generalisieren, ohne hardcodierte SQL-Antworten.
 
 #### Context and Problem Statement
@@ -614,17 +551,17 @@ Diese Funktionen geben nur `True/False` zurück und generieren **keine SQL**, so
 
 ---
 
-### ADR-004: Implementierung von Mehrstufiger Consistency Validation
+### ADR-006: Consistency Validation (mehrstufig)
 
-**[short title of solved problem and solution]**: 3-Ebenen Validierung (Safety + Semantik + BSL) für robuste SQL-Qualität
+**[short title of solved problem and solution]**: 2-Ebenen Validierung (Safety + LLM-based Semantik) für robuste SQL-Qualität
 **Status**: accepted
 **Deciders**: Tim Kühne, Joel Martinez, Sören Frank
-**Date**: 2025-01-14
+**Date**: 12.01.2026
 **Technical Story**: Nach BSL-Migration zeigte sich, dass LLMs trotz BSL-Regeln häufig Fehler machten.
 
 #### Context and Problem Statement
 
-Nach der BSL-Migration (ADR-001) verbesserte sich die Accuracy signifikant. Jedoch machte das LLM trotz BSL-Regeln weiterhin Fehler:
+Nach der BSL-Migration (ADR-004) verbesserte sich die Accuracy signifikant. Jedoch machte das LLM trotz BSL-Regeln weiterhin Fehler:
 - **Identifier-Verwechslungen** (CU vs CS) in 5% der Fälle
 - **JOIN-Chain-Verletzungen** (Tabellen übersprungen)
 - **Aggregationsfehler** (GROUP BY fehlend bei "by segment")
@@ -654,10 +591,11 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 
 | Ebene | Typ | Prüft | Geschwindigkeit | Implementierung |
 |-------|-----|-------|-----------------|-----------------|
-| **Level 1** | SQL Guard (Regex) | Sicherheit (nur SELECT, keine Injection) | ~10ms | `utils/sql_guard.py` |
-| **Level 2** | LLM Validation | Semantik, JOINs, Spalten-Existenz, BSL-Compliance | ~1-2s | `llm/generator.py` (`validate_sql()`) |
+| **Layer A** | Rule-based + Auto-repair | BSL-Compliance, SQLite Dialektfix | ~10ms | `llm/generator.py` (Heuristiken) |
+| **Server Guards** | SQL Guard + Known Tables | Sicherheit (nur SELECT, keine Injection), Tabellenvalidierung | ~10ms | `utils/sql_guard.py`, `main.py` |
+| **Layer B** | LLM Validation | Semantik, JOINs, Spalten-Existenz, Self-correction bei low confidence | ~1-2s | `llm/generator.py` (`validate_sql()`) |
 
-> **Hinweis**: Die BSL-Compliance-Prüfung erfolgt integriert in Level 2 (LLM Validation). Es gibt kein separates Level-3-Modul - die BSL-Validierung wird durch das LLM im Validation-Prompt durchgeführt.
+> **Hinweis**: Es gibt **kein separates** `consistency_checker.py` Modul - alles ist in `llm/generator.py` integriert.
 
 #### Positive Consequences
 
@@ -668,8 +606,8 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 
 #### Negative Consequences
 
-- Zusätzliche Latenz (~2-3s für vollständige Validation)
-- Validation ist in `llm/generator.py` integriert (kein separates Modul)
+- Zusätzliche Latenz (~2-3s für vollständige Validation bei Layer B)
+- Alles in `llm/generator.py` integriert (weniger modulär, aber weniger komplex)
 
 #### Pros and Cons of the Options
 
@@ -716,7 +654,7 @@ Chosen option: **"Option 3: Mehrstufige Validation"**, because es Defense in Dep
 - **BSL Compliance**: 98% Korrektheit
 - **Overall Success Rate**: 95% (9.5/10 Fragen)
 
-> **Hinweis**: Diese Metriken sind manuelle Evaluationsergebnisse aus der Analyse der 10 Testfragen. Die SQL-Validation erfolgt durch `llm_generator.validate_sql()` in `backend/llm/generator.py` (integriert, kein separates Consistency-Checker-Modul).
+> **Hinweis**: Diese Metriken sind manuelle Evaluationsergebnisse aus der Analyse der 10 Testfragen. Die SQL-Validation erfolgt durch `validate_sql()` in `backend/llm/generator.py` (integriert, **kein separates** `consistency_checker.py` Modul).
 
 **Performance-Metriken:**
 - **Durchschnittliche Antwortzeit**: 3.2 Sekunden
@@ -934,9 +872,9 @@ graph TD
    - Direkte Integration des Feedbacks vermeidet Fehlentwicklungen
    - Professor-Feedback als "bester Ansatz" bestätigt Richtung
 
-2. **Modulare Architektur**: BSL-Module machen Wartung und Testing einfach
-   - 6 separate Module mit klaren Verantwortlichkeiten
-   - Unabhängige Tests und Erweiterungen möglich
+2. **Modulare Architektur**: BSL-Sektionen machen Wartung und Testing einfach
+   - BSL als Textdatei mit klaren Sektionen (Part A / Part B / Annex C)
+   - Unabhängige Anpassungen und Erweiterungen möglich
 
 3. **Deterministische Ergebnisse**: Reproduzierbarkeit für Evaluation entscheidend
    - Gleiche Frage + gleicher BSL = gleiche SQL
