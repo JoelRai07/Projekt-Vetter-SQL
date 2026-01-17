@@ -253,46 +253,58 @@ flowchart TD
 
 ```mermaid
 erDiagram
-    CORE_RECORD ||--|| EMPLOYMENT_AND_INCOME : coreregistry = emplcoreref
-    EMPLOYMENT_AND_INCOME ||--|| EXPENSES_AND_ASSETS : emplcoreref = exemplref
-    EXPENSES_AND_ASSETS ||--|| BANK_AND_TRANSACTIONS : exemplref = bankexpref
-    BANK_AND_TRANSACTIONS ||--|| CREDIT_AND_COMPLIANCE : bankexpref = compbankref
-    CREDIT_AND_COMPLIANCE ||--|| CREDIT_ACCOUNTS_AND_HISTORY : compbankref = histcompref
-    
+    CORE_RECORD ||--|| EMPLOYMENT_AND_INCOME : links
+    EMPLOYMENT_AND_INCOME ||--|| EXPENSES_AND_ASSETS : links
+    EXPENSES_AND_ASSETS ||--|| BANK_AND_TRANSACTIONS : links
+    BANK_AND_TRANSACTIONS ||--|| CREDIT_AND_COMPLIANCE : links
+    CREDIT_AND_COMPLIANCE ||--|| CREDIT_ACCOUNTS_AND_HISTORY : links
+
     CORE_RECORD {
         string coreregistry PK
         string clientref
         string clientseg
         date scoredate
         string risklev
-        real custlifeval
+        float custlifeval
         int tenureyrs
     }
-    
+
     EMPLOYMENT_AND_INCOME {
         string emplcoreref PK
-        real mthincome
-        real debincratio
-        real credutil
+        string coreregistry FK
+        float mthincome
+        float debincratio
+        float credutil
     }
-    
+
     EXPENSES_AND_ASSETS {
         string exemplref PK
-        real totassets
-        real totliabs
-        real liqassets
-        string propfinancialdata JSON
+        string emplcoreref FK
+        float totassets
+        float totliabs
+        float liqassets
+        string propfinancialdata
     }
-    
+
     BANK_AND_TRANSACTIONS {
         string bankexpref PK
-        string chaninvdatablock JSON
+        string exemplref FK
+        string chaninvdatablock
     }
-    
+
     CREDIT_AND_COMPLIANCE {
         string compbankref PK
+        string bankexpref FK
         int delinqcount
         int latepaycount
+    }
+
+    CREDIT_ACCOUNTS_AND_HISTORY {
+        string histcompref PK
+        string compbankref FK
+        int acctcount
+        int openacctcount
+        int closedacctcount
     }
 ```
 
