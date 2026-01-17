@@ -143,7 +143,11 @@ User (React) → FastAPI Backend → BSL Builder → OpenAI LLM → SQLite → R
 **Wie das Caching funktioniert:**
 1. **Erste Anfrage**: Komplette Pipeline läuft → Ergebnis wird gecached
 2. **Wiederholte Frage**: System prüft Cache → Direkte Rückgabe in <100ms
-3. **Verschiedene Cache-Typen**: Schemas (permanent), Domänenwissen (1h), Query-Ergebnisse (5min), Sessions (1h)
+3. **Verschiedene Cache-Typen**: 
+   - **Schemas** (permanent): Datenbank-Strukturen ändern sich selten
+   - **Domänenwissen** (1h): Business-Regeln wie "Financially Vulnerable"
+   - **Query-Ergebnisse** (5min): Komplette Antworten auf Fragen
+   - **Sessions** (1h): Paging für konsistente Navigation zwischen Seiten
 4. **Smart-Caching**: Nur Seite 1 wird gecached, Paging funktioniert über Sessions
 
 ### ADR-006: Consistency Validation (3-Ebenen)
