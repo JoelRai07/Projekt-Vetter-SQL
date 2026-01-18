@@ -172,12 +172,7 @@ graph TB
             GUARD --> G2[enforce_known_tables<br/>Tabellenvalidierung]
 
             CTX[context_loader.py]
-            CTX --> |lädt| KB_FILE[credit_kb.jsonl]
-            CTX --> |lädt| MEAN_FILE[credit_column_meaning_base.json]
-            CTX --> |lädt| BSL_FILE[credit_bsl.txt]
-
             OPT[query_optimizer.py]
-            OPT --> |analyze| QPLAN[Query Plan Analyse]
         end
 
         subgraph "Database Layer"
@@ -190,25 +185,56 @@ graph TB
 
         subgraph "Offline Tools"
             BSLB[bsl_builder.py<br/>BSL Generator]
-            BSLB --> |liest| KB_FILE
-            BSLB --> |liest| MEAN_FILE
-            BSLB --> |liest| SCHEMA_FILE[credit.sqlite]
-            BSLB --> |generiert| BSL_FILE
         end
     end
 
-    subgraph "Data Layer [SQLite + JSON Files]"
-        DB[(credit.sqlite<br/>6 Tabellen)]
-        DB --> T1[core_record]
-        DB --> T2[employment_and_income]
-        DB --> T3[expenses_and_assets]
-        DB --> T4[bank_and_transactions]
-        DB --> T5[credit_and_compliance]
-        DB --> T6[credit_accounts_and_history]
+    subgraph "Data Layer"
+        subgraph "SQLite Database"
+            DB[(credit.sqlite)]
+            DB --> T1[core_record]
+            DB --> T2[employment_and_income]
+            DB --> T3[expenses_and_assets]
+            DB --> T4[bank_and_transactions]
+            DB --> T5[credit_and_compliance]
+            DB --> T6[credit_accounts_and_history]
+        end
+
+        subgraph "Knowledge Files [JSON/Text]"
+            KB_FILE[credit_kb.jsonl<br/>Knowledge Base]
+            MEAN_FILE[credit_column_meaning_base.json<br/>Spalten-Bedeutungen]
+            BSL_FILE[credit_bsl.txt<br/>Business Semantics Layer]
+        end
+
+        subgraph "Configuration Files"
+            ENV[.env<br/>OPENAI_API_KEY<br/>OPENAI_MODEL]
+            CONFIG[config.py<br/>DATA_DIR, DEFAULT_DATABASE<br/>MAX_RESULT_ROWS]
+        end
     end
 
     subgraph "External Services"
         OPENAI[OpenAI API<br/>GPT Model]
+    end
+
+    subgraph "Frameworks & Dependencies"
+        direction LR
+        subgraph "Backend"
+            PY[Python 3.11+]
+            FA[FastAPI]
+            UV[Uvicorn]
+            PYD[Pydantic]
+            OAI[openai]
+            CT[cachetools]
+            DOT[python-dotenv]
+        end
+        subgraph "Frontend"
+            REACT[React 19]
+            VITE[Vite 7]
+            ESL[ESLint]
+            PRET[Prettier]
+        end
+        subgraph "Database"
+            SQL[SQLite 3]
+        end
     end
 
     %% Connections
@@ -221,6 +247,14 @@ graph TB
     MAIN --> DBM
     GEN --> OPENAI
     DBM --> DB
+    CTX --> KB_FILE
+    CTX --> MEAN_FILE
+    CTX --> BSL_FILE
+    BSLB --> KB_FILE
+    BSLB --> MEAN_FILE
+    BSLB --> DB
+    BSLB --> BSL_FILE
+    MAIN --> CONFIG
 ```
 
 #### Dateistruktur
