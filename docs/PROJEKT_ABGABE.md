@@ -1089,9 +1089,17 @@ graph TD
 
 ### 📅 Arbeitspakete & Zeitplan
 
-| Arbeitspaket | Verantwortlich | Dauer | Status | Aufwand |
-|--------------|----------------|--------|--------|--------|
-Hier kommen die Jira Tickets rein
+| Arbeitspaket                              | Art des Tickets | Bezeichnung | Verantwortlich                 | Dauer   | Status | Aufwand |
+|------------------------------------------|-----------------|-------------|--------------------------------|---------|--------|---------|
+| Architektur & Projektsetup               | Epic            | Proj-1      | Tim Kühne                     | 5 Tage  | Fertig | 3,5 Std |
+| Backend: API, LLM & SQL-Engine            | Epic            | Proj-2     | Dominik Ruoff & Joel Martinez | 20 Tage | Fertig | 30 Std  |
+| Frontend: Chatinterface                  | Epic            | Proj-3      | Joel Martinez                 | 5 Tage  | Fertig | 2 Std   |
+| Evaluation & Testing                     | Epic            | Proj-4      | Sören Frank                   | 5 Tage  | Fertig | 4 Std   |
+| Dokumentation & Präsentation             | Epic            | Proj-5      | Alle                          | 10 Tage     | Fertig | 15 Std  |
+| Projektmanagement & Retrospektive        | Epic            | Proj-6      | Tim Kühne                     | -       | Fertig | 2 Std   |
+| Projekt-Repository initialisieren        | Task            | Proj-7      | Tim Kühne                     | -       | Fertig | 0,5 Std |
+
+
 
 **Gesamtaufwand**: X Stunden (ca. 10 Wochen bei Y Stunden pro Woche)
 
@@ -1272,7 +1280,7 @@ Die folgenden Probleme wurden während der Evaluation der 10 Testfragen identifi
 2. **Multi-DB-Erweiterung**: Wenn Bedarf besteht, Architektur entsprechend anpassen
 3. **Performance-Tuning**: Basierend auf Produktivierungs-Erfahrungen optimieren
 4. **User Testing**: Mit echten Nutzern Feedback sammeln und umsetzen
-5. **Open Source**: Überlegen, Teile des Systems als Open Source zu veröffentlichen
+5. **Open Source LLM**: Überlegen ein Fine-Tuning-LLM anstatt GPT-5.2 zu benutzen
 
 ---
 
