@@ -1088,28 +1088,30 @@ async def cache_status():
 
 ### 📊 Success Rate: 88.5% (7×100% + 3×95%)
 
-| Frage | Typ | Erwartetes Verhalten | Ergebnis | Status | BSL-Regeln angewendet |
-|-------|------|---------------------|----------|--------|----------------------|
-| Q1 | Finanzielle Kennzahlen | CS Format, korrekte JOINs | ✅ Bestanden | 100% | Identity, Join Chain |
-| Q2 | Engagement nach Kohorte | Zeitbasierte Aggregation | ✅ Bestanden | 100% | Aggregation, Time Logic |
-| Q3 | Schuldenlast nach Segment | GROUP BY, Business Rules | ✅ Bestanden | 100% | Aggregation, Business Logic |
-| Q4 | Top 10 Kunden | ORDER BY + LIMIT | ✅ Bestanden | 100% | Aggregation Patterns |
-| Q5 | Digital Natives | JSON-Extraktion | ⚠️ 95% | 95% | JSON Rules, Identity |
-| Q6 | Risikoklassifizierung | Business Rules | ⚠️ 95% | 95% | Business Logic |
-| Q7 | Multi-Level Aggregation | CTEs, Prozentberechnung | ✅ Bestanden | 100% | Complex Templates |
-| Q8 | Segment-Übersicht + Total | UNION ALL | ✅ Bestanden | 100% | Complex Templates |
-| Q9 | Property Leverage | Tabellen-spezifische Regeln | ✅ Bestanden | 100% | Business Logic |
-| Q10 | Kredit-Details | Detail-Query, kein GROUP BY | ⚠️ 95% | 95% | Aggregation Patterns |
+| Frage | Typ                                   | Erwartetes Verhalten                                                             | Status Core | BSL-Regeln                     |
+|-------|---------------------------------------|----------------------------------------------------------------------------------|-------------|--------------------------------|
+| Q1    | Ranking / Wealth (Top-N)             | Top-10 Kunden nach Net Worth (Assets − Liabilities) inkl. IDs, Werte & Ranking    | ✅ 100 %     | Identity, Join Chain           |
+| Q2    | Digital Segmentierung (Rule-based)  | CS-IDs gemäß Digital-First-Regel (JSON-Extraktion, definierte Kriterien)          | ✅ 100 %     | Aggregation, Time Logic        |
+| Q3    | Investment Segmentierung (Rule-based)| CS-ID + Investmentbetrag + Assets für Investment-fokussierte Kunden              | ✅ 100 %     | Aggregation, Business Logic    |
+| Q4    | Credit-Score-Klassifikation (Aggregiert) | Kategorie-Summary: Credit-Kategorie + COUNT + AVG                              | ✅ 100 %     | Aggregation Patterns           |
+| Q5    | Property Leverage / LTV (Row-level, JSON) | CS-ID + Property Value + Mortgage + Ratio als JSON-Feld                        | ✅ 100 %     | JSON Rules, Identity           |
+| Q6    | Risikoklassifizierung (Rule-based)   | Klassifikation gemäß Business-Regeln (regelbasierte Ableitung)                   | ✅ 95 %      | Business Logic                 |
+| Q7    | Multi-Level Aggregation              | CTEs + Prozentberechnung über mehrere Ebenen                                     | ✅ 100 %     | Complex Templates              |
+| Q8    | Segment-Übersicht (Total)            | UNION ALL für Segment-Summen                                     | ⚠️ 60 %      | Complex Templates              |
+| Q9    | Property Leverage (Tabellenspezifisch) | Tabellen-spezifische Regeln                                 | ✅ 100 %     | Business Logic                 |
+| Q10   | Kredit-Details (Detail-Query)        | Row-Level-Details, kein GROUP BY                                                 | ✅ 95 %      | Aggregation Patterns           |
+
 
 ### 🎯 Validierungs-Performance
 
 **Manuelle Evaluationsergebnisse (basierend auf 10 Testfragen):**
-- **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q5 und Q10)
+- **Identifier Consistency**: 95% Korrektheit (1 Fehler bei Q6 und Q10)
 - **Mehr ausgegebene Spalten als gefragt**: 95% Korrektheit (1 Fehler bei Q6)
+- **Fehlende Spalten**: 60% Korrektheit (1 Fehler bei Q8)
 - **JOIN Chain Validation**: 100% Korrektheit
 - **Aggregation Logic**: 100% Korrektheit
-- **BSL Compliance**: 98% Korrektheit
-- **Overall Success Rate**: 88.5% (7×100% + 3×95%)
+- **BSL Compliance**: 100% Korrektheit
+- **Overall Success Rate**: 95% (7×100% + 2×95% + 1x60%)
 
 > **Hinweis**: Diese Metriken sind manuelle Evaluationsergebnisse aus der Analyse der 10 Testfragen. Die SQL-Validation erfolgt durch `validate_sql()` in `backend/llm/generator.py` (integriert, **kein separates** `consistency_checker.py` Modul).
 

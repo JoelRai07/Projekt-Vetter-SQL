@@ -11,4 +11,7 @@ To pinpoint customers who might be facing financial hardship, I'd like to see th
 
 
 
-- Beschädigte Dateien sind ChromaDB-Vektor-Store-Datenbanken
+Beschädigte Dateien sind ChromaDB-Vektor-Store-Datenbanken
+Frage 8 braucht noch average tdsr und median digital
+Frage 6 CU wird nicht ausgegeben und mehr daten als gewollt
+Frage 10 CU wird nicht ausgegeben

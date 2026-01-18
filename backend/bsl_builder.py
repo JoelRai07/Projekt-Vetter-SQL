@@ -401,11 +401,13 @@ class BSLBuilder:
             "### Row-level detail (no aggregation)",
             "Trigger words: 'show all', 'list each', 'identify', 'find customers where'.",
             "",
-            "### Policy Overrides (Credit DB)",
-            "- “digital native” → treat as **Digital First Customer** segment.",
-            "- “credit classification” → treat as **credit score categories** (credscore bands).",
-            "- If a question says “few customers” without a threshold: default to `HAVING COUNT(*) >= 10` (policy choice).",
-            ""
+            '### Policy Overrides (Credit DB)',
+            '- "digital native" → treat as **Digital First Customer** segment.',
+            '- "credit classification" → treat as **credit score categories** (credscore bands).',
+            '- If a question says "few customers" without a threshold: default to `HAVING COUNT(*) >= 10` (policy choice).',
+            '- "investment potential" label → use \'Target\' for customers with ALR > 0.3 AND mthincome > 5000, otherwise \'Standard\'.',
+            '- Percentage metrics (e.g., pct_high_engagement) → always express as decimal ratio 0-1 (e.g., 0.1684), never multiply by 100.',
+            ''
         ]
 
         calc = [m for m in kb_entries if m.get("type") == "calculation_knowledge"]

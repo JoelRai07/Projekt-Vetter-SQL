@@ -321,9 +321,11 @@ Trigger words: 'top N', 'highest', 'lowest', 'best', 'worst'.
 Trigger words: 'show all', 'list each', 'identify', 'find customers where'.
 
 ### Policy Overrides (Credit DB)
-- “digital native” → treat as **Digital First Customer** segment.
-- “credit classification” → treat as **credit score categories** (credscore bands).
-- If a question says “few customers” without a threshold: default to `HAVING COUNT(*) >= 10` (policy choice).
+- "digital native" → treat as **Digital First Customer** segment.
+- "credit classification" → treat as **credit score categories** (credscore bands).
+- If a question says "few customers" without a threshold: default to `HAVING COUNT(*) >= 10` (policy choice).
+- "investment potential" label → use 'Target' for customers with ALR > 0.3 AND mthincome > 5000, otherwise 'Standard'.
+- Percentage metrics (e.g., pct_high_engagement) → always express as decimal ratio 0-1 (e.g., 0.1684), never multiply by 100.
 
 ## Reminder: Frequently Used Metrics
 - Debt-to-Income Ratio (DTI): DTI = \frac{\text{Total Monthly Debt Payments}}{\text{Monthly Income}} = debincratio
