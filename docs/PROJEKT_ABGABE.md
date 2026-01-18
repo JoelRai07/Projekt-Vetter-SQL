@@ -78,7 +78,7 @@ Zeige query_id für konsistentes Paging
 ```
 
 ### 🛠️ Technologie-Stack
-- **Frontend**: React 18+ mit TypeScript, Tailwind CSS
+- **Frontend**: React 18+ mit TypeScript, CSS
 - **Backend**: Python 3.11+ mit FastAPI
 - **LLM**: GPT-5.2
 - **Datenbank**: SQLite (Credit Risk Domain)

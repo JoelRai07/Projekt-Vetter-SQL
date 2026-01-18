@@ -40,7 +40,7 @@ Mit diesem Projekt helfen wir Unternehmen dabei, **data-driven** zu werden, inde
 
 ### Frontend
 - **React 18+** mit TypeScript
-- **Tailwind CSS** für Styling
+- **CSS** für Styling
 - Real-time Chat-Interface
 - Pagination für große Ergebnismengen
 
