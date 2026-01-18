@@ -1086,7 +1086,7 @@ async def cache_status():
 
 ## 7. Testergebnisse
 
-### 📊 Success Rate: 88.5% (7×100% + 3×95%)
+### 📊 Success Rate: 95% (7×100% + 2×95% + 60%)
 
 | Frage | Typ                                   | Erwartetes Verhalten                                                             | Status Core | BSL-Regeln                     |
 |-------|---------------------------------------|----------------------------------------------------------------------------------|-------------|--------------------------------|
@@ -1111,7 +1111,7 @@ async def cache_status():
 - **JOIN Chain Validation**: 100% Korrektheit
 - **Aggregation Logic**: 100% Korrektheit
 - **BSL Compliance**: 100% Korrektheit
-- **Overall Success Rate**: 95% (7×100% + 2×95% + 1x60%)
+- **Overall Success Rate**: 95% (7×100% + 2×95% + 60%)
 
 > **Hinweis**: Diese Metriken sind manuelle Evaluationsergebnisse aus der Analyse der 10 Testfragen. Die SQL-Validation erfolgt durch `validate_sql()` in `backend/llm/generator.py` (integriert, **kein separates** `consistency_checker.py` Modul).
 
