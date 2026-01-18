@@ -124,6 +124,156 @@ graph TB
     DM --> CACHE
 ```
 
+### 🔧 Detaillierte IT-Architektur
+
+```mermaid
+graph TB
+    subgraph "Frontend [React + Vite]"
+        APP[App.jsx<br/>Haupt-Komponente]
+        APP --> |useState| STATE[State Management<br/>messages, question, isLoading]
+        APP --> |fetch| APICALL[API Client<br/>POST /query]
+        APP --> |render| UI_COMP[UI Components<br/>Messages, Table, Paging, SQL-Toggle]
+    end
+
+    subgraph "Backend [FastAPI + Python 3.11+]"
+        subgraph "API Layer"
+            MAIN[main.py<br/>FastAPI App]
+            MAIN --> |imports| MODELS[models.py<br/>Pydantic Models]
+            MODELS --> QR[QueryRequest]
+            MODELS --> QRESP[QueryResponse]
+            MODELS --> AR[AmbiguityResult]
+            MODELS --> VR[ValidationResult]
+        end
+
+        subgraph "LLM Layer"
+            GEN[generator.py<br/>OpenAIGenerator]
+            GEN --> |uses| PROMPTS[prompts.py<br/>SystemPrompts]
+            PROMPTS --> P_AMB[AMBIGUITY_DETECTION]
+            PROMPTS --> P_SQL[SQL_GENERATION]
+            PROMPTS --> P_VAL[SQL_VALIDATION]
+            PROMPTS --> P_SUM[RESULT_SUMMARY]
+            GEN --> |methods| M1[check_ambiguity]
+            GEN --> |methods| M2[generate_sql]
+            GEN --> |methods| M3[validate_sql]
+            GEN --> |methods| M4[summarize_results]
+            GEN --> |methods| M5[generate_sql_with_correction]
+            GEN --> |helper| BSL_COMP[BSL Compliance Trigger<br/>_is_property_leverage_question<br/>_is_digital_engagement_cohort_question<br/>_bsl_compliance_instruction]
+        end
+
+        subgraph "Utils Layer"
+            CACHE[cache.py]
+            CACHE --> C1[get_cached_schema<br/>LRU, permanent]
+            CACHE --> C2[meanings_cache<br/>TTL 1h]
+            CACHE --> C3[query_cache<br/>TTL 5min]
+            CACHE --> C4[query_session_cache<br/>TTL 1h]
+
+            GUARD[sql_guard.py]
+            GUARD --> G1[enforce_safety<br/>nur SELECT erlaubt]
+            GUARD --> G2[enforce_known_tables<br/>Tabellenvalidierung]
+
+            CTX[context_loader.py]
+            CTX --> |lädt| KB_FILE[credit_kb.jsonl]
+            CTX --> |lädt| MEAN_FILE[credit_column_meaning_base.json]
+            CTX --> |lädt| BSL_FILE[credit_bsl.txt]
+
+            OPT[query_optimizer.py]
+            OPT --> |analyze| QPLAN[Query Plan Analyse]
+        end
+
+        subgraph "Database Layer"
+            DBM[manager.py<br/>DatabaseManager]
+            DBM --> |methods| DB1[get_schema_and_sample]
+            DBM --> |methods| DB2[get_table_columns]
+            DBM --> |methods| DB3[execute_query_with_paging]
+            DBM --> |methods| DB4[normalize_sql_for_paging]
+        end
+
+        subgraph "Offline Tools"
+            BSLB[bsl_builder.py<br/>BSL Generator]
+            BSLB --> |liest| KB_FILE
+            BSLB --> |liest| MEAN_FILE
+            BSLB --> |liest| SCHEMA_FILE[credit.sqlite]
+            BSLB --> |generiert| BSL_FILE
+        end
+    end
+
+    subgraph "Data Layer [SQLite + JSON Files]"
+        DB[(credit.sqlite<br/>6 Tabellen)]
+        DB --> T1[core_record]
+        DB --> T2[employment_and_income]
+        DB --> T3[expenses_and_assets]
+        DB --> T4[bank_and_transactions]
+        DB --> T5[credit_and_compliance]
+        DB --> T6[credit_accounts_and_history]
+    end
+
+    subgraph "External Services"
+        OPENAI[OpenAI API<br/>GPT Model]
+    end
+
+    %% Connections
+    APICALL --> MAIN
+    MAIN --> GEN
+    MAIN --> CACHE
+    MAIN --> GUARD
+    MAIN --> CTX
+    MAIN --> OPT
+    MAIN --> DBM
+    GEN --> OPENAI
+    DBM --> DB
+```
+
+#### Dateistruktur
+
+```
+backend/
+├── main.py                 # FastAPI Entry Point, Request-Orchestrierung
+├── models.py               # Pydantic Models (Request/Response)
+├── config.py               # Konfiguration (API Keys, Pfade)
+├── bsl_builder.py          # Offline-Tool: BSL-Generierung
+├── test_questions.py       # Test-Suite
+├── llm/
+│   ├── generator.py        # OpenAIGenerator (alle LLM-Interaktionen)
+│   └── prompts.py          # System Prompts (Ambiguity, SQL, Validation, Summary)
+├── database/
+│   └── manager.py          # DatabaseManager (SQLite-Zugriff, Paging)
+├── utils/
+│   ├── cache.py            # Multi-Layer Caching (Schema, Meanings, Query, Session)
+│   ├── sql_guard.py        # Sicherheits-Guards (Safety, Tables)
+│   ├── context_loader.py   # Lädt KB, Meanings, BSL
+│   └── query_optimizer.py  # Query Plan Analyse
+└── mini-interact/credit/
+    ├── credit.sqlite       # SQLite Datenbank
+    ├── credit_kb.jsonl     # Knowledge Base
+    ├── credit_column_meaning_base.json  # Spalten-Bedeutungen
+    └── credit_bsl.txt      # Generierter BSL (von bsl_builder.py)
+
+frontend/
+├── src/
+│   ├── main.jsx            # React Entry Point
+│   ├── App.jsx             # Haupt-Komponente (UI + State + API)
+│   ├── App.css             # Styling
+│   └── index.css           # Global Styles
+├── index.html              # HTML Template
+└── vite.config.js          # Vite Konfiguration
+```
+
+#### Komponenten-Verantwortlichkeiten
+
+| Komponente | Datei | Verantwortlichkeit |
+|------------|-------|-------------------|
+| **FastAPI App** | `main.py` | Request-Handling, Pipeline-Orchestrierung, Error Handling |
+| **Pydantic Models** | `models.py` | Type-safe Request/Response Definitionen |
+| **OpenAIGenerator** | `llm/generator.py` | Alle LLM-Aufrufe (Ambiguity, SQL, Validation, Summary), BSL-Compliance Checks |
+| **SystemPrompts** | `llm/prompts.py` | Zentrale Prompt-Definitionen für jeden LLM-Task |
+| **DatabaseManager** | `database/manager.py` | Schema-Extraktion, Query-Ausführung, Paging |
+| **Cache Module** | `utils/cache.py` | 4-Layer Caching (Schema, Meanings, Query, Session) |
+| **SQL Guard** | `utils/sql_guard.py` | Sicherheitsprüfung (nur SELECT), Tabellenvalidierung |
+| **Context Loader** | `utils/context_loader.py` | Lädt KB, Meanings, BSL aus Dateien |
+| **Query Optimizer** | `utils/query_optimizer.py` | EXPLAIN Query Plan Analyse, Index-Empfehlungen |
+| **BSL Builder** | `bsl_builder.py` | Offline-Tool: Generiert BSL aus KB + Meanings + Schema |
+| **React App** | `frontend/src/App.jsx` | UI, State Management, API-Kommunikation |
+
 ### 🔄 Request-Flow Pipeline
 
 > **Wichtig**: `bsl_builder.py` ist ein **Build-/Maintenance-Tool** (offline/on-demand) und **kein** Request-Step im API-Flow. Die BSL-Datei (`credit_bsl.txt`) wird zur Laufzeit nur geladen, nicht generiert.
@@ -190,50 +340,80 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A[User startet Anwendung] --> B{Frage eingeben}
-    B --> C[Frontend sendet an Backend]
-    C --> D[Backend: Request-Flow]
+    A[User stellt Frage] --> B[Frontend sendet POST /query]
+    B --> C{query_id vorhanden?}
 
-    D --> E[Phase 1: Context Loading - Schema/Meanings/KB/BSL cached]
-    E --> F[Phase 2: Parallelisierung - Ambiguity + SQL Generation]
-    F --> G[Phase 3: SQL-Generierung BSL-first + Layer A]
-    G --> H[Phase 4: Optional Self-Correction Layer B]
-    H --> I[Phase 5: Server Guards - Safety + Tabellenvalidierung]
-    I --> I2[Phase 6: LLM SQL Validation]
-    I2 --> J[Phase 7-8: Execution + Summarization]
+    %% Paging-Pfad (mit existierender Session)
+    C -->|Ja| D[Session aus Cache laden]
+    D --> E[Server Guards prüfen]
+    E --> F[Query mit Paging ausführen]
+    F --> RESP[Response an Frontend]
 
-    I2 --> K{SQL gültig?}
-    K -->|Ja| L[Query ausführen]
-    K -->|Nein| M[Fehlerkorrektur via LLM]
-    M --> G
+    %% Neuer Query-Pfad
+    C -->|Nein| G{Cache Hit?}
+    G -->|Ja| RESP
 
-    L --> N[Results formatieren]
-    N --> O[Response an Frontend]
-    O --> P[Ergebnisse anzeigen]
+    G -->|Nein| H[Context Loading<br/>Schema, KB, Meanings, BSL]
+    H --> I[PARALLEL:<br/>Ambiguity Check + SQL Generation]
 
-    P --> Q{Paging gewünscht?}
-    Q -->|Ja| R[Session-basiert Paging]
-    Q -->|Nein| S[Ende]
+    I --> J{Confidence < 0.4?}
+    J -->|Ja| K[Self-Correction Loop<br/>max 2 Iterationen]
+    K --> L
+    J -->|Nein| L[Server Guards<br/>Safety + Tabellenvalidierung]
 
-    R --> T[Seite 2, 3, ... laden]
-    T --> P
+    L --> M{Guards OK?}
+    M -->|Nein| N[Autokorrektur versuchen]
+    N --> O{Immer noch Fehler?}
+    O -->|Ja| ERR1[Error Response]
+    O -->|Nein| P
+    M -->|Ja| P[LLM SQL Validation]
+
+    P --> Q{Severity = high?}
+    Q -->|Ja| R[Correction Loop + Re-Validate]
+    R --> S{Immer noch high?}
+    S -->|Ja| ERR2[Error Response]
+    S -->|Nein| T
+    Q -->|Nein| T[Query ausführen]
+
+    T --> U[Result Summarization]
+    U --> V[Session erstellen + Cache speichern]
+    V --> RESP
+
+    %% Frontend zeigt Ergebnisse
+    RESP --> W[Ergebnisse anzeigen]
+    W --> X{Weitere Seite?}
+    X -->|Ja| Y[Request mit query_id]
+    Y --> B
+    X -->|Nein| Z[Ende]
 ```
 
-### 🔄 Detail-Prozessablauf (8-Phasen-Pipeline)
+### 🔄 Detail-Prozessablauf
 
-> **Wichtig**: `bsl_builder.py` ist ein **Offline/On-demand Tool** (Phase 0) und **kein** Request-Step. Die BSL-Datei wird zur Laufzeit nur geladen.
+> **Wichtig**: `bsl_builder.py` ist ein **Offline/On-demand Tool** und **kein** Request-Step. Die BSL-Datei wird zur Laufzeit nur geladen.
 
-| Phase | Bezeichnung | Beschreibung |
-|-------|-------------|--------------|
+#### Haupt-Request-Flow (neue Frage)
+
+| Schritt | Bezeichnung | Beschreibung |
+|---------|-------------|--------------|
 | **Phase 0** | Build/Maintenance (offline) | BSL-Generierung durch `bsl_builder.py` (nicht pro Request) |
-| **Phase 1** | Context Loading | Schema, Meanings, KB, BSL werden geladen (cached) |
-| **Phase 2** | Parallelisierung | Ambiguity Detection + SQL-Generierung parallel |
-| **Phase 3** | SQL-Generierung (BSL-first) | LLM generiert SQL + Layer A (rule-based Compliance + Auto-Repair) |
-| **Phase 4** | Self-Correction Loop (Layer B) | Optional bei niedriger Confidence |
-| **Phase 5** | Server Guards | `enforce_safety` + `enforce_known_tables` (Sicherheit + Tabellenvalidierung) |
-| **Phase 6** | LLM SQL Validation | Semantische Prüfung + ggf. Korrektur bei high severity |
-| **Phase 7** | Query Execution | Mit Paging und Session-Management |
-| **Phase 8** | Result Summarization | Zusammenfassung der Ergebnisse |
+| **1** | Cache-Check | Prüft ob identische Frage bereits im Cache ist → direkter Return |
+| **2** | Context Loading | Schema, Meanings, KB, BSL werden geladen (cached) |
+| **3** | Parallel LLM Calls | Ambiguity Detection + SQL-Generierung laufen parallel |
+| **4** | Self-Correction (optional) | Bei Confidence < 0.4: bis zu 2 Korrektur-Iterationen |
+| **5** | Server Guards | `enforce_safety` + `enforce_known_tables` + ggf. Autokorrektur |
+| **6** | LLM SQL Validation | Semantische Prüfung, bei Severity "high" → Korrektur + Re-Validate |
+| **7** | Query Execution | SQL ausführen mit Paging |
+| **8** | Result Summarization | LLM fasst Ergebnisse zusammen |
+| **9** | Session + Cache | Session für Paging erstellen, Ergebnis cachen |
+
+#### Paging-Flow (mit query_id)
+
+| Schritt | Bezeichnung | Beschreibung |
+|---------|-------------|--------------|
+| **1** | Session laden | SQL aus Session-Cache holen (kein LLM-Aufruf!) |
+| **2** | Server Guards | Sicherheitsprüfung der gespeicherten SQL |
+| **3** | Query Execution | SQL mit neuem Page-Offset ausführen |
+| **4** | Response | Ergebnisse zurückgeben (ohne Summarization) |
 
 #### Wie heuristische Fragetyp-Erkennung in diesem Projekt funktioniert:
 

@@ -144,24 +144,107 @@ graph TB
 
 ## Detaillierter Prozessablauf
 
+### User Workflow Diagramm
+
+```mermaid
+flowchart TD
+    A[User stellt Frage] --> B[Frontend sendet POST /query]
+    B --> C{query_id vorhanden?}
+
+    %% Paging-Pfad (mit existierender Session)
+    C -->|Ja| D[Session aus Cache laden]
+    D --> E[Server Guards prüfen]
+    E --> F[Query mit Paging ausführen]
+    F --> RESP[Response an Frontend]
+
+    %% Neuer Query-Pfad
+    C -->|Nein| G{Cache Hit?}
+    G -->|Ja| RESP
+
+    G -->|Nein| H[Context Loading<br/>Schema, KB, Meanings, BSL]
+    H --> I[PARALLEL:<br/>Ambiguity Check + SQL Generation]
+
+    I --> J{Confidence < 0.4?}
+    J -->|Ja| K[Self-Correction Loop<br/>max 2 Iterationen]
+    K --> L
+    J -->|Nein| L[Server Guards<br/>Safety + Tabellenvalidierung]
+
+    L --> M{Guards OK?}
+    M -->|Nein| N[Autokorrektur versuchen]
+    N --> O{Immer noch Fehler?}
+    O -->|Ja| ERR1[Error Response]
+    O -->|Nein| P
+    M -->|Ja| P[LLM SQL Validation]
+
+    P --> Q{Severity = high?}
+    Q -->|Ja| R[Correction Loop + Re-Validate]
+    R --> S{Immer noch high?}
+    S -->|Ja| ERR2[Error Response]
+    S -->|Nein| T
+    Q -->|Nein| T[Query ausführen]
+
+    T --> U[Result Summarization]
+    U --> V[Session erstellen + Cache speichern]
+    V --> RESP
+
+    %% Frontend zeigt Ergebnisse
+    RESP --> W[Ergebnisse anzeigen]
+    W --> X{Weitere Seite?}
+    X -->|Ja| Y[Request mit query_id]
+    Y --> B
+    X -->|Nein| Z[Ende]
+```
+
+---
+
+### Haupt-Request-Flow (neue Frage)
+
+| Schritt | Bezeichnung | Beschreibung |
+|---------|-------------|--------------|
+| **Phase 0** | Build/Maintenance (offline) | BSL-Generierung durch `bsl_builder.py` (nicht pro Request) |
+| **1** | Cache-Check | Prüft ob identische Frage bereits im Cache ist → direkter Return |
+| **2** | Context Loading | Schema, Meanings, KB, BSL werden geladen (cached) |
+| **3** | Parallel LLM Calls | Ambiguity Detection + SQL-Generierung laufen parallel |
+| **4** | Self-Correction (optional) | Bei Confidence < 0.4: bis zu 2 Korrektur-Iterationen |
+| **5** | Server Guards | `enforce_safety` + `enforce_known_tables` + ggf. Autokorrektur |
+| **6** | LLM SQL Validation | Semantische Prüfung, bei Severity "high" → Korrektur + Re-Validate |
+| **7** | Query Execution | SQL ausführen mit Paging |
+| **8** | Result Summarization | LLM fasst Ergebnisse zusammen |
+| **9** | Session + Cache | Session für Paging erstellen, Ergebnis cachen |
+
+---
+
+### Paging-Flow (mit query_id)
+
+| Schritt | Bezeichnung | Beschreibung |
+|---------|-------------|--------------|
+| **1** | Session laden | SQL aus Session-Cache holen (kein LLM-Aufruf!) |
+| **2** | Server Guards | Sicherheitsprüfung der gespeicherten SQL |
+| **3** | Query Execution | SQL mit neuem Page-Offset ausführen |
+| **4** | Response | Ergebnisse zurückgeben (ohne Summarization) |
+
+---
+
 ### Phase 0: Build/Maintenance (offline/on-demand)
 
-* `bsl_builder.py` generiert `mini-interact/credit/credit_bsl.txt` 
+* `bsl_builder.py` generiert `mini-interact/credit/credit_bsl.txt`
 * BSL Overrides können manuell in `credit_bsl.txt` gepflegt werden (`# BSL OVERRIDES (MANUAL)`)
 
 > Diese Phase ist **nicht** Teil des `/query` Request-Flows.
 
 ---
 
-### Phase 1: Request Intake, Context Loading & Caching
-
-**Schritt 1.1: Cache-Check (Performance-Optimierung)**
+### Schritt 1: Cache-Check
 
 * Prüfung auf Cache-Hit vor kompletter Pipeline
 * `get_cached_query_result(question, database)` mit MD5-Hash Key
 * Bei Cache-Hit: Direkte Rückgabe in <100ms
 
-**Schritt 1.2: Frontend sendet Anfrage**
+---
+
+### Schritt 2: Context Loading
+
+**Frontend sendet Anfrage:**
 
 ```http
 POST /query
@@ -175,98 +258,92 @@ Content-Type: application/json
 }
 ```
 
-**Schritt 1.3: Backend lädt Kontext (cached)**
+**Backend lädt Kontext (cached):**
 
-* DB-Pfad: `DATA_DIR/credit/credit.sqlite` 
-* Kontext mit Caching:
-
-  * Schema: `get_cached_schema(db_path)` - permanent LRU-Cache
-  * Meanings: `get_cached_meanings(database, DATA_DIR)` - 1h TTL
-  * KB + BSL: `load_context_files(database, DATA_DIR)` 
-    (danach wird Meanings nochmals aus Cache überschrieben – ist okay, aber doppelt)
+* DB-Pfad: `DATA_DIR/credit/credit.sqlite`
+* Schema: `get_cached_schema(db_path)` - permanent LRU-Cache
+* Meanings: `get_cached_meanings(database, DATA_DIR)` - 1h TTL
+* KB + BSL: `load_context_files(database, DATA_DIR)`
 
 ---
 
-### Phase 2: Parallelisierung – Ambiguity Detection + SQL-Generierung
+### Schritt 3: Parallel LLM Calls (Ambiguity + SQL Generation)
 
-* Task A: `llm_generator.check_ambiguity(question, schema, kb, meanings)` 
-* Task B: `llm_generator.generate_sql(question, schema, meanings, bsl)` 
+Beide Tasks laufen parallel via `asyncio.gather`:
 
-Wenn `ambiguity.is_ambiguous == true`:
+* **Task A:** `llm_generator.check_ambiguity(question, schema, kb, meanings)`
+* **Task B:** `llm_generator.generate_sql(question, schema, meanings, bsl)`
 
-* Kein Hard-Fail; es wird ein `ambiguity_notice` in `notice` eingeblendet.
-
----
-
-### Phase 3: SQL-Generierung (BSL-first) + Layer A (rule-based Compliance + Auto-Repair)
-
-**In `OpenAIGenerator.generate_sql(...)`:**
+**SQL-Generierung (BSL-first) + Layer A:**
 
 1. Prompt: **Overrides → BSL → Schema → Meanings → Frage**
 2. LLM liefert JSON (sql, explanation, confidence, …)
-3. Layer A:
-
+3. Layer A (rule-based Compliance):
    * `_bsl_compliance_instruction(question, sql)` → ggf. Instruction
    * `_regenerate_with_bsl_compliance(...)` → 2. LLM Call nur bei Verstoß
    * `_fix_union_order_by(sql)` für SQLite
 
+Wenn `ambiguity.is_ambiguous == true`:
+* Kein Hard-Fail; es wird ein `ambiguity_notice` in `notice` eingeblendet.
+
 ---
 
-### Phase 4: Optionaler Self-Correction Loop (Layer B) bei niedriger Confidence
+### Schritt 4: Self-Correction (optional)
+
+Bei `confidence < 0.4`:
 
 * `generate_sql_with_correction(...)` führt iterativ:
-
   * SQL generieren/korrigieren
   * `validate_sql(sql, schema)` via LLM
-  * erneute Korrektur (max 2)
+  * erneute Korrektur (max 2 Iterationen)
 
 ---
 
-### Phase 5: Server Guards (Security & Known-Table Validation)
+### Schritt 5: Server Guards
 
-**Server Guards** sind die mittlere Validierungsebene zwischen Layer A und Layer B:
+**Server Guards** sind die mittlere Validierungsebene (ADR-006):
 
-In `main.py` (vor Execution):
-
-* `enforce_safety(sql)` → nur SELECT, keine gefährlichen Statements (DROP, DELETE, INSERT, etc.)
-* `enforce_known_tables(sql, table_columns)` → nur bekannte Tabellen aus dem Schema erlaubt
+* `enforce_safety(sql)` → nur SELECT, keine gefährlichen Statements
+* `enforce_known_tables(sql, table_columns)` → nur bekannte Tabellen erlaubt
 
 **Autokorrektur bei Tabellenfehlern:**
-Bei *nur* Table-Fehlern versucht `main.py` eine **Autokorrektur der Tabellennamen** via LLM (separater Correction Prompt) und validiert erneut.
+Bei *nur* Table-Fehlern versucht `main.py` eine **Autokorrektur der Tabellennamen** via LLM und validiert erneut.
 
-> **Hinweis**: Server Guards sind Teil der 3-Ebenen Validierungsarchitektur (ADR-006) und bilden die Sicherheitsschicht zwischen rule-based (Layer A) und LLM-based (Layer B) Validierung.
+Bei Fehler nach Autokorrektur → **Error Response**
 
 ---
 
-### Phase 6: LLM SQL Validation (zusätzliche Prüfung) + ggf. Korrektur
-
-Nach Server Guards:
+### Schritt 6: LLM SQL Validation
 
 * `validate_sql(generated_sql, schema)` (LLM)
-* Bei `severity == "high"`: `generate_sql_with_correction(...)` und erneute Validation
+* Bei `severity == "high"`:
+  * `generate_sql_with_correction(...)`
+  * Erneute Validation
+  * Bei weiterhin "high" → **Error Response**
 
 ---
 
-### Phase 7: Query Execution & Paging
+### Schritt 7: Query Execution
 
-* `generated_sql = db_manager.normalize_sql_for_paging(generated_sql)` 
+* `generated_sql = db_manager.normalize_sql_for_paging(generated_sql)`
 * `execute_query_with_paging(sql, page, page_size)` liefert:
-
-  * `results` 
+  * `results`
   * `paging_info` (page, total_pages, total_rows, …)
 
-Query Session mit Caching:
+---
 
-* `query_id = create_query_session(database, sql, question)` - 1h TTL
-* Für Folgeseiten: `query_id` erforderlich; die SQL kommt aus der Session
-* Nur bei Seite 1: Ergebnis wird für Query-Cache gespeichert (5min TTL)
+### Schritt 8: Result Summarization
+
+* `summarize_results(question, generated_sql, results, len(results), notice)`
+* Fallback: einfache Preview ("Top N rows…")
 
 ---
 
-### Phase 8: Result Summarization (optional)
+### Schritt 9: Session + Cache
 
-* `summarize_results(question, generated_sql, results, len(results), notice)` 
-* Fallback: einfache Preview ("Top N rows…")
+* `query_id = create_query_session(database, sql, question)` - 1h TTL
+* Nur bei Seite 1: Ergebnis wird für Query-Cache gespeichert (5min TTL)
+* Für Folgeseiten: `query_id` erforderlich; die SQL kommt aus der Session
 
 ---
 
