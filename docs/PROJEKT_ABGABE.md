@@ -1089,43 +1089,48 @@ graph TD
 
 ### 📅 Arbeitspakete & Zeitplan
 
-| Arbeitspaket                                              | Art des Tickets | Bezeichnung | Verantwortlich                          | Dauer   | Status | Aufwand |
-|----------------------------------------------------------|-----------------|-------------|-----------------------------------------|---------|--------|---------|
-| Architektur & Projektsetup                               | Epic            | Proj-1      | Tim Kühne                              | 5 Tage  | Fertig | 3,5 Std |
-| Backend: API, LLM & SQL-Engine                            | Epic            | Proj-2      | Dominik Ruoff & Joel Martinez           | 20 Tage | Fertig | 30 Std  |
-| Frontend: Chatinterface                                  | Epic            | Proj-3      | Joel Martinez                          | 5 Tage  | Fertig | 2,5 Std |
-| Evaluation & Testing                                     | Epic            | Proj-4      | Sören Frank                            | 5 Tage  | Fertig | 4 Std   |
-| Dokumentation & Präsentation                             | Epic            | Proj-5      | Alle                                   | 10 Tage | Fertig | 25 Std  |
-| Projektmanagement & Retrospektive                        | Epic            | Proj-6      | Tim Kühne                              | 1 Tag   | Fertig | 2 Std   |
-| Projekt-Repository initialisieren                        | Task            | Proj-7      | Tim Kühne                              | 1 Tag   | Fertig | 0,5 Std |
-| Datenmodell analysieren                                  | Task            | Proj-8      | Joel Martinez                          | 2 Tage  | Fertig | 1 Std   |
-| Datenmodellierung und -beschreibung                      | Task            | Proj-9      | Sören Frank                            | 2 Tage  | Fertig | 1 Std   |
-| React-Frontend + Features                                 | Task            | Proj-10     | Joel Martinez                          | 5 Tage  | Fertig | 2,5 Std |
-| Dokumentation des Frontends                               | Task            | Proj-11     | Sören Frank                            | 1 Tag   | Fertig | 1,5 Std |
-| Database Manager                                          | Task            | Proj-12     | Dominik Ruoff                          | 1 Tag   | Fertig | 1 Std   |
-| Anbindung an das LLM                                      | Task            | Proj-13     | Dominik Ruoff                          | 1 Tag   | Fertig | 1 Std   |
-| Schema-RAG                                                | Task            | Proj-14     | Dominik Ruoff & Joel Martinez           | 5 Tage  | Fertig | 5 Std   |
-| Prompt-Engineering Recherche                              | Task            | Proj-15     | Umut Polat                             | 2 Tage  | Fertig | 2 Std   |
-| Few-Shot Prompting / In-Context Examples                  | Task            | Proj-16     | Umut Polat                             | 3 Tage  | Fertig | –       |
-| Erstellung eines präzisen Prompts                         | Task            | Proj-17     | Umut Polat                             | 4 Tage  | Fertig | 2 Std   |
-| ReAct-Agent mit Tool execute_sql implementieren            | Task            | Proj-18     | Dominik Ruoff & Joel Martinez           | 4 Tage  | Fertig | 5 Std   |
-| Confidence-Mechanismus                                    | Task            | Proj-19     | Joel Martinez                          | 2 Tage  | Fertig | 2 Std   |
-| SQL Guards und Sicherheit                                 | Task            | Proj-20     | Dominik Ruoff & Joel Martinez           | 2 Tage  | Fertig | 1,5 Std |
-| Multi-DB Routing                                          | Task            | Proj-21     | Joel Martinez                          | 2 Tage  | Fertig | 2 Std   |
-| Technische Dokumentation Modellierungen                   | Task            | Proj-22     | Sören Frank                            | 10 Tage | Fertig | 10 Std  |
-| Qualität der Text2SQL-Ergebnisse                          | Task            | Proj-23     | Joel Martinez                          | 3 Tage  | Fertig | 5 Std   |
-| Query-basiertes RAG                                       | Task            | Proj-24     | Dominik Ruoff                          | 2 Tage  | Fertig | 4 Std   |
-| Caching                                                   | Task            | Proj-25     | Dominik Ruoff & Joel Martinez           | 2 Tage  | Fertig | 2 Std   |
-| Vector-Store aufsetzen                                    | Task            | Proj-26     | Joel Martinez                          | 4 Tage  | Fertig | 4 Std   |
-| Verwerfung des Ansatzes & neue Architektur entwerfen      | Task            | Proj-27     | Tim Kühne                              | 5 Tage  | Fertig | 5 Std   |
+| Arbeitspaket                                              | Art des Tickets | Bezeichnung | Verantwortlich                          | Dauer    | Status | Aufwand |
+|----------------------------------------------------------|-----------------|-------------|-----------------------------------------|----------|--------|---------|
+| Architektur & Projektsetup                               | Task            | Proj-7      | Tim Kühne                              | 5 Tage   | Fertig | 3,5 Std |
+| Projekt-Repository initialisieren                        | Task            | Proj-8      | Tim Kühne                              | 1 Tag    | Fertig | 0,5 Std |
+| Datenmodell analysieren                                  | Task            | Proj-9      | Joel Martinez                          | 2 Tage   | Fertig | 0,5 Std |
+| Datenmodellierung und -beschreibung                      | Task            | Proj-10     | Sören Frank                            | 2 Tage   | Fertig | 1 Std   |
+| React-Frontend + Features                                | Task            | Proj-11     | Joel Martinez                          | 5 Tage   | Fertig | 2,5 Std |
+| Dokumentation des Frontends                              | Task            | Proj-12     | Sören Frank                            | 1 Tag    | Fertig | 1,5 Std |
+| Database Manager                                         | Task            | Proj-13     | Dominik Ruoff                          | 1 Tag    | Fertig | 1 Std   |
+| Anbindung an das LLM                                     | Task            | Proj-14     | Dominik Ruoff                          | 1 Tag    | Fertig | 1 Std   |
+| Schema-RAG                                               | Task            | Proj-15     | Dominik Ruoff & Joel Martinez           | 5 Tage   | Fertig | 3 Std   |
+| Prompt-Engineering Recherche                             | Task            | Proj-16     | Umut Polat                             | 2 Tage   | Fertig | 1,5 Std |
+| Few-Shot Prompting / In-Context Examples                 | Task            | Proj-17     | Umut Polat                             | 3 Tage   | Fertig | 2 Std   |
+| Erstellung eines präzisen Prompts                        | Task            | Proj-18     | Umut Polat                             | 4 Tage   | Fertig | 1,5 Std |
+| ReAct-Agent mit Tool execute_sql implementieren          | Task            | Proj-19     | Dominik Ruoff & Joel Martinez           | 4 Tage   | Fertig | 3 Std   |
+| Confidence-Mechanismus                                   | Task            | Proj-20     | Joel Martinez                          | 2 Tage   | Fertig | 2 Std   |
+| SQL Guards und Sicherheit                                | Task            | Proj-21     | Dominik Ruoff & Joel Martinez           | 2 Tage   | Fertig | 1,5 Std |
+| Multi-DB Routing                                         | Task            | Proj-22     | Joel Martinez                          | 2 Tage   | Fertig | 2 Std   |
+| Technische Dokumentation Modellierungen                  | Task            | Proj-23     | Sören Frank                            | 10 Tage  | Fertig | 5 Std   |
+| Qualität der Text2SQL-Ergebnisse                         | Task            | Proj-24     | Joel Martinez                          | 3 Tage   | Fertig | 2 Std   |
+| Query-basiertes RAG                                      | Task            | Proj-25     | Dominik Ruoff                          | 2 Tage   | Fertig | 3 Std   |
+| Caching                                                  | Task            | Proj-26     | Dominik Ruoff & Joel Martinez           | 2 Tage   | Fertig | 2 Std   |
+| Testing der Ergebnisse und Vergleich                     | Task            | Proj-27     | Sören Frank                            | 2 Tage   | Fertig | 2 Std   |
+| Vector-Store aufsetzen                                   | Task            | Proj-28     | Joel Martinez                          | 4 Tage   | Fertig | 2,5 Std |
+| Verwerfung des Ansatzes & neue Architektur entwerfen    | Task            | Proj-29     | Tim Kühne                              | 5 Tage   | Fertig | 5 Std   |
+| Löschen alter Dateien und verbleibender Inhalte          | Task            | Proj-30     | Joel Martinez                          | 1 Tag    | Fertig | 1,5 Std |
+| BSL Builder implementieren + BSL-Versionierung           | Task            | Proj-31     | Joel Martinez                           | 2 Tage   | Fertig | 3 Std   |
+| Prompt und Pipeline an BSL anpassen                      | Task            | Proj-32     | Umut Polat                              | 2 Tage   | Fertig | 3 Std   |
+| BSL Compliance Checker + Auto-Repair Rules               | Task            | Proj-33     | Dominik Ruoff & Joel Martinez           | 2 Tage   | Fertig | 3 Std   |
+| First Round of Testing (neue Architektur)               | Task            | Proj-34     | Sören Frank                             | 2 Tage   | Fertig | 2 Std   |
+| Implementierung automatischer Tests                      | Task            | Proj-35     | Joel Martinez                          | 1 Tag    | Fertig | 0,5 Std |
+| Output Schema Enforcer (nur gefragte Spalten)           | Task            | Proj-36     | Joel Martinez                          | 1 Tag    | Fertig | 2 Std   |
+| Identifier Output Guard (CS default, CU nur explizit)   | Task            | Proj-37     | Joel Martinez                          | 1 Tag    | Fertig | 1,5 Std |
+| JSON Extraction Validator                                 | Task            | Proj-38     | Dominik Ruoff                          | 1 Tag    | Fertig | 2 Std   |
+| Second Round of Testing (neue Architektur)               | Task            | Proj-39     | Sören Frank                             | 1 Tag    | Fertig | 1 Std   |
+| Determinism Test (gleiche Frage → gleiche SQL)           | Task            | Proj-40     | Sören Frank                             | 1 Tag    | Fertig | 0,5 Std |
+| SQL Injection Test                                       | Task            | Proj-41     | Sören Frank                             | 1 Tag    | Fertig | 0,5 Std |
+| Doku-Konsistenz verbessern                               | Task            | Proj-42     | Tim Kühne                               | 0,5 Tage | Fertig | 4 Std   |
+| Projektmanagement & Retrospektive                        | Task            | Proj-43     | Tim Kühne                              | 1 Tag    | Fertig | 2 Std   |
+| Präsentation gestalten                                   | Task            | Proj-44     | Tim Kühne, Sören Frank, Umut Polat      | 4 Tage   | Fertig | 10 Std  |
 
-
-
-
-
-
-
-**Gesamtaufwand**: X Stunden (ca. 10 Wochen bei Y Stunden pro Woche)
+**Gesamtaufwand**: 86 Stunden (ca. 10 Wochen bei 8,6 Stunden pro Woche)
 
 ### 🔄 Projektmethodik
 
