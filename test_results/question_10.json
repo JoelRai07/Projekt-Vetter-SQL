@@ -2,22 +2,23 @@
   "question": "To pinpoint customers who might be facing financial hardship, I'd like to see their customer ID, the calculated vulnerability score, their net worth, delinquency count, and late payment count. Only output the customers with signs of financial hardship.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "Wesentliche Kriterien für „signs of financial hardship“ sind nicht eindeutig definiert. Zwar existiert im Domain-Wissen ein Financial Vulnerability Score (FVS), aber es fehlt ein konkreter Schwellenwert/Regel, ab wann ein Kunde als „financial hardship“ gilt. Zusätzlich ist unklar, ob „vulnerability score“ explizit FVS meint (und ob weitere Bedingungen wie negative Net Worth oder Delinquencies zwingend sind). Ohne diese Definition ist keine sichere Filterbedingung für die Ausgabe möglich.",
+    "reason": "Wesentliche Kriterien sind nicht eindeutig definiert: „signs of financial hardship“ kann über verschiedene im Domain-Wissen vorhandene Regeln/Schwellen operationalisiert werden (z.B. Financially Vulnerable, Financial Stress Indicator, FVS > 0.7, negative Net Worth, Payment-Issues-Zeitraum). Außerdem ist unklar, ob mit „calculated vulnerability score“ explizit der definierte FVS gemeint ist und wie „recent“/Zeiträume (z.B. „past six months“) mangels Zeitreihenfelder umgesetzt werden sollen. Ohne diese Festlegungen ist keine sichere, korrekte SQL-Filterlogik ableitbar.",
     "questions": [
-      "Meinst du mit „calculated vulnerability score“ den Financial Vulnerability Score (FVS) aus dem Domain-Wissen, oder einen anderen Score (z. B. FSI/CHS/CRI)?",
-      "Ab welchem Kriterium sollen Kunden als „financial hardship“ gelten: z. B. FVS > 0.7 (laut Domain-Wissen) oder eine andere Schwelle/Regel (z. B. zusätzlich negative networth und/oder delinqcount/latepaycount > 0)?"
+      "Meinst du mit „calculated vulnerability score“ konkret den im Domain-Wissen definierten Financial Vulnerability Score (FVS), oder eine andere Kennzahl (z.B. Financial Stability Index/CHS)?",
+      "Wie genau sollen „signs of financial hardship“ gefiltert werden: nach der Regel „Financially Vulnerable“ (DTI>0.5, liqassets < mthincome×3, plus Delinq/Late/Overdraft-Kriterium) oder nach „Financial Stress Indicator“ (FVS>0.7, Payment-Issues, negative Net Worth) oder nur nach einem FVS-Schwellenwert (welcher)?"
     ]
   },
-  "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  (\n    0.5 * ei.debincratio\n    + 0.5 * (\n      1.0 - (ea.liqassets / (ei.mthincome * 6.0))\n    )\n  ) AS vulnerability_score,\n  (ea.totassets - ea.totliabs) AS net_worth,\n  cc.delinqcount AS delinquency_count,\n  cc.latepaycount AS late_payment_count\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE\n  (\n    0.5 * ei.debincratio\n    + 0.5 * (\n      1.0 - (ea.liqassets / (ei.mthincome * 6.0))\n    )\n  ) > 0.7\n  AND (cc.delinqcount > 0 OR cc.latepaycount > 0)\n  AND (ea.totassets - ea.totliabs) < 0\n  AND ei.mthincome IS NOT NULL\n  AND ei.mthincome > 0\n  AND ea.liqassets IS NOT NULL",
+  "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  (\n    0.5 * ei.debincratio\n    + 0.5 * (\n      1 - (\n        ea.liqassets / NULLIF(ei.mthincome * 6, 0)\n      )\n    )\n  ) AS vulnerability_score,\n  (ea.totassets - ea.totliabs) AS net_worth,\n  cc.delinqcount,\n  cc.latepaycount\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE (\n    0.5 * ei.debincratio\n    + 0.5 * (\n      1 - (\n        ea.liqassets / NULLIF(ei.mthincome * 6, 0)\n      )\n    )\n  ) > 0.7\n  AND (cc.delinqcount > 0 OR cc.latepaycount > 0)\n  AND (ea.totassets - ea.totliabs) < 0",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Division-by-zero/NULL-Schutz: Obwohl ei.mthincome > 0 und ea.liqassets IS NOT NULL gefiltert wird, kann (ea.liqassets / (ei.mthincome * 6.0)) bei sehr kleinen Einkommen extrem groß werden. Optional zusätzlich: AND (ei.mthincome * 6.0) != 0 (redundant) bzw. clamp/CASE zur Begrenzung.",
-      "Redundante JOINs: credit_accounts_and_history (cah) wird gejoint, aber keine Spalte daraus selektiert oder gefiltert. Wenn nicht benötigt, JOIN entfernen, sonst ggf. cah.* in SELECT/WHERE nutzen.",
-      "Lesbarkeit/Performance: Den wiederholten vulnerability_score-Ausdruck in eine CTE/Subquery auslagern und dann im WHERE darauf filtern (SQLite erlaubt i.d.R. kein Alias im WHERE derselben SELECT-Ebene).",
-      "Logik prüfen: (cc.delinqcount > 0 OR cc.latepaycount > 0) ist plausibel; falls beide Bedingungen gleichzeitig gefordert sind, OR zu AND ändern (nur falls fachlich gewünscht)."
+      "Query is safe (SELECT-only) and syntactically valid for SQLite.",
+      "JOIN chain follows the declared FK relationships: core_record→employment_and_income→expenses_and_assets→bank_and_transactions→credit_and_compliance→credit_accounts_and_history.",
+      "All referenced tables and columns exist in the provided schema.",
+      "Optional: remove the JOIN to credit_accounts_and_history (cah) if you don't select/filter on its columns; otherwise it can duplicate rows if there are multiple history rows per compbankref (even though schema suggests 1:1 via PK).",
+      "Optional: consider guarding against NULLs in ei.debincratio/ea.liqassets/ei.mthincome (e.g., COALESCE) if you want vulnerability_score to be computable when inputs are NULL; currently NULL inputs will yield NULL and be excluded by the WHERE clause."
     ]
   },
   "results": [
@@ -25,27 +26,27 @@
       "customer_id": "CS448987",
       "vulnerability_score": 0.7420225883917988,
       "net_worth": -589973.0,
-      "delinquency_count": 5,
-      "late_payment_count": 10
+      "delinqcount": 5,
+      "latepaycount": 10
     },
     {
       "customer_id": "CS127904",
       "vulnerability_score": 0.7817902361020886,
       "net_worth": -320071.0,
-      "delinquency_count": 2,
-      "late_payment_count": 14
+      "delinqcount": 2,
+      "latepaycount": 14
     }
   ],
   "row_count": 2,
-  "query_id": "8255cc2bc3604d898ef5fb53f01f0c01",
+  "query_id": "6821da0052ad4696ab48fa72db17ecf4",
   "page": 1,
   "page_size": 50,
   "total_pages": 1,
   "total_rows": 2,
   "has_next_page": false,
   "has_previous_page": false,
-  "notice": " Hinweis: Ambiguity: Wesentliche Kriterien für „signs of financial hardship“ sind nicht eindeutig definiert. Zwar existiert im Domain-Wissen ein Financial Vulnerability Score (FVS), aber es fehlt ein konkreter Schwellenwert/Regel, ab wann ein Kunde als „financial hardship“ gilt. Zusätzlich ist unklar, ob „vulnerability score“ explizit FVS meint (und ob weitere Bedingungen wie negative Net Worth oder Delinquencies zwingend sind). Ohne diese Definition ist keine sichere Filterbedingung für die Ausgabe möglich.. Klärungsfragen: Meinst du mit „calculated vulnerability score“ den Financial Vulnerability Score (FVS) aus dem Domain-Wissen, oder einen anderen Score (z. B. FSI/CHS/CRI)?, Ab welchem Kriterium sollen Kunden als „financial hardship“ gelten: z. B. FVS > 0.7 (laut Domain-Wissen) oder eine andere Schwelle/Regel (z. B. zusätzlich negative networth und/oder delinqcount/latepaycount > 0)?",
-  "summary": "Die Abfrage identifiziert 2 Kunden mit Anzeichen finanzieller Härte (Vulnerability Score > 0,7, negative Net Worth sowie Delinquenzen oder verspätete Zahlungen): CS127904 (Vulnerability Score 0,7818; Net Worth -320.071; 2 Delinquenzen; 14 verspätete Zahlungen) und CS448987 (0,7420; -589.973; 5 Delinquenzen; 10 verspätete Zahlungen). CS127904 weist den höheren Vulnerability Score und die meisten Late Payments auf, während CS448987 die deutlich negativere Vermögenslage und mehr Delinquenzen hat.",
-  "explanation": "Returns row-level customers (customer_id in CS format) who meet the BSL-defined Financial Hardship/Stress criteria (Financial Stress Indicator): vulnerability score (FVS) > 0.7, at least one recent payment issue (delinquency or late payment), and negative net worth. The query also outputs delinquency and late payment counts plus computed net worth and computed vulnerability score.",
+  "notice": " Hinweis: Ambiguity: Wesentliche Kriterien sind nicht eindeutig definiert: „signs of financial hardship“ kann über verschiedene im Domain-Wissen vorhandene Regeln/Schwellen operationalisiert werden (z.B. Financially Vulnerable, Financial Stress Indicator, FVS > 0.7, negative Net Worth, Payment-Issues-Zeitraum). Außerdem ist unklar, ob mit „calculated vulnerability score“ explizit der definierte FVS gemeint ist und wie „recent“/Zeiträume (z.B. „past six months“) mangels Zeitreihenfelder umgesetzt werden sollen. Ohne diese Festlegungen ist keine sichere, korrekte SQL-Filterlogik ableitbar.. Klärungsfragen: Meinst du mit „calculated vulnerability score“ konkret den im Domain-Wissen definierten Financial Vulnerability Score (FVS), oder eine andere Kennzahl (z.B. Financial Stability Index/CHS)?, Wie genau sollen „signs of financial hardship“ gefiltert werden: nach der Regel „Financially Vulnerable“ (DTI>0.5, liqassets < mthincome×3, plus Delinq/Late/Overdraft-Kriterium) oder nach „Financial Stress Indicator“ (FVS>0.7, Payment-Issues, negative Net Worth) oder nur nach einem FVS-Schwellenwert (welcher)?",
+  "summary": "Die Abfrage identifiziert 2 Kunden mit klaren Anzeichen finanzieller Belastung (Vulnerability Score > 0,7, negative Net Worth sowie Delinquenzen oder verspätete Zahlungen). CS127904 weist den höchsten Vulnerability Score (0,782) und die meisten Late Payments (14) bei einem Nettovermögen von -320.071 auf, während CS448987 ein noch stärker negatives Nettovermögen (-589.973) und die höchste Delinquency-Anzahl (5) bei einem Score von 0,742 zeigt.",
+  "explanation": "Lists customers (customer_id in CS format) who meet the BSL-defined financial hardship/stress condition (Financial Stress Indicator): vulnerability score (FVS) > 0.7, at least one recent payment issue (delinquencies or late payments), and negative net worth. Returns the requested fields: customer_id, calculated vulnerability score, computed net worth, delinquency count, and late payment count.",
   "error": null
 }

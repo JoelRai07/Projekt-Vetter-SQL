@@ -1,19 +1,22 @@
 {
   "question": "To analyze customer property leverage, please show the customer ID, property value, mortgage balance, and the calculated ratio.",
   "ambiguity_check": {
-    "is_ambiguous": false,
-    "reason": "Die Anfrage ist ausreichend klar: „customer property leverage“ entspricht im Domain-Wissen dem Loan-to-Value (LTV) = mortbalance / propvalue. Die benötigten Felder sind im Schema vorhanden (clientref in core_record; propfinancialdata->propvalue und propfinancialdata->mortgagebits->mortbalance in expenses_and_assets) und können über die definierten FK-Ketten verknüpft werden. Es ist kein Zeitraum, keine Aggregation und kein Schwellenwert erforderlich.",
-    "questions": []
+    "is_ambiguous": true,
+    "reason": "Die Anfrage ist grundsätzlich machbar (Property Value und Mortgage Balance stehen in expenses_and_assets.propfinancialdata; Customer ID steht in core_record.clientref), aber es fehlen essenzielle Spezifikationen für eine sichere SQL-Abfrage: (1) Welche „calculated ratio“ ist gemeint (typisch LTV = mortbalance/propvalue, aber nicht explizit genannt). (2) Es ist unklar, welche Datensätze zu verwenden sind, falls es pro Kunde mehrere core_record-Einträge gibt (z.B. mehrere scoredate/appref) – ohne Regel (neuester, bestimmter Zeitraum, pro Anwendung) ist das Ergebnis nicht eindeutig. (3) Es ist unklar, ob nur Kunden mit Immobilienbesitz/Mortgage gezeigt werden sollen oder auch solche ohne (NULL/0-Werte) und wie Division durch 0/fehlende JSON-Felder behandelt werden soll.",
+    "questions": [
+      "Welche Kennzahl soll als „calculated ratio“ berechnet werden – Loan-to-Value (LTV = mortgage balance / property value) oder eine andere Ratio?",
+      "Falls ein Kunde mehrere core_record-Einträge hat: Soll pro Kunde nur der neueste Datensatz (z.B. nach scoredate/timemark) verwendet werden oder sollen alle Einträge ausgegeben werden?"
+    ]
   },
-  "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_value,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mortgage_balance,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL)\n    / CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_leverage_ratio\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE json_extract(ea.propfinancialdata, '$.propvalue') IS NOT NULL\n  AND CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) > 0\n  AND json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') IS NOT NULL\nORDER BY property_leverage_ratio DESC",
+  "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_value,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mortgage_balance,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL)\n    / CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_leverage_ratio\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) IS NOT NULL\n  AND CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) <> 0\n  AND CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) IS NOT NULL\nORDER BY property_leverage_ratio DESC",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Division-by-zero/NULL absichern: property_leverage_ratio z.B. als CASE WHEN CAST(json_extract(ea.propfinancialdata,'$.propvalue') AS REAL) > 0 THEN CAST(json_extract(ea.propfinancialdata,'$.mortgagebits.mortbalance') AS REAL) / CAST(json_extract(ea.propfinancialdata,'$.propvalue') AS REAL) END berechnen.",
-      "Optional: mortgage_balance ebenfalls als REAL > 0 filtern, falls negative/0 Werte ausgeschlossen werden sollen.",
-      "Performance/Lesbarkeit: json_extract(ea.propfinancialdata, ...) mehrfach genutzt; ggf. in einer CTE/Subquery einmal extrahieren und dann weiterverwenden."
+      "Division-by-zero is already prevented for propvalue; consider also filtering negative propvalue if that is not meaningful for leverage ratios.",
+      "To avoid repeated JSON parsing, consider extracting propvalue and mortbalance once in a CTE/subquery and reuse the derived columns in SELECT/WHERE/ORDER BY.",
+      "If you want to keep customers even when downstream tables are missing, replace some INNER JOINs with LEFT JOINs; current JOIN chain will drop rows without matching records in all joined tables."
     ]
   },
   "results": [
@@ -319,15 +322,15 @@
     }
   ],
   "row_count": 50,
-  "query_id": "feca17c57c4b4d0ba51baaf9fe7af06b",
+  "query_id": "35cf12b992284d99ad24f153dad79759",
   "page": 1,
   "page_size": 50,
   "total_pages": 20,
   "total_rows": 1000,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar. ",
-  "summary": "Die Abfrage liefert 1.000 Kunden mit vorhandenen Immobilienwert- und Hypothekendaten (hier Seite 1 mit 50 Zeilen), sortiert nach dem höchsten Beleihungsgrad (mortgage_balance/property_value). Auffällig sind extrem hohe Leverage-Ratios in den Top-Ergebnissen, z. B. CS108475 mit property_value 1.018 und mortgage_balance 1.276.018 (Ratio ~1253,46) sowie CS232079 mit 389 vs. 433.348 (Ratio ~1114,01), was auf sehr niedrige erfasste Immobilienwerte oder potenzielle Daten-/Einheitenprobleme hindeutet. Der dritthöchste Eintrag in den ersten Zeilen (CS138931) liegt mit 3.029 vs. 560.342 bei einem deutlich niedrigeren, aber weiterhin sehr hohen Ratio von ~184,99.",
-  "explanation": "Returns each customer (CS-format customer_id) with property value and mortgage balance extracted from expenses_and_assets.propfinancialdata, computes property leverage as mortgage_balance/property_value, filters out missing mortgage/property values and excludes NULL/zero property_value, then ranks customers by highest leverage ratio first. [BSL compliance regeneration]",
+  "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Die Anfrage ist grundsätzlich machbar (Property Value und Mortgage Balance stehen in expenses_and_assets.propfinancialdata; Customer ID steht in core_record.clientref), aber es fehlen essenzielle Spezifikationen für eine sichere SQL-Abfrage: (1) Welche „calculated ratio“ ist gemeint (typisch LTV = mortbalance/propvalue, aber nicht explizit genannt). (2) Es ist unklar, welche Datensätze zu verwenden sind, falls es pro Kunde mehrere core_record-Einträge gibt (z.B. mehrere scoredate/appref) – ohne Regel (neuester, bestimmter Zeitraum, pro Anwendung) ist das Ergebnis nicht eindeutig. (3) Es ist unklar, ob nur Kunden mit Immobilienbesitz/Mortgage gezeigt werden sollen oder auch solche ohne (NULL/0-Werte) und wie Division durch 0/fehlende JSON-Felder behandelt werden soll.. Klärungsfragen: Welche Kennzahl soll als „calculated ratio“ berechnet werden – Loan-to-Value (LTV = mortgage balance / property value) oder eine andere Ratio?, Falls ein Kunde mehrere core_record-Einträge hat: Soll pro Kunde nur der neueste Datensatz (z.B. nach scoredate/timemark) verwendet werden oder sollen alle Einträge ausgegeben werden?",
+  "summary": "Die Ergebnisse zeigen sehr hohe Beleihungsquoten (mortgage_balance/property_value) bei mehreren Kunden, angeführt von CS108475 mit property_value 1.018 und mortgage_balance 1.276.018 (Leverage-Ratio ~1253,46) sowie CS232079 mit property_value 389 und mortgage_balance 433.348 (Ratio ~1114,01). Auch CS138931 fällt mit property_value 3.029 und mortgage_balance 560.342 (Ratio ~184,99) deutlich auf, insgesamt sind 1.000 Datensätze vorhanden und die Sortierung nach absteigender Ratio hebt die extremsten Fälle zuerst hervor.",
+  "explanation": "Returns one row per customer with property data, including CS-format customer_id, extracted property value and mortgage balance from propfinancialdata JSON, and the leverage ratio (mortgage_balance/property_value). Filters out records where property_value is NULL or 0 and where mortgage_balance is NULL, then sorts customers by highest leverage ratio first. [BSL compliance regeneration]",
   "error": null
 }

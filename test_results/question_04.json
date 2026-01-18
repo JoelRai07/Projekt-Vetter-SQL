@@ -2,21 +2,21 @@
   "question": "Analyze customer credit scores by credit classification. Show the credit category, and the customers' details for each category.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "Unklar, welche „customer details“ genau ausgegeben werden sollen (es gibt viele mögliche Felder über mehrere Tabellen). Außerdem ist nicht eindeutig, ob „customers“ nach clientref (Kunde) oder nach coreregistry (Core-Record/Scoring-Event) gezählt/gelistet werden sollen, und ob pro Kunde mehrere Score-Records existieren können. Ohne diese Festlegungen ist keine sichere, korrekte Abfrage definierbar.",
+    "reason": "Die Frage verlangt „customers' details“ je Kreditkategorie, aber es ist nicht spezifiziert, welche Detailfelder ausgegeben werden sollen (es gibt viele mögliche Attribute über mehrere Tabellen). Außerdem ist unklar, ob pro Kunde nur der aktuellste Datensatz (z.B. nach scoredate/timemark) oder alle historischen Core-Records berücksichtigt werden sollen. Ohne diese Festlegungen ist keine eindeutige, sichere SQL-Abfrage ableitbar.",
     "questions": [
-      "Welche konkreten Kundendetails sollen je Kreditkategorie ausgegeben werden (z. B. clientref, agespan, clientseg, risklev, debincratio, credutil, decidestat, etc.)?",
-      "Soll die Analyse pro Kunde (clientref) oder pro Core-Record/Scoring-Record (coreregistry) erfolgen—und falls pro Kunde mehrere Records existieren: nur der neueste (z. B. nach scoredate/timemark) oder alle?"
+      "Welche konkreten Kundendetails sollen pro Kreditkategorie ausgegeben werden (z.B. clientref, appref, agespan, clientseg, risklev, debincratio, credutil, etc.)?",
+      "Sollen pro Kunde nur der aktuellste Score (z.B. max(scoredate) oder max(timemark)) verwendet werden oder alle vorhandenen Datensätze/Scorings in die Kategorisierung einfließen?"
     ]
   },
-  "generated_sql": "WITH scored AS (\n  SELECT\n    CASE\n      WHEN cc.credscore BETWEEN 300 AND 579 THEN 'Poor'\n      WHEN cc.credscore BETWEEN 580 AND 669 THEN 'Fair'\n      WHEN cc.credscore BETWEEN 670 AND 739 THEN 'Good'\n      WHEN cc.credscore BETWEEN 740 AND 799 THEN 'Very Good'\n      WHEN cc.credscore BETWEEN 800 AND 850 THEN 'Excellent'\n      ELSE 'Unknown'\n    END AS credit_category,\n    cc.credscore\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\n  JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\n  JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\n)\nSELECT\n  credit_category,\n  COUNT(*) AS customer_count,\n  AVG(credscore) AS average_credscore\nFROM scored\nGROUP BY credit_category\nORDER BY\n  CASE credit_category\n    WHEN 'Poor' THEN 1\n    WHEN 'Fair' THEN 2\n    WHEN 'Good' THEN 3\n    WHEN 'Very Good' THEN 4\n    WHEN 'Excellent' THEN 5\n    ELSE 6\n  END",
+  "generated_sql": "SELECT\n  CASE\n    WHEN cc.credscore BETWEEN 300 AND 579 THEN 'Poor'\n    WHEN cc.credscore BETWEEN 580 AND 669 THEN 'Fair'\n    WHEN cc.credscore BETWEEN 670 AND 739 THEN 'Good'\n    WHEN cc.credscore BETWEEN 740 AND 799 THEN 'Very Good'\n    WHEN cc.credscore BETWEEN 800 AND 850 THEN 'Excellent'\n    ELSE 'Unknown'\n  END AS credit_category,\n  COUNT(*) AS customer_count,\n  AVG(cc.credscore) AS average_credscore\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nGROUP BY\n  credit_category\nORDER BY\n  customer_count DESC,\n  credit_category",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: In der CTE nur die benötigten Tabellen joinen. Für credscore/credit_category reichen bank_and_transactions -> credit_and_compliance (und ggf. core_record-Kette nur, wenn wirklich auf Kunden/Antrag gefiltert werden soll).",
-      "Optional: Wenn pro Kunde genau ein Datensatz erwartet wird, COUNT(DISTINCT cr.coreregistry) statt COUNT(*) verwenden, um Mehrfachzählungen bei 1:n-Beziehungen zu vermeiden (falls solche in den Daten vorkommen).",
-      "Optional: AVG(credscore) ist ok; falls NULL-Werte möglich sind und berücksichtigt werden sollen, ggf. COALESCE(credscore,0) oder explizit WHERE cc.credscore IS NOT NULL."
+      "GROUP BY credit_category relies on the SELECT alias. While SQLite allows this, for portability you could repeat the CASE expression in GROUP BY.",
+      "The JOIN to credit_accounts_and_history (cah) is not used in SELECT/WHERE; if it’s only to enforce existence, keep it, otherwise remove it to avoid unnecessary row filtering and potential row multiplication if the relationship is not strictly 1:1.",
+      "If there can be multiple matching rows in downstream tables (e.g., history), COUNT(*) may overcount customers. Consider COUNT(DISTINCT cr.coreregistry) if you want unique customers."
     ]
   },
   "results": [
@@ -47,15 +47,15 @@
     }
   ],
   "row_count": 5,
-  "query_id": "e7dd45bb40a9409ba5084f1150d8b36a",
+  "query_id": "0a51eafdcd5444fc9e559eec163cdf4c",
   "page": 1,
   "page_size": 50,
   "total_pages": 1,
   "total_rows": 5,
   "has_next_page": false,
   "has_previous_page": false,
-  "notice": " Hinweis: Ambiguity: Unklar, welche „customer details“ genau ausgegeben werden sollen (es gibt viele mögliche Felder über mehrere Tabellen). Außerdem ist nicht eindeutig, ob „customers“ nach clientref (Kunde) oder nach coreregistry (Core-Record/Scoring-Event) gezählt/gelistet werden sollen, und ob pro Kunde mehrere Score-Records existieren können. Ohne diese Festlegungen ist keine sichere, korrekte Abfrage definierbar.. Klärungsfragen: Welche konkreten Kundendetails sollen je Kreditkategorie ausgegeben werden (z. B. clientref, agespan, clientseg, risklev, debincratio, credutil, decidestat, etc.)?, Soll die Analyse pro Kunde (clientref) oder pro Core-Record/Scoring-Record (coreregistry) erfolgen—und falls pro Kunde mehrere Records existieren: nur der neueste (z. B. nach scoredate/timemark) oder alle?",
-  "summary": "Die Auswertung klassifiziert Kunden nach Credit Score in fünf Kategorien und zeigt, dass die meisten in „Poor“ fallen (496 Kunden) mit einem durchschnittlichen Score von ca. 432,5. Deutlich weniger Kunden liegen in „Fair“ (160; Ø ca. 625,6) und „Good“ (128; Ø ca. 707,0), was auf eine starke Konzentration im niedrigen Score-Bereich hindeutet. In den bereitgestellten ersten Zeilen sind „Very Good“ und „Excellent“ nicht sichtbar; prüfen Sie diese Kategorien in den restlichen Ergebniszeilen, um das Bild zu vervollständigen.",
-  "explanation": "Returns a BSL-compliant credit classification summary: each credit score category (Poor/Fair/Good/Very Good/Excellent/Unknown) with the number of customers in that category and the average credit score. Uses the mandated customer join chain and groups strictly by the derived credit_category. [BSL compliance regeneration]",
+  "notice": " Hinweis: Ambiguity: Die Frage verlangt „customers' details“ je Kreditkategorie, aber es ist nicht spezifiziert, welche Detailfelder ausgegeben werden sollen (es gibt viele mögliche Attribute über mehrere Tabellen). Außerdem ist unklar, ob pro Kunde nur der aktuellste Datensatz (z.B. nach scoredate/timemark) oder alle historischen Core-Records berücksichtigt werden sollen. Ohne diese Festlegungen ist keine eindeutige, sichere SQL-Abfrage ableitbar.. Klärungsfragen: Welche konkreten Kundendetails sollen pro Kreditkategorie ausgegeben werden (z.B. clientref, appref, agespan, clientseg, risklev, debincratio, credutil, etc.)?, Sollen pro Kunde nur der aktuellste Score (z.B. max(scoredate) oder max(timemark)) verwendet werden oder alle vorhandenen Datensätze/Scorings in die Kategorisierung einfließen?",
+  "summary": "Die Auswertung gruppiert Kunden nach Kreditkategorie und zeigt, dass die größte Gruppe „Poor“ ist (496 Kunden) mit einem durchschnittlichen Score von ca. 432,46. Deutlich kleiner sind „Fair“ (160 Kunden, Ø ca. 625,57) und „Good“ (128 Kunden, Ø ca. 706,97); insgesamt wurden 5 Kategorien berechnet, wobei in den ersten Zeilen keine „Very Good“/„Excellent“ Werte sichtbar sind. Wenn du tatsächlich „Kundendetails je Kategorie“ brauchst, muss die Abfrage um Kunden-IDs/Attribute (z. B. coreregistry) erweitert und ggf. ohne Aggregation (COUNT/AVG) ausgegeben werden.",
+  "explanation": "Creates BSL-defined credit score categories from credit_and_compliance.credscore, then returns a compliant summary by category: number of customers in each category and the average credit score within that category. Uses the required full join chain to preserve customer-level integrity across the domain tables. [BSL compliance regeneration]",
   "error": null
 }

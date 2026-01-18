@@ -2,10 +2,11 @@
   "question": "Can you show me the top wealthy customers with their financial value? Including their IDs, total assets, total liabilities, the computed net worth value, and their ranking.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "Wesentliche Kriterien für eine korrekte SQL-Abfrage sind nicht festgelegt: (1) Was bedeutet „top wealthy“ genau (nach totassets oder nach networth)? (2) Wie viele Kunden sollen gezeigt werden (Top N) bzw. gibt es einen Schwellenwert? (3) Welche ID ist gemeint (coreregistry vs. clientref vs. appref)? (4) Wie soll das Ranking berechnet werden (nach networth oder totassets; Umgang mit NULL/negativen Werten/Ties)?",
+    "reason": "Wesentliche Kriterien sind nicht festgelegt: Was bedeutet „top wealthy“ (nach Net Worth, totassets, liqassets oder anderem) und wie viele Kunden sollen gezeigt werden. Außerdem ist „their IDs“ unklar, ob clientref (Kunde) oder coreregistry (Record) gemeint ist. Für „ranking“ ist ebenfalls nicht eindeutig, nach welcher Kennzahl sortiert werden soll (z.B. Net Worth absteigend).",
     "questions": [
-      "Nach welcher Kennzahl soll „top wealthy“ sortiert werden: networth (Vermögen) oder totassets (Gesamtvermögen) oder etwas anderes?",
-      "Wie viele Datensätze sollen ausgegeben werden (Top 10/Top 100) oder gibt es einen Mindestwert/Schwellenwert?"
+      "Was genau bedeutet „top wealthy“: Soll nach Net Worth (networth bzw. totassets - totliabs) oder nach Total Assets (totassets) gerankt werden?",
+      "Wie viele Kunden sollen angezeigt werden (z.B. Top 10/50/100) oder soll ein Schwellenwert verwendet werden?",
+      "Welche ID soll ausgegeben werden: clientref (Customer ID) aus core_record oder coreregistry (Record ID) bzw. expemplref/bankexpref?"
     ]
   },
   "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  ea.totassets AS total_assets,\n  ea.totliabs AS total_liabilities,\n  (ea.totassets - ea.totliabs) AS computed_net_worth,\n  DENSE_RANK() OVER (ORDER BY (ea.totassets - ea.totliabs) DESC) AS wealth_rank\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nORDER BY computed_net_worth DESC\nLIMIT 10",
@@ -14,9 +15,9 @@
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: Der JOIN auf bank_and_transactions, credit_and_compliance und credit_accounts_and_history ist für die ausgewählten Spalten nicht nötig. Wenn du nur Vermögen/Verbindlichkeiten/Net Worth und Ranking brauchst, kannst du diese JOINs entfernen, um Performance zu verbessern.",
-      "Optional: Falls es in den gejointen Tabellen (bt/cc/cah) mehrere Zeilen pro Schlüssel geben könnte, kann der JOIN die Zeilen vervielfachen und das Ranking verfälschen. In dem Fall vorher deduplizieren (z.B. per DISTINCT/CTE) oder nur die benötigten Tabellen joinen.",
-      "SQLite-Kompatibilität: Window Functions wie DENSE_RANK() werden erst ab SQLite 3.25+ unterstützt. Stelle sicher, dass deine SQLite-Version das unterstützt."
+      "SQLite: Window-Funktionen (DENSE_RANK() OVER ...) erfordern SQLite >= 3.25.0. Falls eine ältere Version genutzt wird, schlägt die Query fehl.",
+      "Der JOIN auf bank_and_transactions / credit_and_compliance / credit_accounts_and_history ist für die ausgewählten Spalten nicht notwendig und kann Duplikate erzeugen (1:n-Beziehungen). Wenn nur Vermögenswerte/Networth gerankt werden sollen, diese JOINs entfernen oder per DISTINCT/Grouping absichern.",
+      "ORDER BY computed_net_worth ist in SQLite als Alias i.d.R. ok; für maximale Kompatibilität kann stattdessen ORDER BY (ea.totassets - ea.totliabs) DESC verwendet werden."
     ]
   },
   "results": [
@@ -92,15 +93,15 @@
     }
   ],
   "row_count": 10,
-  "query_id": "095dee7980b345b1b75f94a34a8d0aea",
+  "query_id": "592ecc758d144cb6a08af8f43a8ac2b5",
   "page": 1,
   "page_size": 50,
   "total_pages": 1,
   "total_rows": 10,
   "has_next_page": false,
   "has_previous_page": false,
-  "notice": " Hinweis: Ambiguity: Wesentliche Kriterien für eine korrekte SQL-Abfrage sind nicht festgelegt: (1) Was bedeutet „top wealthy“ genau (nach totassets oder nach networth)? (2) Wie viele Kunden sollen gezeigt werden (Top N) bzw. gibt es einen Schwellenwert? (3) Welche ID ist gemeint (coreregistry vs. clientref vs. appref)? (4) Wie soll das Ranking berechnet werden (nach networth oder totassets; Umgang mit NULL/negativen Werten/Ties)?. Klärungsfragen: Nach welcher Kennzahl soll „top wealthy“ sortiert werden: networth (Vermögen) oder totassets (Gesamtvermögen) oder etwas anderes?, Wie viele Datensätze sollen ausgegeben werden (Top 10/Top 100) oder gibt es einen Mindestwert/Schwellenwert?",
-  "summary": "Die Abfrage liefert die Top-10 vermögendsten Kunden nach berechnetem Nettovermögen (Total Assets minus Total Liabilities) inklusive Ranking. An der Spitze steht CS239090 mit 1,966,126 Gesamtvermögen und 50,822 Verbindlichkeiten (Net Worth 1,915,304; Rang 1), gefolgt von CS363544 (Net Worth 1,900,606; Rang 2) und CS979721 (Net Worth 1,896,679; Rang 3). Insgesamt liegen die Verbindlichkeiten der Top-Kunden im Vergleich zu den Assets relativ niedrig, wodurch die Nettovermögen nahe an den Gesamtvermögen liegen.",
-  "explanation": "Lists the top 10 customers by computed net worth (total assets minus total liabilities), returning the CS-format customer_id, assets, liabilities, computed net worth, and a dense rank as their wealth ranking.",
+  "notice": " Hinweis: Ambiguity: Wesentliche Kriterien sind nicht festgelegt: Was bedeutet „top wealthy“ (nach Net Worth, totassets, liqassets oder anderem) und wie viele Kunden sollen gezeigt werden. Außerdem ist „their IDs“ unklar, ob clientref (Kunde) oder coreregistry (Record) gemeint ist. Für „ranking“ ist ebenfalls nicht eindeutig, nach welcher Kennzahl sortiert werden soll (z.B. Net Worth absteigend).. Klärungsfragen: Was genau bedeutet „top wealthy“: Soll nach Net Worth (networth bzw. totassets - totliabs) oder nach Total Assets (totassets) gerankt werden?, Wie viele Kunden sollen angezeigt werden (z.B. Top 10/50/100) oder soll ein Schwellenwert verwendet werden?, Welche ID soll ausgegeben werden: clientref (Customer ID) aus core_record oder coreregistry (Record ID) bzw. expemplref/bankexpref?",
+  "summary": "Die Abfrage liefert die Top-10 vermögendsten Kunden nach berechnetem Nettovermögen (Total Assets minus Total Liabilities) inklusive Ranking. An der Spitze steht CS239090 mit 1,966,126 Gesamtvermögen und 50,822 Verbindlichkeiten (Net Worth 1,915,304; Rang 1), gefolgt von CS363544 (Net Worth 1,900,606; Rang 2) und CS979721 (Net Worth 1,896,679; Rang 3). Insgesamt liegen die führenden Kunden sehr nah beieinander, wobei die hohen Nettovermögen primär durch sehr hohe Assets bei vergleichsweise niedrigen Verbindlichkeiten getrieben sind.",
+  "explanation": "Lists the top 10 wealthiest customers ranked by computed net worth (total assets minus total liabilities), returning the CS-format customer_id plus assets, liabilities, computed net worth, and rank. Uses the full required join chain to stay consistent with the customer entity model.",
   "error": null
 }
