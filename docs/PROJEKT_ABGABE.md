@@ -107,9 +107,10 @@ graph TB
     subgraph "Data Layer"
         KB[Knowledge Base]
         SCHEMA[Database Schema]
-        BSL_FILE[BSL Rules]
-        MEANINGS[Column Meanings]
-        CACHE[Cache Layer]
+      BSL_FILE[BSL Rules]
+      MEANINGS[Column Meanings]
+      CACHE[Cache Layer]
+      BSL_CACHE[BSL Cache (TTL 1h)]
     end
     
     subgraph "External Services"
@@ -125,6 +126,9 @@ graph TB
 ```
 
 ### 🔧 Detaillierte IT-Architektur
+
+#### BSL-Caching
+Seit Version X.1.0 wird das Business Semantic Layer (BSL) im Backend gecacht. Das BSL wird beim ersten Zugriff geladen und für 1 Stunde im Speicher gehalten (TTL 1h). Dadurch werden wiederholte Dateizugriffe vermieden und die Performance bei häufigen BSL-Abfragen deutlich verbessert. Änderungen an der BSL-Datei sind nach spätestens einer Stunde wirksam.
 
 ```mermaid
 graph TB

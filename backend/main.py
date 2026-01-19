@@ -245,8 +245,10 @@ async def query_database(request: QueryRequest):
         # Use cached schema/KB (Phase 1: Caching)
         schema = get_cached_schema(db_path)
         table_columns = db_manager.get_table_columns()
-        kb_text, meanings_text, bsl_text = load_context_files(selected_database, Config.DATA_DIR)
+        kb_text, meanings_text, _ = load_context_files(selected_database, Config.DATA_DIR)
         meanings_text = get_cached_meanings(selected_database, Config.DATA_DIR)
+        from utils.cache import get_cached_bsl
+        bsl_text = get_cached_bsl(selected_database, Config.DATA_DIR)
 
         print(f"✅ Schema geladen ({len(schema)} Zeichen)")
         print(f"✅ KB geladen ({len(kb_text)} Zeichen)")
