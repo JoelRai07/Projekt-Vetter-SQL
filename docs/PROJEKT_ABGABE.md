@@ -127,8 +127,6 @@ graph TB
 
 ### 🔧 Detaillierte IT-Architektur
 
-#### BSL-Caching
-Seit Version X.1.0 wird das Business Semantic Layer (BSL) im Backend gecacht. Das BSL wird beim ersten Zugriff geladen und für 1 Stunde im Speicher gehalten (TTL 1h). Dadurch werden wiederholte Dateizugriffe vermieden und die Performance bei häufigen BSL-Abfragen deutlich verbessert. Änderungen an der BSL-Datei sind nach spätestens einer Stunde wirksam.
 
 ```mermaid
 graph TB
@@ -276,7 +274,7 @@ backend/
 ├── database/
 │   └── manager.py          # DatabaseManager (SQLite-Zugriff, Paging)
 ├── utils/
-│   ├── cache.py            # Multi-Layer Caching (Schema, Meanings, Query, Session)
+│   ├── cache.py            # Multi-Layer Caching (Schema, Meanings, Query, Session, BSL)
 │   ├── sql_guard.py        # Sicherheits-Guards (Safety, Tables)
 │   ├── context_loader.py   # Lädt KB, Meanings, BSL
 │   └── query_optimizer.py  # Query Plan Analyse
@@ -996,6 +994,7 @@ Chosen option: **"Multi-Layer Caching"**, because es unterschiedliche TTL-Anford
 |-----------|-------|-----|-------|-------------|----------------|
 | **Schema Cache** | Datenbank-Schemas | Unlimitiert (LRU) | 32 DBs | `@lru_cache` | Datenbank-Pfad |
 | **Meanings Cache** | Domänenwissen | 1 Stunde | 32 Einträge | `TTLCache` | `{db_name}_meanings` |
+| **BSL Cache** | Business Semantic Layer | 1 Stunde | 32 Einträge | `TTLCache` | `{db_name}_bsl` |
 | **Query Cache** | Komplette Query-Ergebnisse | 5 Minuten | 100 Queries | `TTLCache` | MD5(`{question}_{database}`) |
 | **Session Cache** | Paging-Sessions | 1 Stunde | 200 Sessions | `TTLCache` | UUID (Session-ID) |
 
@@ -1015,6 +1014,7 @@ if cached_result and request.page == 1:
 # Wiederverwendung von gecachten Daten
 schema = get_cached_schema(db_path)  # LRU, permanent
 meanings_text = get_cached_meanings(selected_database, Config.DATA_DIR)  # 1h TTL
+bsl_text = get_cached_bsl(selected_database, Config.DATA_DIR)  # 1h TTL
 ```
 
 **Phase 3: Result-Caching (nach Pipeline)**
@@ -1031,13 +1031,14 @@ if request.page == 1:
 - **Skalierbarkeit**: Bessere Performance bei hoher Last
 - **Monitoring**: `/cache-status` Endpoint für Transparenz und Debugging
 - **User Experience**: Deutlich schnellere Antworten bei häufigen Fragen
+- **BSL-Performance**: BSL wird jetzt ebenfalls gecacht, was die Ladezeit bei häufigen BSL-Abfragen deutlich reduziert.
 
 #### Negative Consequences
 
 - **Speicherverbrauch**: Caches benötigen RAM (konfigurierbare Größen)
-- **Stale Data**: Mögliche veraltete Ergebnisse bei Datenänderungen
+- **Stale Data**: Mögliche veraltete Ergebnisse bei Daten- oder BSL-Änderungen (BSL-Cache wird nach 1h automatisch erneuert)
 - **Komplexität**: Zusätzliche Cache-Management-Logik
-- **Cache-Invalidation**: Manuelle Invalidierung bei Schema-Änderungen notwendig
+- **Cache-Invalidation**: Manuelle Invalidierung bei Schema- oder BSL-Änderungen notwendig (BSL-Cache kann durch Backend-Neustart oder nach Ablauf der TTL aktualisiert werden)
 
 #### Cache-Strategien im Detail
 
@@ -1050,6 +1051,11 @@ if request.page == 1:
 - Domänenwissen ändert sich gelegentlich → kurze TTL
 - Vermeidet wiederholtes File-Reading und JSON-Parsing
 - Balance zwischen Frische der Daten und Performance
+
+**BSL Cache (1 Stunde):**
+- BSL wird häufig benötigt, aber selten geändert → 1h TTL
+- Vermeidet wiederholtes File-Reading und reduziert Latenz bei BSL-Zugriffen
+- Änderungen an der BSL-Datei werden nach spätestens 1 Stunde übernommen (oder sofort nach Backend-Neustart)
 
 **Query Cache (5 Minuten):**
 - Ergebnisse ändern sich potenziell häufig → kurze TTL
