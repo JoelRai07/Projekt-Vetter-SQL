@@ -1,0 +1,259 @@
+<mxfile host="app.diagrams.net" modified="2026-01-20T10:00:00.000Z" agent="Claude AI" version="22.1.0" etag="text2sql-architektur" type="device">
+  <diagram name="IT-Architektur Text2SQL" id="arch-main">
+    <mxGraphModel dx="2000" dy="1500" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ==================== TITEL ==================== -->
+        <mxCell id="title" value="&lt;b&gt;IT-Architektur: Text2SQL System (BSL-first)&lt;/b&gt;&lt;br&gt;Version 9.0.0 | Januar 2026 | DHBW Stuttgart" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="500" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== FRONTEND LAYER ==================== -->
+        <mxCell id="frontend-group" value="Frontend Layer" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="340" height="280" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fe-react" value="React 19 Frontend" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="frontend-group">
+          <mxGeometry y="30" width="340" height="250" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fe-app" value="App.jsx (408 Zeilen)&#xa;├─ Chat Interface&#xa;├─ SQL Display + Copy&#xa;├─ Results Table&#xa;├─ Pagination Controls&#xa;└─ Theme Toggle (Dark/Light)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="fe-react">
+          <mxGeometry y="26" width="340" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fe-state" value="State Management&#xa;├─ useState (messages, question, isLoading)&#xa;├─ useRef (messageEndRef)&#xa;└─ useEffect (Auto-Scroll)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="fe-react">
+          <mxGeometry y="116" width="340" height="64" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fe-tools" value="Build &amp; Tools&#xa;├─ Vite 7.2.4 (Bundler)&#xa;├─ ESLint (Linting)&#xa;└─ Prettier (Formatting)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="fe-react">
+          <mxGeometry y="180" width="340" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== BACKEND LAYER ==================== -->
+        <mxCell id="backend-group" value="Backend Layer (Python 3.11+ / FastAPI)" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="420" y="80" width="760" height="560" as="geometry" />
+        </mxCell>
+
+        <!-- API Layer -->
+        <mxCell id="api-layer" value="API Layer (main.py, models.py, config.py)" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=24;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="backend-group">
+          <mxGeometry y="30" width="370" height="170" as="geometry" />
+        </mxCell>
+
+        <mxCell id="api-main" value="main.py (681 Zeilen) - FastAPI App&#xa;├─ POST /query (Haupt-Endpoint)&#xa;├─ GET /health, /cache-status&#xa;├─ Request Orchestrierung&#xa;├─ Parallel LLM Calls (asyncio.gather)&#xa;├─ Error Handling&#xa;└─ CORS Middleware" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="api-layer">
+          <mxGeometry y="24" width="370" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="api-models" value="models.py - Pydantic Models&#xa;├─ QueryRequest, QueryResponse&#xa;├─ AmbiguityResult, ValidationResult" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="api-layer">
+          <mxGeometry y="124" width="370" height="46" as="geometry" />
+        </mxCell>
+
+        <!-- LLM Layer -->
+        <mxCell id="llm-layer" value="LLM Layer (llm/)" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=24;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="backend-group">
+          <mxGeometry x="380" y="30" width="370" height="250" as="geometry" />
+        </mxCell>
+
+        <mxCell id="llm-gen" value="generator.py - OpenAIGenerator&#xa;├─ check_ambiguity()&#xa;├─ generate_sql() [BSL-first]&#xa;├─ validate_sql()&#xa;├─ summarize_results()&#xa;└─ generate_sql_with_correction()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="llm-layer">
+          <mxGeometry y="24" width="370" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="llm-compliance" value="Layer A: BSL-Compliance (rule-based)&#xa;├─ _is_property_leverage_question()&#xa;├─ _is_digital_engagement_cohort_question()&#xa;├─ _has_explicit_time_range()&#xa;├─ _bsl_compliance_instruction()&#xa;├─ _regenerate_with_bsl_compliance()&#xa;└─ _fix_union_order_by() [SQLite]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="llm-layer">
+          <mxGeometry y="114" width="370" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="llm-prompts" value="prompts.py - SystemPrompts&#xa;├─ AMBIGUITY_DETECTION&#xa;├─ SQL_GENERATION, SQL_VALIDATION&#xa;└─ RESULT_SUMMARY" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="llm-layer">
+          <mxGeometry y="214" width="370" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- Utils Layer -->
+        <mxCell id="utils-layer" value="Utils Layer (utils/)" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=24;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="backend-group">
+          <mxGeometry y="210" width="370" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="utils-cache" value="cache.py - Multi-Layer Caching&#xa;├─ get_cached_schema() [LRU, permanent]&#xa;├─ get_cached_meanings() [TTL 1h]&#xa;├─ get_cached_bsl() [TTL 1h]&#xa;├─ query_cache [TTL 5min, 100 entries]&#xa;├─ query_session_cache [TTL 1h, 200 entries]&#xa;└─ cache_query_result(), get_cached_query_result()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="utils-layer">
+          <mxGeometry y="24" width="370" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="utils-guard" value="sql_guard.py - Security&#xa;├─ enforce_safety() [nur SELECT/WITH]&#xa;└─ enforce_known_tables()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="utils-layer">
+          <mxGeometry y="124" width="370" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="utils-other" value="context_loader.py | query_optimizer.py" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="utils-layer">
+          <mxGeometry y="170" width="370" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Database Layer -->
+        <mxCell id="db-layer" value="Database Layer (database/)" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=24;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="backend-group">
+          <mxGeometry x="380" y="290" width="370" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="db-manager" value="manager.py - DatabaseManager&#xa;├─ get_schema_and_sample()&#xa;├─ get_table_columns()&#xa;├─ execute_query_with_paging()&#xa;└─ normalize_sql_for_paging()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="db-layer">
+          <mxGeometry y="24" width="370" height="76" as="geometry" />
+        </mxCell>
+
+        <mxCell id="db-sqlite" value="SQLite 3 | Uvicorn ASGI Server" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="db-layer">
+          <mxGeometry y="100" width="370" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Offline Tools -->
+        <mxCell id="offline-tools" value="Offline Tools" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=24;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="backend-group">
+          <mxGeometry y="420" width="370" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="bsl-builder" value="bsl_builder.py (501 Zeilen)&#xa;├─ Generiert credit_bsl.txt&#xa;├─ Liest credit_kb.jsonl&#xa;├─ Liest credit_column_meaning_base.json&#xa;├─ Extrahiert Schema aus credit.sqlite&#xa;└─ Erstellt Part A / Part B / Annex C" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="offline-tools">
+          <mxGeometry y="24" width="370" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="bsl-note" value="⚠️ Nicht Teil des Request-Flows (Build-Time)" style="text;strokeColor=none;fillColor=#fff2cc;align=center;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontStyle=2;" vertex="1" parent="offline-tools">
+          <mxGeometry y="114" width="370" height="16" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== DATA LAYER ==================== -->
+        <mxCell id="data-group" value="Data Layer" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="380" width="340" height="420" as="geometry" />
+        </mxCell>
+
+        <!-- SQLite Database -->
+        <mxCell id="sqlite-db" value="SQLite Database (credit.sqlite, 1.3 MB)" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=24;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="data-group">
+          <mxGeometry y="30" width="340" height="160" as="geometry" />
+        </mxCell>
+
+        <mxCell id="db-tables" value="Tabellen (FK-Kette):&#xa;1. core_record (PK: coreregistry)&#xa;2. employment_and_income&#xa;3. expenses_and_assets&#xa;4. bank_and_transactions [JSON]&#xa;5. credit_and_compliance&#xa;6. credit_accounts_and_history" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="sqlite-db">
+          <mxGeometry y="24" width="340" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="db-ids" value="⚠️ Dual-ID: coreregistry (CS) vs clientref (CU)" style="text;strokeColor=none;fillColor=#fff2cc;align=center;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontStyle=3;" vertex="1" parent="sqlite-db">
+          <mxGeometry y="124" width="340" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="db-template" value="credit_template.sqlite (Backup)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="sqlite-db">
+          <mxGeometry y="144" width="340" height="16" as="geometry" />
+        </mxCell>
+
+        <!-- Knowledge Files -->
+        <mxCell id="knowledge-files" value="Knowledge Files" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=24;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="data-group">
+          <mxGeometry y="200" width="340" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="kb-files" value="credit_kb.jsonl (30 KB)&#xa;├─ Business Terms &amp; Definitions&#xa;├─ Calculation Knowledge (DTI, CUR, LTV...)&#xa;└─ Value Illustrations" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="knowledge-files">
+          <mxGeometry y="24" width="340" height="56" as="geometry" />
+        </mxCell>
+
+        <mxCell id="meanings-file" value="credit_column_meaning_base.json (16 KB)&#xa;└─ 100+ Spaltendefinitionen" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="knowledge-files">
+          <mxGeometry y="80" width="340" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="bsl-file" value="credit_bsl.txt (24 KB) - BSL Rules" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="knowledge-files">
+          <mxGeometry y="110" width="340" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Config Files -->
+        <mxCell id="config-files" value="Konfiguration" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=24;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="data-group">
+          <mxGeometry y="340" width="340" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="config-env" value=".env (OPENAI_API_KEY, OPENAI_MODEL)&#xa;config.py (DATA_DIR, DEFAULT_DATABASE)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="config-files">
+          <mxGeometry y="24" width="340" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== EXTERNAL SERVICES ==================== -->
+        <mxCell id="external-group" value="External Services" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#f5f5f5;strokeColor=#666666;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1220" y="80" width="340" height="160" as="geometry" />
+        </mxCell>
+
+        <mxCell id="openai-api" value="OpenAI API" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=24;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="external-group">
+          <mxGeometry y="30" width="340" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="openai-model" value="GPT-5.2 (LLM)&#xa;├─ Ambiguity Detection&#xa;├─ SQL Generation (BSL-first)&#xa;├─ SQL Validation (Layer B)&#xa;├─ Result Summarization&#xa;└─ Self-Correction (bei Bedarf)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=11;fontFamily=Courier New;" vertex="1" parent="openai-api">
+          <mxGeometry y="24" width="340" height="86" as="geometry" />
+        </mxCell>
+
+        <mxCell id="openai-temp" value="temperature=0 (deterministisch)" style="text;strokeColor=none;fillColor=none;align=center;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontStyle=2;" vertex="1" parent="openai-api">
+          <mxGeometry y="110" width="340" height="10" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== CACHING ARCHITEKTUR ==================== -->
+        <mxCell id="cache-group" value="Multi-Layer Caching Architektur (ADR-007)" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#e6d0de;strokeColor=#996185;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1220" y="260" width="340" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cache-table" value="Cache           | TTL      | Größe  | Typ&#xa;─────────────────┼──────────┼────────┼──────────&#xa;Schema Cache     | ∞ (LRU)  | 32 DBs | @lru_cache&#xa;Meanings Cache   | 1 Stunde | 32     | TTLCache&#xa;BSL Cache        | 1 Stunde | 32     | TTLCache&#xa;Query Cache      | 5 Minuten| 100    | TTLCache&#xa;Session Cache    | 1 Stunde | 200    | TTLCache" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cache-group">
+          <mxGeometry y="30" width="340" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cache-benefit" value="Cache-Hit: &lt;100ms | Pipeline: 3-5 Sekunden" style="text;strokeColor=none;fillColor=#e6d0de;align=center;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontStyle=2;" vertex="1" parent="cache-group">
+          <mxGeometry y="140" width="340" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== VALIDIERUNG (3-EBENEN) ==================== -->
+        <mxCell id="validation-group" value="3-Ebenen Validierung (ADR-006)" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1220" y="460" width="340" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="validation-layers" value="Layer A (Rule-based, ~10ms)&#xa;├─ BSL-Compliance Check&#xa;├─ Auto-Repair (SQLite Dialekt)&#xa;└─ Heuristische Trigger&#xa;&#xa;Server Guards (~10ms)&#xa;├─ enforce_safety (nur SELECT)&#xa;└─ enforce_known_tables&#xa;&#xa;Layer B (LLM-based, ~1-2s)&#xa;├─ Semantische Validierung&#xa;└─ Self-Correction bei severity=high" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="validation-group">
+          <mxGeometry y="30" width="340" height="150" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== VERBINDUNGEN ==================== -->
+        <!-- Frontend -> Backend -->
+        <mxCell id="conn-fe-be" value="HTTP/REST&#xa;POST /query" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#6c8ebf;" edge="1" parent="1" source="fe-react" target="api-layer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Backend -> OpenAI -->
+        <mxCell id="conn-be-openai" value="OpenAI API&#xa;(mehrere Calls)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#9673a6;dashed=1;" edge="1" parent="1" source="llm-layer" target="openai-api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Backend -> Data Layer -->
+        <mxCell id="conn-be-data" value="File I/O" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#d79b00;" edge="1" parent="1" source="utils-layer" target="knowledge-files">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Database Manager -> SQLite -->
+        <mxCell id="conn-dbm-sqlite" value="SQLite" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#d79b00;" edge="1" parent="1" source="db-layer" target="sqlite-db">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="450" />
+              <mxPoint x="400" y="450" />
+              <mxPoint x="400" y="500" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- BSL Builder -> Data -->
+        <mxCell id="conn-bsl-data" value="generiert" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1;strokeColor=#d6b656;dashed=1;" edge="1" parent="1" source="offline-tools" target="knowledge-files">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="400" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ==================== LEGENDE ==================== -->
+        <mxCell id="legend" value="Legende" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=24;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="820" width="520" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-colors" value="Farben:  🔵 Frontend (#dae8fc)  |  🟢 Backend (#d5e8d4)  |  🟣 LLM (#e1d5e7)  |  🟠 Database/Data (#ffe6cc)  |  🔴 Knowledge (#f8cecc)  |  ⚪ External (#f5f5f5)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;" vertex="1" parent="legend">
+          <mxGeometry y="24" width="520" height="26" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-lines" value="Linien:  ─── Synchroner Datenfluss  |  - - - Asynchron/Optional  |  ─►  Richtung" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;" vertex="1" parent="legend">
+          <mxGeometry y="50" width="520" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-tech" value="Stack: React 19 + Vite 7 | Python 3.11 + FastAPI + Uvicorn | SQLite 3 | OpenAI GPT-5.2" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;" vertex="1" parent="legend">
+          <mxGeometry y="70" width="520" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-version" value="Version 9.0.0 | Erstellt: Januar 2026 | Team: 5 Studierende DHBW Stuttgart" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontStyle=2;" vertex="1" parent="legend">
+          <mxGeometry y="90" width="520" height="30" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

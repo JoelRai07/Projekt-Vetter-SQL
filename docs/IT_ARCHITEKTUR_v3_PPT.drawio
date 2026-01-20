@@ -1,0 +1,231 @@
+<mxfile host="app.diagrams.net" modified="2026-01-20T12:00:00.000Z" agent="Claude AI" version="22.1.0" etag="text2sql-arch-ppt" type="device">
+  <diagram name="IT-Architektur (PowerPoint)" id="arch-ppt">
+    <mxGraphModel dx="1280" dy="720" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1280" pageHeight="720" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ==================== TITEL ==================== -->
+        <mxCell id="title" value="Text2SQL System - IT-Architektur" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="390" y="20" width="500" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== USER/CLIENT ==================== -->
+        <mxCell id="user" value="👤 Benutzer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=14;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="300" width="120" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== FRONTEND ==================== -->
+        <mxCell id="frontend-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;opacity=50;" vertex="1" parent="1">
+          <mxGeometry x="200" y="80" width="180" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="frontend-label" value="Frontend" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontStyle=1;fontColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="245" y="90" width="90" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="react" value="React 19&#xa;Chat UI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="225" y="130" width="130" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fe-features" value="• Natürlichsprachliche Eingabe&#xa;• SQL-Anzeige&#xa;• Ergebnis-Tabelle&#xa;• Pagination" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="220" y="210" width="140" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="vite" value="Vite 7" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="225" y="320" width="130" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== BACKEND ==================== -->
+        <mxCell id="backend-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;opacity=50;" vertex="1" parent="1">
+          <mxGeometry x="420" y="80" width="440" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="backend-label" value="Backend (FastAPI + Python 3.11)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontStyle=1;fontColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="520" y="90" width="240" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- API -->
+        <mxCell id="api" value="REST API&#xa;POST /query" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="130" width="130" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Pipeline -->
+        <mxCell id="pipeline" value="Pipeline&#xa;Orchestrator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="205" width="130" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- LLM Generator -->
+        <mxCell id="llm-gen" value="LLM Generator&#xa;(BSL-first)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="590" y="130" width="120" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Validation -->
+        <mxCell id="validation" value="3-Ebenen&#xa;Validierung" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="590" y="205" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Cache -->
+        <mxCell id="cache" value="Multi-Layer&#xa;Cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="730" y="130" width="110" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- SQL Guard -->
+        <mxCell id="guard" value="SQL Guard&#xa;(Security)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="730" y="205" width="110" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Database Manager -->
+        <mxCell id="db-mgr" value="Database&#xa;Manager" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="440" y="280" width="130" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- BSL -->
+        <mxCell id="bsl" value="Business&#xa;Semantics Layer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="590" y="280" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Knowledge -->
+        <mxCell id="knowledge" value="Knowledge Base&#xa;+ Meanings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="730" y="280" width="110" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== DATABASE ==================== -->
+        <mxCell id="db-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;opacity=50;" vertex="1" parent="1">
+          <mxGeometry x="420" y="360" width="440" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="db-label" value="Data Layer" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;fontColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="435" y="365" width="80" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sqlite" value="SQLite&#xa;credit.sqlite" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="390" width="100" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="tables" value="6 Tabellen&#xa;(Credit Risk Domain)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="570" y="400" width="130" height="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="bsl-file" value="BSL Rules&#xa;(.txt)" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="720" y="395" width="80" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== EXTERNAL: OPENAI ==================== -->
+        <mxCell id="openai-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;opacity=50;" vertex="1" parent="1">
+          <mxGeometry x="900" y="80" width="160" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="openai-label" value="External Service" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;fontColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="920" y="90" width="120" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="openai" value="OpenAI API&#xa;GPT-5.2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="125" width="120" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="openai-features" value="• SQL-Generierung&#xa;• Validierung&#xa;• Summarization" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;align=left;spacingLeft=5;" vertex="1" parent="1">
+          <mxGeometry x="920" y="195" width="120" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== VERBINDUNGEN ==================== -->
+        <!-- User -> Frontend -->
+        <mxCell id="c1" value="Frage" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="user" target="react">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Frontend -> API -->
+        <mxCell id="c2" value="REST" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#6c8ebf;fontSize=11;" edge="1" parent="1" source="react" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- API -> Pipeline -->
+        <mxCell id="c3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#82b366;" edge="1" parent="1" source="api" target="pipeline">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Pipeline -> LLM Generator -->
+        <mxCell id="c4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#9673a6;" edge="1" parent="1" source="pipeline" target="llm-gen">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- LLM Generator -> OpenAI -->
+        <mxCell id="c5" value="LLM Calls" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#b85450;dashed=1;fontSize=10;" edge="1" parent="1" source="llm-gen" target="openai">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Pipeline -> DB Manager -->
+        <mxCell id="c6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#82b366;" edge="1" parent="1" source="pipeline" target="db-mgr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- DB Manager -> SQLite -->
+        <mxCell id="c7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#d79b00;" edge="1" parent="1" source="db-mgr" target="sqlite">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- LLM -> BSL -->
+        <mxCell id="c8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#9673a6;dashed=1;" edge="1" parent="1" source="llm-gen" target="bsl">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== LEGENDE ==================== -->
+        <mxCell id="legend" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="500" width="320" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-title" value="Legende" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="505" width="60" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="55" y="530" width="20" height="12" as="geometry" />
+        </mxCell>
+        <mxCell id="l1t" value="Frontend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="527" width="55" height="18" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l2" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="55" y="550" width="20" height="12" as="geometry" />
+        </mxCell>
+        <mxCell id="l2t" value="Backend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="547" width="55" height="18" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l3" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="55" y="570" width="20" height="12" as="geometry" />
+        </mxCell>
+        <mxCell id="l3t" value="LLM/BSL" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="567" width="55" height="18" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l4" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="150" y="530" width="20" height="12" as="geometry" />
+        </mxCell>
+        <mxCell id="l4t" value="Utils/Cache" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="175" y="527" width="65" height="18" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l5" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="150" y="550" width="20" height="12" as="geometry" />
+        </mxCell>
+        <mxCell id="l5t" value="Data Layer" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="175" y="547" width="65" height="18" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l6" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="150" y="570" width="20" height="12" as="geometry" />
+        </mxCell>
+        <mxCell id="l6t" value="External" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="175" y="567" width="55" height="18" as="geometry" />
+        </mxCell>
+
+        <!-- Key Features -->
+        <mxCell id="features" value="✓ BSL-first SQL-Generierung&#xa;✓ 3-Ebenen Validierung&#xa;✓ Multi-Layer Caching" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="250" y="530" width="100" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Version -->
+        <mxCell id="version" value="v9.0.0 | DHBW Stuttgart | Januar 2026" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontStyle=2;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="900" y="500" width="220" height="20" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

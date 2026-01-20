@@ -1,0 +1,455 @@
+<mxfile host="app.diagrams.net" modified="2026-01-20T12:00:00.000Z" agent="Claude AI" version="22.1.0" etag="text2sql-process-v2" type="device">
+  <diagram name="Text2SQL - Prozessablauf (Detailliert)" id="process-v2">
+    <mxGraphModel dx="1600" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ==================== TITEL ==================== -->
+        <mxCell id="title" value="Text2SQL - Prozessablauf (Detailliert)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="15" width="500" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== SWIMLANES ==================== -->
+        <!-- Frontend Swimlane -->
+        <mxCell id="lane-frontend" value="Frontend (Browser + React)" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;startSize=25;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="1520" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- External System Swimlane -->
+        <mxCell id="lane-external" value="External System (OpenAI API)" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;startSize=25;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="160" width="1520" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Backend Swimlane -->
+        <mxCell id="lane-backend" value="Backend (FastAPI + Python)" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;startSize=25;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="240" width="1520" height="420" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== PHASE HEADERS ==================== -->
+        <mxCell id="phase1-header" value="Phase 1: Initialisierung (Startup)" style="text;html=1;strokeColor=none;fillColor=#e6d0de;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="680" width="200" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="phase2-header" value="Phase 2: Vorverarbeitung" style="text;html=1;strokeColor=none;fillColor=#fff2cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="680" width="200" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="phase3-header" value="Phase 3: SQL-Generierung" style="text;html=1;strokeColor=none;fillColor=#e1d5e7;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="500" y="680" width="250" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="phase4-header" value="Phase 4: Validierung" style="text;html=1;strokeColor=none;fillColor=#d5e8d4;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="770" y="680" width="250" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="phase5-header" value="Phase 5: Ausführung &amp; Response" style="text;html=1;strokeColor=none;fillColor=#dae8fc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="680" width="250" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== FRONTEND ELEMENTE ==================== -->
+        <!-- Start -->
+        <mxCell id="start" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane-frontend">
+          <mxGeometry x="50" y="35" width="30" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- User Input -->
+        <mxCell id="user-input" value="Benutzer gibt&#xa;Frage ein" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="lane-frontend">
+          <mxGeometry x="100" y="25" width="100" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Send Request -->
+        <mxCell id="send-request" value="POST /query&#xa;senden" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="lane-frontend">
+          <mxGeometry x="220" y="30" width="90" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Display Results -->
+        <mxCell id="display-results" value="Ergebnisse&#xa;anzeigen" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="lane-frontend">
+          <mxGeometry x="1300" y="30" width="90" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Gateway: More Pages? -->
+        <mxCell id="gw-more" value="Weitere&#xa;Seite?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="lane-frontend">
+          <mxGeometry x="1410" y="20" width="60" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- End -->
+        <mxCell id="end" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;" vertex="1" parent="lane-frontend">
+          <mxGeometry x="1490" y="35" width="30" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== EXTERNAL SYSTEM ELEMENTE ==================== -->
+        <!-- OpenAI Call -->
+        <mxCell id="openai-call" value="GPT-5.2&#xa;LLM Calls" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=1;" vertex="1" parent="lane-external">
+          <mxGeometry x="580" y="20" width="100" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== BACKEND ELEMENTE ==================== -->
+        <!-- Phase 1: Request Receive -->
+        <mxCell id="receive-request" value="Request&#xa;empfangen" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6d0de;strokeColor=#996185;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="60" y="30" width="90" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Gateway: Query ID? -->
+        <mxCell id="gw-queryid" value="query_id&#xa;?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="lane-backend">
+          <mxGeometry x="170" y="25" width="60" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Load Session (Paging) -->
+        <mxCell id="load-session" value="Session&#xa;laden" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6d0de;strokeColor=#996185;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="170" y="90" width="70" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Phase 2: Cache Check -->
+        <mxCell id="cache-check" value="Cache&#xa;prüfen" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="260" y="30" width="80" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Gateway: Cache Hit? -->
+        <mxCell id="gw-cache" value="Cache&#xa;Hit?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="lane-backend">
+          <mxGeometry x="360" y="25" width="60" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Context Loading -->
+        <mxCell id="context-load" value="Context laden&#xa;(Schema, KB,&#xa;Meanings, BSL)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="360" y="90" width="100" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Phase 3: Ambiguity Check -->
+        <mxCell id="ambiguity" value="Ambiguity&#xa;Check" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="490" y="30" width="80" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- SQL Generation -->
+        <mxCell id="sql-gen" value="SQL&#xa;Generierung&#xa;(BSL-first)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;fontStyle=1;" vertex="1" parent="lane-backend">
+          <mxGeometry x="490" y="90" width="100" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Parallel Indicator -->
+        <mxCell id="parallel-box" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#9673a6;strokeWidth=2;dashed=1;" vertex="1" parent="lane-backend">
+          <mxGeometry x="480" y="20" width="120" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="parallel-label" value="parallel" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontStyle=2;fontColor=#9673a6;" vertex="1" parent="lane-backend">
+          <mxGeometry x="510" y="150" width="50" height="15" as="geometry" />
+        </mxCell>
+
+        <!-- Gateway: Confidence? -->
+        <mxCell id="gw-confidence" value="Conf.&#xa;&lt;0.4?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="lane-backend">
+          <mxGeometry x="620" y="85" width="60" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Self-Correction -->
+        <mxCell id="self-correct" value="Self-&#xa;Correction" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="620" y="165" width="70" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Phase 4: Layer A -->
+        <mxCell id="layer-a" value="Layer A&#xa;(BSL Compliance)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="710" y="30" width="100" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Server Guards -->
+        <mxCell id="guards" value="Server Guards&#xa;(SQL Guard)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="710" y="90" width="100" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Gateway: Guards OK? -->
+        <mxCell id="gw-guards" value="OK?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="lane-backend">
+          <mxGeometry x="830" y="85" width="50" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Auto Correct -->
+        <mxCell id="auto-correct" value="Auto-&#xa;korrektur" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="lane-backend">
+          <mxGeometry x="820" y="155" width="70" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Layer B Validation -->
+        <mxCell id="layer-b" value="Layer B&#xa;(LLM Validation)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="910" y="30" width="100" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Gateway: Severity? -->
+        <mxCell id="gw-severity" value="high?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="lane-backend">
+          <mxGeometry x="930" y="90" width="50" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Error Response -->
+        <mxCell id="error" value="Error" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="920" y="160" width="60" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Phase 5: Query Execute -->
+        <mxCell id="query-exec" value="Query&#xa;ausführen" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;fontStyle=1;" vertex="1" parent="lane-backend">
+          <mxGeometry x="1020" y="30" width="90" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Paging -->
+        <mxCell id="paging" value="Paging&#xa;anwenden" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="1020" y="90" width="90" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Result Summary -->
+        <mxCell id="summary" value="Result&#xa;Summary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="1130" y="55" width="80" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Session + Cache -->
+        <mxCell id="session-cache" value="Session &amp;&#xa;Cache speichern" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="1230" y="55" width="100" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Build Response -->
+        <mxCell id="build-response" value="Response&#xa;erstellen" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="lane-backend">
+          <mxGeometry x="1350" y="55" width="80" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== VERBINDUNGEN FRONTEND ==================== -->
+        <mxCell id="c-start" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-frontend" source="start" target="user-input">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-input-send" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-frontend" source="user-input" target="send-request">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-display-more" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-frontend" source="display-results" target="gw-more">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-more-end" value="Nein" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=8;" edge="1" parent="lane-frontend" source="gw-more" target="end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== VERBINDUNGEN BACKEND ==================== -->
+        <mxCell id="c-recv-qid" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="receive-request" target="gw-queryid">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-qid-session" value="Ja" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=8;" edge="1" parent="lane-backend" source="gw-queryid" target="load-session">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-qid-cache" value="Nein" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=8;" edge="1" parent="lane-backend" source="gw-queryid" target="cache-check">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-cache-gw" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="cache-check" target="gw-cache">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-cache-context" value="Nein" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=8;" edge="1" parent="lane-backend" source="gw-cache" target="context-load">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-context-ambig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="context-load" target="ambiguity">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="470" y="115" />
+              <mxPoint x="470" y="50" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c-context-sql" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="context-load" target="sql-gen">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-sql-conf" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="sql-gen" target="gw-confidence">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-conf-self" value="Ja" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=8;" edge="1" parent="lane-backend" source="gw-confidence" target="self-correct">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-conf-layera" value="Nein" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=8;" edge="1" parent="lane-backend" source="gw-confidence" target="layer-a">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="115" />
+              <mxPoint x="700" y="50" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c-self-layera" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;dashed=1;" edge="1" parent="lane-backend" source="self-correct" target="layer-a">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="185" />
+              <mxPoint x="700" y="50" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c-layera-guards" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="layer-a" target="guards">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-guards-gw" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="guards" target="gw-guards">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-gw-auto" value="Nein" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=8;" edge="1" parent="lane-backend" source="gw-guards" target="auto-correct">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-gw-layerb" value="Ja" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=8;" edge="1" parent="lane-backend" source="gw-guards" target="layer-b">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="900" y="110" />
+              <mxPoint x="900" y="50" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c-layerb-sev" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="layer-b" target="gw-severity">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-sev-error" value="Ja" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=8;" edge="1" parent="lane-backend" source="gw-severity" target="error">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-sev-exec" value="Nein" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;fontSize=8;" edge="1" parent="lane-backend" source="gw-severity" target="query-exec">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="115" />
+              <mxPoint x="1000" y="50" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c-exec-paging" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="query-exec" target="paging">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-paging-summary" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="paging" target="summary">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-summary-session" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="summary" target="session-cache">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c-session-build" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;" edge="1" parent="lane-backend" source="session-cache" target="build-response">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Cache Hit direct to Response -->
+        <mxCell id="c-cache-response" value="Ja" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;dashed=1;strokeColor=#996185;fontSize=8;" edge="1" parent="lane-backend" source="gw-cache" target="build-response">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="390" y="10" />
+              <mxPoint x="1390" y="10" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Session to Exec -->
+        <mxCell id="c-session-exec" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;dashed=1;strokeColor=#996185;" edge="1" parent="lane-backend" source="load-session" target="query-exec">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="205" y="150" />
+              <mxPoint x="1065" y="150" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ==================== CROSS-LANE CONNECTIONS ==================== -->
+        <!-- Frontend Send -> Backend Receive -->
+        <mxCell id="cross-fe-be" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;dashed=1;strokeColor=#666666;" edge="1" parent="1" source="send-request" target="receive-request">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Backend SQL Gen -> OpenAI -->
+        <mxCell id="cross-be-openai" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;dashed=1;strokeColor=#b85450;" edge="1" parent="1" source="sql-gen" target="openai-call">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Backend Build -> Frontend Display -->
+        <mxCell id="cross-be-fe" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;dashed=1;strokeColor=#666666;" edge="1" parent="1" source="build-response" target="display-results">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- More Pages Loop -->
+        <mxCell id="cross-more-send" value="Ja (mit query_id)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;dashed=1;strokeColor=#d6b656;fontSize=8;" edge="1" parent="1" source="gw-more" target="send-request">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1480" y="50" />
+              <mxPoint x="1480" y="50" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ==================== LEGENDE ==================== -->
+        <mxCell id="legend" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="720" width="1250" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-title" value="Legende:" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="55" y="725" width="70" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Legend Items Row 1 -->
+        <mxCell id="leg-start" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="55" y="750" width="15" height="15" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-start-text" value="Start" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="75" y="748" width="40" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg-end" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="125" y="750" width="15" height="15" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-end-text" value="Ende" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="145" y="748" width="40" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg-gw" value="" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="195" y="748" width="18" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-gw-text" value="Gateway" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="218" y="748" width="55" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg-task" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="285" y="750" width="25" height="15" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-task-text" value="Task/Activity" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="315" y="748" width="70" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg-error" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="395" y="750" width="25" height="15" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-error-text" value="Error/Exception" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="425" y="748" width="85" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Legend Items Row 2 -->
+        <mxCell id="leg-line" value="───" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="520" y="748" width="30" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-line-text" value="Sequenzfluss" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="550" y="748" width="75" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg-dashed" value="- - -" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="635" y="748" width="30" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-dashed-text" value="Nachrichtenfluss" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="665" y="748" width="90" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg-parallel" value="┆ ┆" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="770" y="748" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-parallel-text" value="Parallel Execution" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="795" y="748" width="100" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Swimlane Colors -->
+        <mxCell id="leg-fe" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="910" y="750" width="20" height="12" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-fe-text" value="Frontend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="935" y="748" width="55" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg-be" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="750" width="20" height="12" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-be-text" value="Backend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1025" y="748" width="50" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg-ext" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1085" y="750" width="20" height="12" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-ext-text" value="External" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="748" width="50" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Version -->
+        <mxCell id="version" value="Version 9.0.0 | Januar 2026 | DHBW Stuttgart" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="775" width="210" height="20" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
