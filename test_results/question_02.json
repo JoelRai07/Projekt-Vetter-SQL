@@ -2,187 +2,184 @@
   "question": "Please find all the customer IDs who are highly digital.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "„Highly digital“ ist kein konkretes Feld/Label im Schema. Es gibt zwar digitale Nutzungsindikatoren (chaninvdatablock.onlineuse, mobileuse, autopay, depostat sowie chanusescore), aber es ist nicht definiert, welche Kriterien/Schwellenwerte „hoch digital“ genau bedeuten. Außerdem ist unklar, welche ID ausgegeben werden soll (core_record.clientref vs. coreregistry) und ob alle Zeitpunkte oder ein bestimmter Stichtag/Zeitraum gelten soll.",
+    "reason": "„Highly digital“ ist nicht eindeutig definiert. Im Schema gibt es zwar digitale Nutzungsfelder (chaninvdatablock.onlineuse, chaninvdatablock.mobileuse, autopay, depostat) und im Domain-Wissen eine Definition für „Digital First Customer“, aber die Nutzerfrage sagt nicht, ob genau diese Definition verwendet werden soll oder ob ein anderes Kriterium/Schwellwert (z.B. nur onlineuse='High', nur mobileuse='High', beides, mit/ohne autopay) gemeint ist. Außerdem ist unklar, welche ID ausgegeben werden soll (core_record.clientref vs. coreregistry), da „customer ID“ im Schema als clientref geführt wird, aber die Join-Kette über coreregistry läuft.",
     "questions": [
-      "Wie soll „highly digital“ genau definiert werden (z.B. Digital First Customer: (onlineuse='High' ODER mobileuse='High') UND autopay='Yes', oder alternativ über chanusescore > bestimmter Schwelle)?",
-      "Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder coreregistry (Record-ID)?",
-      "Soll die Auswahl für alle Datensätze gelten oder nur für den neuesten Datensatz je Kunde bzw. für einen bestimmten scoredate/Zeitraum?"
+      "Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ gefiltert werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?",
+      "Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder core_record.coreregistry (Core Record ID)?"
     ]
   },
-  "generated_sql": "SELECT\n  cr.coreregistry AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
+  "generated_sql": "SELECT DISTINCT\n  cr.coreregistry AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Query is SELECT-only and uses valid SQLite syntax; no safety issues found.",
-      "JOIN chain follows the declared foreign keys: core_record→employment_and_income→expenses_and_assets→bank_and_transactions→credit_and_compliance→credit_accounts_and_history.",
-      "JSON extraction is from the correct column (bank_and_transactions.chaninvdatablock) and paths match the example keys (onlineuse, mobileuse, autopay).",
-      "Optional: If you want to avoid NULL JSON values affecting logic, wrap json_extract with COALESCE(...,'') in the WHERE clause."
+      "DISTINCT ist hier wahrscheinlich redundant, da die Join-Kette über PK/FK (1:1) läuft und pro coreregistry typischerweise nur eine Zeile entsteht; kann entfernt werden, falls keine Duplikate erwartet werden.",
+      "Optional: json_extract(...) kann NULL liefern, wenn der Key fehlt/JSON ungültig ist. Falls gewünscht, explizit absichern (z.B. COALESCE(json_extract(...),'') = 'High')."
     ]
   },
   "results": [
     {
-      "customer_id": "CS893515"
+      "customer_id": "CS100596"
     },
     {
-      "customer_id": "CS414493"
+      "customer_id": "CS101678"
     },
     {
-      "customer_id": "CS222072"
+      "customer_id": "CS104169"
     },
     {
-      "customer_id": "CS162913"
+      "customer_id": "CS108094"
     },
     {
-      "customer_id": "CS180245"
+      "customer_id": "CS115119"
     },
     {
-      "customer_id": "CS354471"
+      "customer_id": "CS117909"
     },
     {
-      "customer_id": "CS230095"
+      "customer_id": "CS118849"
     },
     {
-      "customer_id": "CS353632"
+      "customer_id": "CS119313"
     },
     {
-      "customer_id": "CS780190"
+      "customer_id": "CS127497"
     },
     {
-      "customer_id": "CS265659"
+      "customer_id": "CS127904"
     },
     {
-      "customer_id": "CS761056"
+      "customer_id": "CS128627"
     },
     {
-      "customer_id": "CS257152"
+      "customer_id": "CS135936"
     },
     {
-      "customer_id": "CS574552"
+      "customer_id": "CS138232"
     },
     {
-      "customer_id": "CS376857"
+      "customer_id": "CS141088"
     },
     {
-      "customer_id": "CS245365"
+      "customer_id": "CS141623"
     },
     {
-      "customer_id": "CS267231"
+      "customer_id": "CS143502"
     },
     {
-      "customer_id": "CS619972"
+      "customer_id": "CS145015"
     },
     {
-      "customer_id": "CS709733"
+      "customer_id": "CS147604"
+    },
+    {
+      "customer_id": "CS149186"
+    },
+    {
+      "customer_id": "CS154166"
     },
     {
       "customer_id": "CS155730"
     },
     {
-      "customer_id": "CS352403"
+      "customer_id": "CS156236"
     },
     {
-      "customer_id": "CS809921"
+      "customer_id": "CS162913"
     },
     {
-      "customer_id": "CS924243"
+      "customer_id": "CS163897"
     },
     {
-      "customer_id": "CS935716"
+      "customer_id": "CS164181"
     },
     {
-      "customer_id": "CS706475"
+      "customer_id": "CS170086"
     },
     {
-      "customer_id": "CS904949"
+      "customer_id": "CS170278"
     },
     {
-      "customer_id": "CS315671"
+      "customer_id": "CS171286"
     },
     {
-      "customer_id": "CS472691"
-    },
-    {
-      "customer_id": "CS696164"
-    },
-    {
-      "customer_id": "CS236543"
-    },
-    {
-      "customer_id": "CS213855"
-    },
-    {
-      "customer_id": "CS686880"
-    },
-    {
-      "customer_id": "CS691358"
-    },
-    {
-      "customer_id": "CS705250"
-    },
-    {
-      "customer_id": "CS539540"
-    },
-    {
-      "customer_id": "CS716787"
+      "customer_id": "CS171476"
     },
     {
       "customer_id": "CS173839"
     },
     {
-      "customer_id": "CS587130"
+      "customer_id": "CS180245"
     },
     {
-      "customer_id": "CS274630"
+      "customer_id": "CS181772"
     },
     {
-      "customer_id": "CS746373"
+      "customer_id": "CS182853"
     },
     {
-      "customer_id": "CS496064"
+      "customer_id": "CS185238"
     },
     {
-      "customer_id": "CS810145"
+      "customer_id": "CS185319"
     },
     {
-      "customer_id": "CS589894"
+      "customer_id": "CS190658"
     },
     {
-      "customer_id": "CS746510"
+      "customer_id": "CS191875"
     },
     {
-      "customer_id": "CS567745"
+      "customer_id": "CS195353"
     },
     {
-      "customer_id": "CS583843"
+      "customer_id": "CS196993"
     },
     {
-      "customer_id": "CS490415"
+      "customer_id": "CS197925"
     },
     {
-      "customer_id": "CS784376"
+      "customer_id": "CS203072"
     },
     {
-      "customer_id": "CS238264"
+      "customer_id": "CS211729"
     },
     {
-      "customer_id": "CS379786"
+      "customer_id": "CS213855"
     },
     {
-      "customer_id": "CS326527"
+      "customer_id": "CS215184"
+    },
+    {
+      "customer_id": "CS218315"
+    },
+    {
+      "customer_id": "CS218700"
+    },
+    {
+      "customer_id": "CS218961"
+    },
+    {
+      "customer_id": "CS220359"
+    },
+    {
+      "customer_id": "CS222072"
+    },
+    {
+      "customer_id": "CS230095"
     }
   ],
   "row_count": 50,
-  "query_id": "046d7f44122246709f76fe193b4722f6",
+  "query_id": "e55a8d4b14984b1ba2d1c2021f8b9b1a",
   "page": 1,
   "page_size": 50,
   "total_pages": 6,
   "total_rows": 285,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist kein konkretes Feld/Label im Schema. Es gibt zwar digitale Nutzungsindikatoren (chaninvdatablock.onlineuse, mobileuse, autopay, depostat sowie chanusescore), aber es ist nicht definiert, welche Kriterien/Schwellenwerte „hoch digital“ genau bedeuten. Außerdem ist unklar, welche ID ausgegeben werden soll (core_record.clientref vs. coreregistry) und ob alle Zeitpunkte oder ein bestimmter Stichtag/Zeitraum gelten soll.. Klärungsfragen: Wie soll „highly digital“ genau definiert werden (z.B. Digital First Customer: (onlineuse='High' ODER mobileuse='High') UND autopay='Yes', oder alternativ über chanusescore > bestimmter Schwelle)?, Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder coreregistry (Record-ID)?, Soll die Auswahl für alle Datensätze gelten oder nur für den neuesten Datensatz je Kunde bzw. für einen bestimmten scoredate/Zeitraum?",
-  "summary": "Die Abfrage identifiziert 285 Kunden-IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden u. a. die Kunden CS893515, CS414493 und CS222072 angezeigt. Insgesamt wurden 285 Treffer gefunden (50 pro Seite, aktuell Seite 1 von 6), was auf eine größere Gruppe stark digitaler Kunden im Datenbestand hindeutet.",
-  "explanation": "Returns all Customer IDs (CS format) for customers who meet the BSL 'Digital First Customer' definition (high online or mobile usage and autopay enabled), using the required full join chain to reach the digital-channel JSON field.",
+  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist nicht eindeutig definiert. Im Schema gibt es zwar digitale Nutzungsfelder (chaninvdatablock.onlineuse, chaninvdatablock.mobileuse, autopay, depostat) und im Domain-Wissen eine Definition für „Digital First Customer“, aber die Nutzerfrage sagt nicht, ob genau diese Definition verwendet werden soll oder ob ein anderes Kriterium/Schwellwert (z.B. nur onlineuse='High', nur mobileuse='High', beides, mit/ohne autopay) gemeint ist. Außerdem ist unklar, welche ID ausgegeben werden soll (core_record.clientref vs. coreregistry), da „customer ID“ im Schema als clientref geführt wird, aber die Join-Kette über coreregistry läuft.. Klärungsfragen: Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ gefiltert werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?, Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder core_record.coreregistry (Core Record ID)?",
+  "summary": "Die Abfrage identifiziert 285 eindeutige Customer IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden u. a. die Kunden CS100596, CS101678 und CS104169 angezeigt. Da aktuell nur Seite 1 von 6 vorliegt, wäre als nächster Schritt der Export bzw. das Abrufen aller Seiten sinnvoll, um die vollständige Liste der 285 IDs zu erhalten.",
+  "explanation": "Returns the (CS-format) customer IDs for customers who meet the BSL 'Digital First Customer' definition: high online or mobile usage and autopay enabled, using the required full join chain and qualified JSON extraction.",
   "error": null
 }

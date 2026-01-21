@@ -1,8 +1,8 @@
 {
   "total_questions": 10,
-  "successful": 10,
-  "failed": 0,
-  "elapsed_seconds": 318.93131256103516,
+  "successful": 9,
+  "failed": 1,
+  "elapsed_seconds": 300.81152296066284,
   "results": [
     {
       "question_num": 1,
@@ -11,23 +11,21 @@
         "question": "Can you show me the top wealthy customers with their financial value? Including their IDs, total assets, total liabilities, the computed net worth value, and their ranking.",
         "ambiguity_check": {
           "is_ambiguous": true,
-          "reason": "Begriffe und Kriterien sind nicht eindeutig genug für eine sichere SQL-Abfrage: „top wealthy“ benötigt eine klare Definition (nach Net Worth? totassets? liqassets?) und eine Anzahl/Schwelle. Außerdem ist „their IDs“ unklar (clientref, coreregistry, appref oder expemplref/bankexpref). Für „ranking“ ist unklar, ob nach Net Worth (computed oder gespeicherte Spalte), nach Assets oder nach einem anderen Maß sortiert werden soll und wie mit Ties umzugehen ist.",
+          "reason": "Wesentliche Parameter für eine sichere SQL-Abfrage fehlen: (1) „top wealthy“ ist nicht definiert (nach networth, totassets, liqassets oder anderem) und (2) „top“ benötigt eine konkrete Anzahl (Top N) oder ein Perzentil. Außerdem ist unklar, welche ID ausgegeben werden soll (coreregistry vs. clientref vs. appref), und ob die Rangliste global oder innerhalb einer Gruppe (z.B. clientseg) erfolgen soll. Ohne diese Festlegungen kann die Abfrage leicht falsche oder unerwartete Ergebnisse liefern.",
           "questions": [
-            "Wie definierst du „top wealthy“: nach (computed) Net Worth = totassets - totliabs, nach totassets, oder nach einem anderen Kriterium?",
-            "Wie viele Kunden sollen angezeigt werden (Top N) oder gibt es eine Mindestschwelle (z. B. Net Worth > X)?",
-            "Welche ID(s) sollen ausgegeben werden: core_record.coreregistry, core_record.clientref, core_record.appref oder die Referenzen expemplref/bankexpref?",
-            "Soll das Ranking strikt nach computed Net Worth erfolgen, und wie sollen Gleichstände behandelt werden (RANK vs DENSE_RANK vs ROW_NUMBER)?"
+            "Wie definierst du „top wealthy“: nach berechnetem Net Worth (totassets - totliabs), nach totassets, oder nach einem anderen Kriterium?",
+            "Wie viele Ergebnisse möchtest du (Top 10/50/100) oder soll es ein Perzentil sein (z.B. oberstes Quartil)?"
           ]
         },
-        "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  ea.totassets AS total_assets,\n  ea.totliabs AS total_liabilities,\n  (ea.totassets - ea.totliabs) AS computed_net_worth,\n  ROW_NUMBER() OVER (ORDER BY (ea.totassets - ea.totliabs) DESC) AS wealth_rank\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nORDER BY computed_net_worth DESC\nLIMIT 10",
+        "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  ea.totassets AS total_assets,\n  ea.totliabs AS total_liabilities,\n  (ea.totassets - ea.totliabs) AS computed_net_worth,\n  DENSE_RANK() OVER (ORDER BY (ea.totassets - ea.totliabs) DESC) AS wealth_rank\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nORDER BY computed_net_worth DESC\nLIMIT 10",
         "validation": {
           "is_valid": true,
           "errors": [],
           "severity": "low",
           "suggestions": [
-            "Optional: The final JOIN to credit_accounts_and_history (cah) is not used in SELECT/WHERE; if not needed, remove it to avoid unnecessary row filtering and potential duplicates.",
-            "Optional: If there can be multiple related rows in downstream tables, consider using DISTINCT or aggregating to ensure one row per customer_id before applying ROW_NUMBER().",
-            "Style: ORDER BY computed_net_worth DESC is fine in SQLite (alias allowed). For maximum portability, repeat the expression: ORDER BY (ea.totassets - ea.totliabs) DESC."
+            "Optional: The join to credit_accounts_and_history (cah) is not used in SELECT/WHERE; remove it (and possibly credit_and_compliance) if not needed to avoid unnecessary row filtering and performance cost.",
+            "Optional: If you want to include customers even when bank/credit data is missing, change the later JOINs (bt/cc/cah) to LEFT JOIN; current INNER JOINs will exclude such customers.",
+            "Style: Add a semicolon at the end of the statement."
           ]
         },
         "results": [
@@ -103,16 +101,16 @@
           }
         ],
         "row_count": 10,
-        "query_id": "3a0479fb4bc04ae1830c5a75f804497c",
+        "query_id": "2a66fd83d1514d12a59c04770b2e94c6",
         "page": 1,
         "page_size": 50,
         "total_pages": 1,
         "total_rows": 10,
         "has_next_page": false,
         "has_previous_page": false,
-        "notice": " Hinweis: Ambiguity: Begriffe und Kriterien sind nicht eindeutig genug für eine sichere SQL-Abfrage: „top wealthy“ benötigt eine klare Definition (nach Net Worth? totassets? liqassets?) und eine Anzahl/Schwelle. Außerdem ist „their IDs“ unklar (clientref, coreregistry, appref oder expemplref/bankexpref). Für „ranking“ ist unklar, ob nach Net Worth (computed oder gespeicherte Spalte), nach Assets oder nach einem anderen Maß sortiert werden soll und wie mit Ties umzugehen ist.. Klärungsfragen: Wie definierst du „top wealthy“: nach (computed) Net Worth = totassets - totliabs, nach totassets, oder nach einem anderen Kriterium?, Wie viele Kunden sollen angezeigt werden (Top N) oder gibt es eine Mindestschwelle (z. B. Net Worth > X)?, Welche ID(s) sollen ausgegeben werden: core_record.coreregistry, core_record.clientref, core_record.appref oder die Referenzen expemplref/bankexpref?, Soll das Ranking strikt nach computed Net Worth erfolgen, und wie sollen Gleichstände behandelt werden (RANK vs DENSE_RANK vs ROW_NUMBER)?",
-        "summary": "Die Abfrage liefert die Top-10 vermögendsten Kunden nach berechnetem Nettovermögen (Total Assets minus Total Liabilities) inklusive Ranking. An der Spitze steht CS239090 mit 1,966,126 Gesamtvermögen und 50,822 Verbindlichkeiten (Nettovermögen 1,915,304; Rang 1), gefolgt von CS363544 (Nettovermögen 1,900,606; Rang 2) und CS979721 (Nettovermögen 1,896,679; Rang 3). Insgesamt liegen die Top-Kunden sehr nah beieinander, da die Vermögenswerte um ~1,94–1,97 Mio. und die Verbindlichkeiten nur im Bereich ~42–51 Tsd. liegen.",
-        "explanation": "Lists the top 10 customers by computed net worth (total assets minus total liabilities), returning the CS-format customer_id, assets, liabilities, computed net worth, and a 1..N rank based on net worth descending. Uses the full required join chain to respect the customer-centric model.",
+        "notice": " Hinweis: Ambiguity: Wesentliche Parameter für eine sichere SQL-Abfrage fehlen: (1) „top wealthy“ ist nicht definiert (nach networth, totassets, liqassets oder anderem) und (2) „top“ benötigt eine konkrete Anzahl (Top N) oder ein Perzentil. Außerdem ist unklar, welche ID ausgegeben werden soll (coreregistry vs. clientref vs. appref), und ob die Rangliste global oder innerhalb einer Gruppe (z.B. clientseg) erfolgen soll. Ohne diese Festlegungen kann die Abfrage leicht falsche oder unerwartete Ergebnisse liefern.. Klärungsfragen: Wie definierst du „top wealthy“: nach berechnetem Net Worth (totassets - totliabs), nach totassets, oder nach einem anderen Kriterium?, Wie viele Ergebnisse möchtest du (Top 10/50/100) oder soll es ein Perzentil sein (z.B. oberstes Quartil)?",
+        "summary": "Die Abfrage liefert die Top-10 vermögendsten Kunden nach berechnetem Nettovermögen (Total Assets minus Total Liabilities) inklusive Ranking. An der Spitze steht CS239090 mit 1,966,126 Gesamtvermögen und 50,822 Verbindlichkeiten (Nettovermögen 1,915,304; Rang 1), gefolgt von CS363544 (Nettovermögen 1,900,606; Rang 2) und CS979721 (Nettovermögen 1,896,679; Rang 3). Insgesamt liegen die Top-Werte eng beieinander, wobei die Verbindlichkeiten im Vergleich zu den Vermögenswerten relativ gering ausfallen.",
+        "explanation": "Lists the top 10 wealthiest customers ranked by computed net worth (total assets minus total liabilities), returning the business customer ID (CS), assets, liabilities, computed net worth, and rank. Uses the full required join chain to stay consistent with the customer-centric model.",
         "error": null
       }
     },
@@ -123,188 +121,185 @@
         "question": "Please find all the customer IDs who are highly digital.",
         "ambiguity_check": {
           "is_ambiguous": true,
-          "reason": "„Highly digital“ ist kein konkretes Feld/Label im Schema. Es gibt zwar digitale Nutzungsindikatoren (chaninvdatablock.onlineuse, mobileuse, autopay, depostat sowie chanusescore), aber es ist nicht definiert, welche Kriterien/Schwellenwerte „hoch digital“ genau bedeuten. Außerdem ist unklar, welche ID ausgegeben werden soll (core_record.clientref vs. coreregistry) und ob alle Zeitpunkte oder ein bestimmter Stichtag/Zeitraum gelten soll.",
+          "reason": "„Highly digital“ ist nicht eindeutig definiert. Im Schema gibt es zwar digitale Nutzungsfelder (chaninvdatablock.onlineuse, chaninvdatablock.mobileuse, autopay, depostat) und im Domain-Wissen eine Definition für „Digital First Customer“, aber die Nutzerfrage sagt nicht, ob genau diese Definition verwendet werden soll oder ob ein anderes Kriterium/Schwellwert (z.B. nur onlineuse='High', nur mobileuse='High', beides, mit/ohne autopay) gemeint ist. Außerdem ist unklar, welche ID ausgegeben werden soll (core_record.clientref vs. coreregistry), da „customer ID“ im Schema als clientref geführt wird, aber die Join-Kette über coreregistry läuft.",
           "questions": [
-            "Wie soll „highly digital“ genau definiert werden (z.B. Digital First Customer: (onlineuse='High' ODER mobileuse='High') UND autopay='Yes', oder alternativ über chanusescore > bestimmter Schwelle)?",
-            "Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder coreregistry (Record-ID)?",
-            "Soll die Auswahl für alle Datensätze gelten oder nur für den neuesten Datensatz je Kunde bzw. für einen bestimmten scoredate/Zeitraum?"
+            "Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ gefiltert werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?",
+            "Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder core_record.coreregistry (Core Record ID)?"
           ]
         },
-        "generated_sql": "SELECT\n  cr.coreregistry AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
+        "generated_sql": "SELECT DISTINCT\n  cr.coreregistry AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
         "validation": {
           "is_valid": true,
           "errors": [],
           "severity": "low",
           "suggestions": [
-            "Query is SELECT-only and uses valid SQLite syntax; no safety issues found.",
-            "JOIN chain follows the declared foreign keys: core_record→employment_and_income→expenses_and_assets→bank_and_transactions→credit_and_compliance→credit_accounts_and_history.",
-            "JSON extraction is from the correct column (bank_and_transactions.chaninvdatablock) and paths match the example keys (onlineuse, mobileuse, autopay).",
-            "Optional: If you want to avoid NULL JSON values affecting logic, wrap json_extract with COALESCE(...,'') in the WHERE clause."
+            "DISTINCT ist hier wahrscheinlich redundant, da die Join-Kette über PK/FK (1:1) läuft und pro coreregistry typischerweise nur eine Zeile entsteht; kann entfernt werden, falls keine Duplikate erwartet werden.",
+            "Optional: json_extract(...) kann NULL liefern, wenn der Key fehlt/JSON ungültig ist. Falls gewünscht, explizit absichern (z.B. COALESCE(json_extract(...),'') = 'High')."
           ]
         },
         "results": [
           {
-            "customer_id": "CS893515"
+            "customer_id": "CS100596"
           },
           {
-            "customer_id": "CS414493"
+            "customer_id": "CS101678"
           },
           {
-            "customer_id": "CS222072"
+            "customer_id": "CS104169"
           },
           {
-            "customer_id": "CS162913"
+            "customer_id": "CS108094"
           },
           {
-            "customer_id": "CS180245"
+            "customer_id": "CS115119"
           },
           {
-            "customer_id": "CS354471"
+            "customer_id": "CS117909"
           },
           {
-            "customer_id": "CS230095"
+            "customer_id": "CS118849"
           },
           {
-            "customer_id": "CS353632"
+            "customer_id": "CS119313"
           },
           {
-            "customer_id": "CS780190"
+            "customer_id": "CS127497"
           },
           {
-            "customer_id": "CS265659"
+            "customer_id": "CS127904"
           },
           {
-            "customer_id": "CS761056"
+            "customer_id": "CS128627"
           },
           {
-            "customer_id": "CS257152"
+            "customer_id": "CS135936"
           },
           {
-            "customer_id": "CS574552"
+            "customer_id": "CS138232"
           },
           {
-            "customer_id": "CS376857"
+            "customer_id": "CS141088"
           },
           {
-            "customer_id": "CS245365"
+            "customer_id": "CS141623"
           },
           {
-            "customer_id": "CS267231"
+            "customer_id": "CS143502"
           },
           {
-            "customer_id": "CS619972"
+            "customer_id": "CS145015"
           },
           {
-            "customer_id": "CS709733"
+            "customer_id": "CS147604"
+          },
+          {
+            "customer_id": "CS149186"
+          },
+          {
+            "customer_id": "CS154166"
           },
           {
             "customer_id": "CS155730"
           },
           {
-            "customer_id": "CS352403"
+            "customer_id": "CS156236"
           },
           {
-            "customer_id": "CS809921"
+            "customer_id": "CS162913"
           },
           {
-            "customer_id": "CS924243"
+            "customer_id": "CS163897"
           },
           {
-            "customer_id": "CS935716"
+            "customer_id": "CS164181"
           },
           {
-            "customer_id": "CS706475"
+            "customer_id": "CS170086"
           },
           {
-            "customer_id": "CS904949"
+            "customer_id": "CS170278"
           },
           {
-            "customer_id": "CS315671"
+            "customer_id": "CS171286"
           },
           {
-            "customer_id": "CS472691"
-          },
-          {
-            "customer_id": "CS696164"
-          },
-          {
-            "customer_id": "CS236543"
-          },
-          {
-            "customer_id": "CS213855"
-          },
-          {
-            "customer_id": "CS686880"
-          },
-          {
-            "customer_id": "CS691358"
-          },
-          {
-            "customer_id": "CS705250"
-          },
-          {
-            "customer_id": "CS539540"
-          },
-          {
-            "customer_id": "CS716787"
+            "customer_id": "CS171476"
           },
           {
             "customer_id": "CS173839"
           },
           {
-            "customer_id": "CS587130"
+            "customer_id": "CS180245"
           },
           {
-            "customer_id": "CS274630"
+            "customer_id": "CS181772"
           },
           {
-            "customer_id": "CS746373"
+            "customer_id": "CS182853"
           },
           {
-            "customer_id": "CS496064"
+            "customer_id": "CS185238"
           },
           {
-            "customer_id": "CS810145"
+            "customer_id": "CS185319"
           },
           {
-            "customer_id": "CS589894"
+            "customer_id": "CS190658"
           },
           {
-            "customer_id": "CS746510"
+            "customer_id": "CS191875"
           },
           {
-            "customer_id": "CS567745"
+            "customer_id": "CS195353"
           },
           {
-            "customer_id": "CS583843"
+            "customer_id": "CS196993"
           },
           {
-            "customer_id": "CS490415"
+            "customer_id": "CS197925"
           },
           {
-            "customer_id": "CS784376"
+            "customer_id": "CS203072"
           },
           {
-            "customer_id": "CS238264"
+            "customer_id": "CS211729"
           },
           {
-            "customer_id": "CS379786"
+            "customer_id": "CS213855"
           },
           {
-            "customer_id": "CS326527"
+            "customer_id": "CS215184"
+          },
+          {
+            "customer_id": "CS218315"
+          },
+          {
+            "customer_id": "CS218700"
+          },
+          {
+            "customer_id": "CS218961"
+          },
+          {
+            "customer_id": "CS220359"
+          },
+          {
+            "customer_id": "CS222072"
+          },
+          {
+            "customer_id": "CS230095"
           }
         ],
         "row_count": 50,
-        "query_id": "046d7f44122246709f76fe193b4722f6",
+        "query_id": "e55a8d4b14984b1ba2d1c2021f8b9b1a",
         "page": 1,
         "page_size": 50,
         "total_pages": 6,
         "total_rows": 285,
         "has_next_page": true,
         "has_previous_page": false,
-        "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist kein konkretes Feld/Label im Schema. Es gibt zwar digitale Nutzungsindikatoren (chaninvdatablock.onlineuse, mobileuse, autopay, depostat sowie chanusescore), aber es ist nicht definiert, welche Kriterien/Schwellenwerte „hoch digital“ genau bedeuten. Außerdem ist unklar, welche ID ausgegeben werden soll (core_record.clientref vs. coreregistry) und ob alle Zeitpunkte oder ein bestimmter Stichtag/Zeitraum gelten soll.. Klärungsfragen: Wie soll „highly digital“ genau definiert werden (z.B. Digital First Customer: (onlineuse='High' ODER mobileuse='High') UND autopay='Yes', oder alternativ über chanusescore > bestimmter Schwelle)?, Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder coreregistry (Record-ID)?, Soll die Auswahl für alle Datensätze gelten oder nur für den neuesten Datensatz je Kunde bzw. für einen bestimmten scoredate/Zeitraum?",
-        "summary": "Die Abfrage identifiziert 285 Kunden-IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden u. a. die Kunden CS893515, CS414493 und CS222072 angezeigt. Insgesamt wurden 285 Treffer gefunden (50 pro Seite, aktuell Seite 1 von 6), was auf eine größere Gruppe stark digitaler Kunden im Datenbestand hindeutet.",
-        "explanation": "Returns all Customer IDs (CS format) for customers who meet the BSL 'Digital First Customer' definition (high online or mobile usage and autopay enabled), using the required full join chain to reach the digital-channel JSON field.",
+        "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist nicht eindeutig definiert. Im Schema gibt es zwar digitale Nutzungsfelder (chaninvdatablock.onlineuse, chaninvdatablock.mobileuse, autopay, depostat) und im Domain-Wissen eine Definition für „Digital First Customer“, aber die Nutzerfrage sagt nicht, ob genau diese Definition verwendet werden soll oder ob ein anderes Kriterium/Schwellwert (z.B. nur onlineuse='High', nur mobileuse='High', beides, mit/ohne autopay) gemeint ist. Außerdem ist unklar, welche ID ausgegeben werden soll (core_record.clientref vs. coreregistry), da „customer ID“ im Schema als clientref geführt wird, aber die Join-Kette über coreregistry läuft.. Klärungsfragen: Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ gefiltert werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?, Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder core_record.coreregistry (Core Record ID)?",
+        "summary": "Die Abfrage identifiziert 285 eindeutige Customer IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden u. a. die Kunden CS100596, CS101678 und CS104169 angezeigt. Da aktuell nur Seite 1 von 6 vorliegt, wäre als nächster Schritt der Export bzw. das Abrufen aller Seiten sinnvoll, um die vollständige Liste der 285 IDs zu erhalten.",
+        "explanation": "Returns the (CS-format) customer IDs for customers who meet the BSL 'Digital First Customer' definition: high online or mobile usage and autopay enabled, using the required full join chain and qualified JSON extraction.",
         "error": null
       }
     },
@@ -314,12 +309,9 @@
       "result": {
         "question": "Can you identify all customers focused on investments in our database? I need to see their IDs, investment amounts and total assets.",
         "ambiguity_check": {
-          "is_ambiguous": true,
-          "reason": "„Focused on investments“ ist nicht eindeutig definiert. Im Domain-Wissen existiert zwar ein Segment „Investment Focused“, das aber zusätzliche Kriterien (JSON-Felder in chaninvdatablock + investamt > 0.3 × totassets) voraussetzt. Die Frage nennt diese Kriterien nicht und könnte auch einfach „Kunden mit investamt > 0“ oder eine andere Schwelle meinen. Außerdem ist unklar, welche „ID“ ausgegeben werden soll (coreregistry vs. clientref vs. appref), da mehrere Identifikatoren im Schema existieren.",
-          "questions": [
-            "Soll „focused on investments“ nach der Domain-Regel „Investment Focused“ bestimmt werden (invcluster.investport in {Moderate, Aggressive} AND invcluster.investexp = Extensive AND investamt > 0.3 * totassets), oder nach einem anderen Kriterium (z. B. investamt > 0)?",
-            "Welche Kunden-ID soll ausgegeben werden: core_record.coreregistry, core_record.clientref oder core_record.appref?"
-          ]
+          "is_ambiguous": false,
+          "reason": "Die Frage ist mit dem gegebenen Schema und Domain-Wissen eindeutig beantwortbar: „Investment Focused“ ist als Regel definiert (invcluster.investport, invcluster.investexp, investamt > 0.3 × totassets). Die gewünschten Ausgabefelder sind vorhanden (ID über coreregistry/expemplref/bankexpref-Kette, investamt, totassets). Es fehlt keine essenzielle Zeit- oder Aggregationsangabe, da es sich um eine Identifikation von Kunden (Zeilen) handelt.",
+          "questions": []
         },
         "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  ea.investamt AS investment_amount,\n  ea.totassets AS total_assets\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE json_extract(bt.chaninvdatablock, '$.invcluster.investport') IN ('Moderate', 'Aggressive')\n  AND json_extract(bt.chaninvdatablock, '$.invcluster.investexp') = 'Extensive'\n  AND ea.investamt > 0.3 * ea.totassets",
         "validation": {
@@ -327,9 +319,9 @@
           "errors": [],
           "severity": "low",
           "suggestions": [
-            "JOINs zu credit_and_compliance und credit_accounts_and_history sind für die ausgewählten Spalten/Filter nicht erforderlich; entfernen, falls nicht gebraucht (Performance/Lesbarkeit).",
-            "Falls chaninvdatablock ungültiges JSON enthalten kann, optional absichern: WHERE json_valid(bt.chaninvdatablock) AND ...",
-            "Logik prüfen: Filter verlangt investport IN ('Moderate','Aggressive') UND investexp = 'Extensive'. In den Beispieldaten ist investexp z.B. 'Moderate'—das kann zu 0 Treffern führen (inhaltlich, nicht syntaktisch)."
+            "JOINs zu credit_and_compliance und credit_accounts_and_history sind für die ausgewählten Spalten/Filter nicht nötig; entfernen, wenn keine Felder daraus verwendet werden (Performance/Lesbarkeit).",
+            "json_extract liefert TEXT; falls Groß-/Kleinschreibung oder Whitespace variieren kann, erwäge Normalisierung (z.B. TRIM/LOWER) in den Filtern.",
+            "Prüfe fachlich, ob der Filter json_extract(bt.chaninvdatablock, '$.invcluster.investexp') = 'Extensive' überhaupt Werte trifft: Im Beispiel steht 'Moderate'. Das ist kein Syntaxfehler, kann aber zu 0 Ergebnissen führen."
           ]
         },
         "results": [
@@ -585,16 +577,16 @@
           }
         ],
         "row_count": 50,
-        "query_id": "17452404206c4df7afc36e1f543b09f6",
+        "query_id": "ab8a4292377b426195ebbf0a03a4c930",
         "page": 1,
         "page_size": 50,
         "total_pages": 2,
         "total_rows": 95,
         "has_next_page": true,
         "has_previous_page": false,
-        "notice": "Seite 1 von 2 (50 von 95 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Focused on investments“ ist nicht eindeutig definiert. Im Domain-Wissen existiert zwar ein Segment „Investment Focused“, das aber zusätzliche Kriterien (JSON-Felder in chaninvdatablock + investamt > 0.3 × totassets) voraussetzt. Die Frage nennt diese Kriterien nicht und könnte auch einfach „Kunden mit investamt > 0“ oder eine andere Schwelle meinen. Außerdem ist unklar, welche „ID“ ausgegeben werden soll (coreregistry vs. clientref vs. appref), da mehrere Identifikatoren im Schema existieren.. Klärungsfragen: Soll „focused on investments“ nach der Domain-Regel „Investment Focused“ bestimmt werden (invcluster.investport in {Moderate, Aggressive} AND invcluster.investexp = Extensive AND investamt > 0.3 * totassets), oder nach einem anderen Kriterium (z. B. investamt > 0)?, Welche Kunden-ID soll ausgegeben werden: core_record.coreregistry, core_record.clientref oder core_record.appref?",
-        "summary": "Die Abfrage identifiziert 95 Kunden mit „Moderate“ oder „Aggressive“ Investmentprofil und „Extensive“ Investment-Erfahrung, deren Investmentbetrag zudem über 30% der Gesamtassets liegt; auf Seite 1 werden 50 Treffer angezeigt. Auffällig sind u.a. CS450025 mit 795.900 Investmentbetrag bei 194.996 Gesamtassets (sehr hoher Investmentanteil), CS354471 mit 708.061 bei 934.678 sowie CS956134 mit 462.864 bei 1.073.011. Für eine vollständige Liste aller betroffenen Kunden-IDs und Werte sollten die weiteren Ergebnisseiten (Seite 2) ebenfalls abgerufen werden.",
-        "explanation": "Returns all Investment Focused customers (per BSL definition) and lists their Customer IDs (CS), investment amount, and total assets. Investment focus is determined using investment style/experience from the channel+investment JSON block and the threshold investamt > 30% of total assets.",
+        "notice": "Seite 1 von 2 (50 von 95 Zeilen). Weitere Seiten verfügbar. ",
+        "summary": "Die Abfrage identifiziert 95 Kunden mit „Moderate“ oder „Aggressive“ Investment-Portfolio und „Extensive“ Investment-Erfahrung, deren Investmentbetrag zudem über 30% der Gesamtassets liegt; auf Seite 1 werden 50 von 95 Treffern angezeigt. In den ersten Ergebnissen fallen u.a. CS450025 (Investment 795.900 bei Total Assets 194.996), CS354471 (708.061 bei 934.678) und CS956134 (462.864 bei 1.073.011) auf, wobei CS450025 besonders heraussticht, da der Investmentbetrag die ausgewiesenen Gesamtassets deutlich übersteigt. Als nächster Schritt wäre es sinnvoll, die Datenqualität bzw. Definition von „totassets“ zu prüfen (z.B. ob unterschiedliche Stichtage/Währungen vorliegen) und anschließend die zweite Ergebnisseite zu laden, um alle 95 Kunden-IDs zu erfassen.",
+        "explanation": "Lists every customer who meets the BSL 'Investment Focused' definition, returning the CS-format customer_id (core_record.coreregistry) along with their investment amount (expenses_and_assets.investamt) and total assets (expenses_and_assets.totassets).",
         "error": null
       }
     },
@@ -605,27 +597,28 @@
         "question": "Analyze customer credit scores by credit classification. Show the credit category, and the customers' details for each category.",
         "ambiguity_check": {
           "is_ambiguous": true,
-          "reason": "Die Frage verlangt „customers' details“ je Credit-Score-Kategorie, aber es ist nicht spezifiziert, welche Kundendetails (welche Spalten) ausgegeben werden sollen. Außerdem ist unklar, ob die Analyse eine Aggregation (z. B. Anzahl/Ø-Score je Kategorie) oder eine reine Auflistung aller Kunden pro Kategorie (potenziell sehr viele Zeilen) sein soll. Optional ist auch nicht definiert, ob ein Zeitraum/aktueller Stand gefiltert werden soll, falls mehrere core_record-Einträge pro Kunde existieren könnten.",
+          "reason": "Unklar ist, welche „customers' details“ genau ausgegeben werden sollen (welche Spalten/Attribute, aus welcher Tabelle bzw. über welche Joins). Außerdem ist nicht spezifiziert, ob pro Kategorie alle Kunden gelistet oder die Scores nur aggregiert (z. B. Anzahl, Durchschnitt) „analysiert“ werden sollen. Es fehlt auch die eindeutige Kundenkennung (clientref vs. coreregistry) für die Ausgabe.",
           "questions": [
-            "Welche konkreten „customer details“ sollen pro Kategorie ausgegeben werden (z. B. clientref, appref, scoredate, risklev, decidestat, demografische Felder etc.)?",
-            "Soll das Ergebnis aggregiert pro Kategorie sein (z. B. Anzahl Kunden, Durchschnitt credscore) oder eine vollständige Kundenliste pro Kategorie (eine Zeile pro Kunde/Record)?"
+            "Welche konkreten Kundendetails sollen pro Credit-Category ausgegeben werden (z. B. clientref, coreregistry, agespan, clientseg, risklev, decidestat, etc.)?",
+            "Soll die Ausgabe alle einzelnen Kunden je Kategorie listen, oder eine Analyse als Aggregation je Kategorie (z. B. Anzahl Kunden, Durchschnitt/Median credscore, Min/Max)?"
           ]
         },
-        "generated_sql": "SELECT\n  CASE\n    WHEN cc.credscore BETWEEN 300 AND 579 THEN 'Poor'\n    WHEN cc.credscore BETWEEN 580 AND 669 THEN 'Fair'\n    WHEN cc.credscore BETWEEN 670 AND 739 THEN 'Good'\n    WHEN cc.credscore BETWEEN 740 AND 799 THEN 'Very Good'\n    WHEN cc.credscore BETWEEN 800 AND 850 THEN 'Excellent'\n    ELSE 'Unknown'\n  END AS credit_category,\n  COUNT(*) AS customer_count,\n  AVG(cc.credscore) AS average_credscore\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nGROUP BY\n  credit_category\nORDER BY\n  credit_category",
+        "generated_sql": "SELECT\n  CASE\n    WHEN cc.credscore BETWEEN 300 AND 579 THEN 'Poor'\n    WHEN cc.credscore BETWEEN 580 AND 669 THEN 'Fair'\n    WHEN cc.credscore BETWEEN 670 AND 739 THEN 'Good'\n    WHEN cc.credscore BETWEEN 740 AND 799 THEN 'Very Good'\n    WHEN cc.credscore BETWEEN 800 AND 850 THEN 'Excellent'\n    ELSE 'Unknown'\n  END AS credit_category,\n  COUNT(*) AS customer_count,\n  AVG(cc.credscore) AS average_credscore\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nGROUP BY\n  credit_category\nORDER BY\n  CASE credit_category\n    WHEN 'Poor' THEN 1\n    WHEN 'Fair' THEN 2\n    WHEN 'Good' THEN 3\n    WHEN 'Very Good' THEN 4\n    WHEN 'Excellent' THEN 5\n    ELSE 6\n  END",
         "validation": {
           "is_valid": true,
           "errors": [],
           "severity": "low",
           "suggestions": [
-            "Optional: GROUP BY uses the SELECT alias 'credit_category'. This works in SQLite, but for portability you could repeat the CASE expression in GROUP BY.",
-            "Optional: The JOIN to credit_accounts_and_history (cah) is not used in SELECT/WHERE; if not needed, remove it to avoid unintended row multiplication and to improve performance."
+            "Optional: GROUP BY uses the alias 'credit_category'. This works in SQLite, but for portability you could repeat the full CASE expression in GROUP BY.",
+            "Optional: The JOIN to credit_accounts_and_history (cah) is not used in SELECT/WHERE; if not needed, remove it to avoid changing counts due to 1:N relationships and to improve performance.",
+            "Optional: If you want to include customers without downstream records (e.g., missing credit history), consider LEFT JOINs instead of JOINs; current INNER JOINs will exclude such customers."
           ]
         },
         "results": [
           {
-            "credit_category": "Excellent",
-            "customer_count": 102,
-            "average_credscore": 826.9019607843137
+            "credit_category": "Poor",
+            "customer_count": 496,
+            "average_credscore": 432.45766129032256
           },
           {
             "credit_category": "Fair",
@@ -638,27 +631,27 @@
             "average_credscore": 706.96875
           },
           {
-            "credit_category": "Poor",
-            "customer_count": 496,
-            "average_credscore": 432.45766129032256
-          },
-          {
             "credit_category": "Very Good",
             "customer_count": 114,
             "average_credscore": 767.5087719298245
+          },
+          {
+            "credit_category": "Excellent",
+            "customer_count": 102,
+            "average_credscore": 826.9019607843137
           }
         ],
         "row_count": 5,
-        "query_id": "4decf6a050fb49248cf7646167817445",
+        "query_id": "a957dea2a7384d7a87a3d7fcdaebf0f5",
         "page": 1,
         "page_size": 50,
         "total_pages": 1,
         "total_rows": 5,
         "has_next_page": false,
         "has_previous_page": false,
-        "notice": " Hinweis: Ambiguity: Die Frage verlangt „customers' details“ je Credit-Score-Kategorie, aber es ist nicht spezifiziert, welche Kundendetails (welche Spalten) ausgegeben werden sollen. Außerdem ist unklar, ob die Analyse eine Aggregation (z. B. Anzahl/Ø-Score je Kategorie) oder eine reine Auflistung aller Kunden pro Kategorie (potenziell sehr viele Zeilen) sein soll. Optional ist auch nicht definiert, ob ein Zeitraum/aktueller Stand gefiltert werden soll, falls mehrere core_record-Einträge pro Kunde existieren könnten.. Klärungsfragen: Welche konkreten „customer details“ sollen pro Kategorie ausgegeben werden (z. B. clientref, appref, scoredate, risklev, decidestat, demografische Felder etc.)?, Soll das Ergebnis aggregiert pro Kategorie sein (z. B. Anzahl Kunden, Durchschnitt credscore) oder eine vollständige Kundenliste pro Kategorie (eine Zeile pro Kunde/Record)?",
-        "summary": "Die Auswertung gruppiert Kunden nach Kreditkategorie und zeigt, dass „Fair“ mit 160 Kunden die größte Gruppe ist (Ø-Score 625,57), gefolgt von „Good“ mit 128 Kunden (Ø-Score 706,97) und „Excellent“ mit 102 Kunden (Ø-Score 826,90). Insgesamt wurden 5 Kategorien zurückgegeben; in den gezeigten Top-Zeilen liegen die Durchschnittswerte klar innerhalb der jeweiligen Score-Bänder, was auf eine konsistente Klassifizierung hindeutet. Wenn zusätzlich „Kundendetails je Kategorie“ benötigt werden, müsste die Abfrage statt Aggregation (COUNT/AVG) auch Kunden-IDs/Attribute selektieren oder eine Detail-Ansicht pro Kategorie ergänzen.",
-        "explanation": "Classifies customers into standard credit score categories and returns a summary by category: number of customers and average credit score per category, using the full mandated join chain. [BSL compliance regeneration]",
+        "notice": " Hinweis: Ambiguity: Unklar ist, welche „customers' details“ genau ausgegeben werden sollen (welche Spalten/Attribute, aus welcher Tabelle bzw. über welche Joins). Außerdem ist nicht spezifiziert, ob pro Kategorie alle Kunden gelistet oder die Scores nur aggregiert (z. B. Anzahl, Durchschnitt) „analysiert“ werden sollen. Es fehlt auch die eindeutige Kundenkennung (clientref vs. coreregistry) für die Ausgabe.. Klärungsfragen: Welche konkreten Kundendetails sollen pro Credit-Category ausgegeben werden (z. B. clientref, coreregistry, agespan, clientseg, risklev, decidestat, etc.)?, Soll die Ausgabe alle einzelnen Kunden je Kategorie listen, oder eine Analyse als Aggregation je Kategorie (z. B. Anzahl Kunden, Durchschnitt/Median credscore, Min/Max)?",
+        "summary": "Die Auswertung gruppiert Kunden nach Kreditkategorie und zeigt, dass die größte Gruppe „Poor“ ist (496 Kunden) mit einem durchschnittlichen Score von ca. 432,46. Deutlich kleiner sind „Fair“ (160 Kunden; Ø ca. 625,57) und „Good“ (128 Kunden; Ø ca. 706,97); insgesamt wurden 5 Kategorien zurückgegeben, wobei in den ersten Zeilen vor allem die starke Konzentration im niedrigen Score-Bereich auffällt. Wenn zusätzlich „customers’ details“ je Kategorie benötigt werden, müsste die Abfrage statt Aggregation (COUNT/AVG) auch Kunden-IDs/Attribute selektieren und entsprechend gruppieren/auflisten.",
+        "explanation": "Classifies customers into standard credit score bands (credit_category) and returns a summary by category: number of customers and average credit score in each band. [BSL compliance regeneration]",
         "error": null
       }
     },
@@ -669,7 +662,7 @@
         "question": "To analyze customer property leverage, please show the customer ID, property value, mortgage balance, and the calculated ratio.",
         "ambiguity_check": {
           "is_ambiguous": false,
-          "reason": "Die Anfrage ist ausreichend präzise: „customer ID“ kann über core_record.clientref geliefert werden; „property value“ und „mortgage balance“ sind in expenses_and_assets.propfinancialdata (JSONB) enthalten; das „calculated ratio“ ist durch das Domain-Wissen als LTV (mortbalance/propvalue) eindeutig definiert. Es ist keine zusätzliche Zeitspanne, Aggregation oder Schwelle erforderlich, um eine korrekte SQL-Abfrage zu formulieren.",
+          "reason": "Die Anfrage ist eindeutig: Sie verlangt pro Kunde (customer ID) den Immobilienwert (propfinancialdata.propvalue), den Hypothekensaldo (propfinancialdata.mortgagebits.mortbalance) und das daraus berechnete Leverage-Verhältnis (LTV = mortbalance/propvalue). Diese Felder sind im Schema/Domain-Wissen vorhanden und über die FK-Kette bis zur core_record.clientref verknüpfbar. Ein Zeitfilter oder weitere Aggregation wird nicht verlangt.",
           "questions": []
         },
         "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_value,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) AS mortgage_balance,\n  CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL)\n    / CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) AS property_leverage_ratio\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) IS NOT NULL\n  AND CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) <> 0\n  AND CAST(json_extract(ea.propfinancialdata, '$.mortgagebits.mortbalance') AS REAL) IS NOT NULL\nORDER BY property_leverage_ratio DESC",
@@ -678,9 +671,9 @@
           "errors": [],
           "severity": "low",
           "suggestions": [
-            "Division-by-zero-Schutz ergänzen: AND CAST(json_extract(ea.propfinancialdata, '$.propvalue') AS REAL) > 0, damit property_leverage_ratio nicht NULL/Inf wird (aktuell wird nur <> 0 geprüft).",
-            "Optional: mortgage_balance ebenfalls auf <> 0 prüfen, falls 0-Werte ausgeschlossen werden sollen.",
-            "Performance/Lesbarkeit: json_extract/Casts mehrfach verwendet – in SQLite ggf. per CTE/Subquery einmalig extrahieren (propvalue, mortbalance) und dann darauf filtern/berechnen."
+            "Division-by-zero ist bereits für propvalue abgefangen; optional zusätzlich mortgage_balance >= 0 filtern, falls negative Werte ausgeschlossen werden sollen.",
+            "Optional: json_valid(ea.propfinancialdata) in WHERE ergänzen, um fehlerhafte JSON-Datensätze auszuschließen.",
+            "Optional: property_leverage_ratio als NULL behandeln, wenn propvalue oder mortbalance nicht numerisch ist (z.B. via NULLIF(CAST(...),0) und/oder CASE), um unerwartete CAST-Ergebnisse zu vermeiden."
           ]
         },
         "results": [
@@ -986,7 +979,7 @@
           }
         ],
         "row_count": 50,
-        "query_id": "e57624259d9447af95e1d7ee51bd9d8e",
+        "query_id": "675186d0cd2e4bd8a4ac388ac2e9ee57",
         "page": 1,
         "page_size": 50,
         "total_pages": 20,
@@ -994,8 +987,8 @@
         "has_next_page": true,
         "has_previous_page": false,
         "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar. ",
-        "summary": "Die Abfrage liefert 1.000 Kunden mit vorhandenen Immobilienwerten und Hypothekensalden (hier Seite 1 mit 50 Zeilen) und sortiert nach dem höchsten Beleihungsgrad (mortgage_balance/property_value). Auffällig sind extrem hohe Leverage-Ratios bei CS108475 (Property Value 1.018, Mortgage 1.276.018, Ratio ~1253,46) und CS232079 (389 vs. 433.348, Ratio ~1114,01), während CS138931 mit 3.029 vs. 560.342 bereits deutlich niedriger, aber immer noch sehr hoch liegt (Ratio ~184,99). Diese Spitzenwerte deuten entweder auf stark überhebelte Fälle oder mögliche Daten-/Einheitenprobleme bei property_value hin und sollten für Plausibilitätschecks priorisiert werden.",
-        "explanation": "Returns one row per customer with property data, extracting property value and mortgage balance from expenses_and_assets.propfinancialdata, computing leverage as mortgage_balance/property_value, filtering out missing or zero property values (and missing mortgage balances), and ranking customers by highest leverage ratio first. [BSL compliance regeneration]",
+        "summary": "Die Abfrage liefert 1.000 Kunden mit vorhandenen Immobilienwerten und Hypothekensalden und sortiert sie nach dem höchsten Beleihungsgrad (mortgage_balance/property_value). In den ersten Zeilen fallen extrem hohe Leverage-Ratios auf: CS108475 hat bei einem property_value von 1.018 und mortgage_balance von 1.276.018 ein Ratio von ca. 1.253,46, gefolgt von CS232079 (389 vs. 433.348; ca. 1.114,01); CS138931 liegt mit 3.029 vs. 560.342 bei ca. 184,99. Diese Spitzenwerte deuten entweder auf sehr stark überhebelte Fälle oder auf mögliche Daten-/Einheitenprobleme bei property_value hin und sollten für Plausibilitätschecks priorisiert werden.",
+        "explanation": "Returns each customer (CS-format customer_id) with property value and mortgage balance extracted from expenses_and_assets.propfinancialdata, computes leverage as mortgage_balance/property_value, filters out missing or zero property values (and missing mortgage balances), and ranks customers by highest leverage ratio first. [BSL compliance regeneration]",
         "error": null
       }
     },
@@ -1006,735 +999,936 @@
         "question": "I want to analyze customer financial standing. Please show the customer identifier, each customer's financial metrics.",
         "ambiguity_check": {
           "is_ambiguous": true,
-          "reason": "Die Anfrage ist zu allgemein: „financial standing“ und „financial metrics“ sind nicht eindeutig definiert. Im Schema/Domain-Wissen existieren mehrere mögliche Kennzahlen (z. B. Net Worth, DTI, CUR, LTV, CHS, FSI, CES, AHI, CLV usw.), und es ist unklar, welche davon ausgegeben werden sollen. Außerdem ist „customer identifier“ nicht eindeutig, da es sowohl core_record.clientref (Kunden-ID) als auch coreregistry (Record-ID) und appref (Antrags-ID) gibt. Ohne diese Festlegungen lässt sich keine sichere, korrekte SQL-Abfrage formulieren.",
+          "reason": "Die Anfrage ist zu allgemein: „customer identifier“ ist im Schema nicht eindeutig (clientref vs. coreregistry vs. appref), und „financial metrics“ ist nicht spezifiziert (es gibt viele mögliche Kennzahlen/Indizes im Domain-Wissen sowie Rohfelder). Ohne Auswahl der gewünschten Metriken und ggf. des Zeitbezugs (mehrere core_record-Einträge pro Kunde möglich über timemark/scoredate) lässt sich keine sichere, korrekte SQL-Abfrage formulieren.",
           "questions": [
-            "Welchen Identifier soll ich als „customer identifier“ verwenden: core_record.clientref (Kunden-ID), core_record.coreregistry (Record-ID) oder core_record.appref (Antrags-ID)?",
-            "Welche konkreten „financial metrics“ sollen ausgegeben werden (z. B. Net Worth, DTI, CUR, LTV, CHS, FSI, CES, AHI, CLV) und sollen es Rohfelder, berechnete Kennzahlen oder beides sein?"
+            "Welchen Kunden-Identifier soll ich ausgeben: core_record.clientref (Kunde), core_record.coreregistry (Record-ID) oder appref (Antrag)?",
+            "Welche „financial metrics“ sollen enthalten sein (z.B. DTI/debincratio, CUR/credutil, Net Worth/networth, CLV/custlifeval, CHS/FSI/CES/AHI oder eine konkrete Liste)?"
           ]
         },
-        "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  ei.mthincome,\n  ei.debincratio AS dti,\n  ea.liqassets,\n  ea.totassets,\n  ea.totliabs,\n  (ea.totassets - ea.totliabs) AS net_worth,\n  cah.credutil AS cur,\n  cc.credscore,\n  cc.risklev,\n  cc.delinqcount,\n  cc.latepaycount\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref;",
+        "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  cr.scoredate,\n  ei.mthincome,\n  ei.annlincome,\n  ei.debincratio AS dti,\n  ea.liqassets,\n  ea.savamount,\n  ea.investamt,\n  ea.totassets,\n  ea.totliabs,\n  (ea.totassets - ea.totliabs) AS net_worth,\n  cah.credutil AS cur,\n  cc.credscore,\n  cc.risklev,\n  cc.delinqcount,\n  cc.latepaycount\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nORDER BY cr.coreregistry",
         "validation": {
           "is_valid": true,
           "errors": [],
           "severity": "low",
           "suggestions": [
-            "Optional: If you want to keep customers even when some downstream tables are missing, replace some JOINs with LEFT JOINs (e.g., credit_* tables).",
-            "Optional: The computed net_worth duplicates the existing column ea.networth; you could select ea.networth directly or keep the calculation for consistency checks."
+            "JOIN-Kette entspricht den definierten FOREIGN KEY-Beziehungen; keine Änderung nötig.",
+            "Optional: Wenn Datensätze in Folgetabellen fehlen können, LEFT JOIN statt JOIN verwenden, um Kunden nicht auszuschließen.",
+            "Optional: ORDER BY cr.coreregistry ist ok; falls Performance relevant ist, Indexe auf den FK/PK-Spalten prüfen (coreregistry, emplcoreref, expemplref, bankexpref, compbankref, histcompref)."
           ]
         },
         "results": [
           {
-            "customer_id": "CS206405",
-            "mthincome": 6564.25,
-            "dti": 0.199,
-            "liqassets": 94190.0,
-            "totassets": 1495371.0,
-            "totliabs": 630844.0,
-            "net_worth": 864527.0,
-            "cur": 0.402,
-            "credscore": 423,
-            "risklev": "High",
-            "delinqcount": 7,
-            "latepaycount": 3
-          },
-          {
-            "customer_id": "CS834424",
-            "mthincome": 33835.58,
-            "dti": 0.506,
-            "liqassets": 186120.0,
-            "totassets": 1923802.0,
-            "totliabs": 111285.0,
-            "net_worth": 1812517.0,
-            "cur": 0.062,
-            "credscore": 379,
-            "risklev": "Medium",
-            "delinqcount": 7,
-            "latepaycount": 13
-          },
-          {
-            "customer_id": "CS904970",
-            "mthincome": 18687.75,
-            "dti": 0.308,
-            "liqassets": 429061.0,
-            "totassets": 1259260.0,
-            "totliabs": 866459.0,
-            "net_worth": 392801.0,
-            "cur": 0.712,
-            "credscore": 645,
-            "risklev": "High",
-            "delinqcount": 3,
-            "latepaycount": 5
-          },
-          {
-            "customer_id": "CS886903",
-            "mthincome": 21272.83,
-            "dti": 0.312,
-            "liqassets": 326737.0,
-            "totassets": 555132.0,
-            "totliabs": 792267.0,
-            "net_worth": -237135.0,
-            "cur": 0.428,
-            "credscore": 707,
-            "risklev": "Medium",
-            "delinqcount": 6,
-            "latepaycount": 2
-          },
-          {
-            "customer_id": "CS767632",
-            "mthincome": 29862.83,
-            "dti": 0.491,
-            "liqassets": 226494.0,
-            "totassets": 846173.0,
-            "totliabs": 987045.0,
-            "net_worth": -140872.0,
-            "cur": 0.039,
-            "credscore": 715,
-            "risklev": "Medium",
-            "delinqcount": 10,
-            "latepaycount": 0
-          },
-          {
-            "customer_id": "CS252516",
-            "mthincome": 5401.75,
-            "dti": 0.15,
-            "liqassets": 172739.0,
-            "totassets": 277451.0,
-            "totliabs": 450724.0,
-            "net_worth": -173273.0,
-            "cur": 0.897,
-            "credscore": 517,
-            "risklev": "Very High",
+            "customer_id": "CS100439",
+            "scoredate": "2025-02-19",
+            "mthincome": 26938.33,
+            "annlincome": 323260.0,
+            "dti": 0.315,
+            "liqassets": 403747.0,
+            "savamount": 11833.0,
+            "investamt": 190078.0,
+            "totassets": 451012.0,
+            "totliabs": 784775.0,
+            "net_worth": -333763.0,
+            "cur": 0.22,
+            "credscore": 508,
+            "risklev": "Low",
             "delinqcount": 9,
-            "latepaycount": 7
+            "latepaycount": 12
           },
           {
-            "customer_id": "CS891919",
-            "mthincome": 29779.67,
-            "dti": 0.443,
-            "liqassets": 284607.0,
-            "totassets": 1190666.0,
-            "totliabs": 411616.0,
-            "net_worth": 779050.0,
-            "cur": 0.823,
-            "credscore": 537,
-            "risklev": "High",
-            "delinqcount": 8,
-            "latepaycount": 4
-          },
-          {
-            "customer_id": "CS765007",
-            "mthincome": 7582.5,
-            "dti": 0.326,
-            "liqassets": 50319.0,
-            "totassets": 1079715.0,
-            "totliabs": 137420.0,
-            "net_worth": 942295.0,
-            "cur": 0.407,
-            "credscore": 497,
+            "customer_id": "CS100596",
+            "scoredate": "2025-02-19",
+            "mthincome": 11967.0,
+            "annlincome": 143604.0,
+            "dti": 0.398,
+            "liqassets": 15960.0,
+            "savamount": 239927.0,
+            "investamt": 582595.0,
+            "totassets": 1336658.0,
+            "totliabs": 522748.0,
+            "net_worth": 813910.0,
+            "cur": 0.408,
+            "credscore": 501,
             "risklev": "Low",
             "delinqcount": 5,
+            "latepaycount": 12
+          },
+          {
+            "customer_id": "CS100625",
+            "scoredate": "2025-02-19",
+            "mthincome": 33004.17,
+            "annlincome": 396050.0,
+            "dti": 0.547,
+            "liqassets": 377201.0,
+            "savamount": 150783.0,
+            "investamt": 725035.0,
+            "totassets": 318459.0,
+            "totliabs": 778174.0,
+            "net_worth": -459715.0,
+            "cur": 0.153,
+            "credscore": 795,
+            "risklev": "Medium",
+            "delinqcount": 1,
+            "latepaycount": 8
+          },
+          {
+            "customer_id": "CS101227",
+            "scoredate": "2025-02-19",
+            "mthincome": 23451.58,
+            "annlincome": 281419.0,
+            "dti": 0.36,
+            "liqassets": 95326.0,
+            "savamount": 301803.0,
+            "investamt": 857629.0,
+            "totassets": 1303085.0,
+            "totliabs": 261451.0,
+            "net_worth": 1041634.0,
+            "cur": 0.361,
+            "credscore": 648,
+            "risklev": "High",
+            "delinqcount": 1,
             "latepaycount": 10
           },
           {
-            "customer_id": "CS507608",
-            "mthincome": 20711.92,
-            "dti": 0.213,
-            "liqassets": 262653.0,
-            "totassets": 1838678.0,
-            "totliabs": 562371.0,
-            "net_worth": 1276307.0,
-            "cur": 0.755,
-            "credscore": 758,
-            "risklev": "Medium",
-            "delinqcount": 7,
-            "latepaycount": 4
-          },
-          {
-            "customer_id": "CS893515",
-            "mthincome": 3105.67,
-            "dti": 0.083,
-            "liqassets": 114233.0,
-            "totassets": 663194.0,
-            "totliabs": 357036.0,
-            "net_worth": 306158.0,
-            "cur": 0.195,
-            "credscore": 423,
-            "risklev": "Low",
+            "customer_id": "CS101678",
+            "scoredate": "2025-02-19",
+            "mthincome": 29689.25,
+            "annlincome": 356271.0,
+            "dti": 0.297,
+            "liqassets": 409143.0,
+            "savamount": 193516.0,
+            "investamt": 628463.0,
+            "totassets": 937719.0,
+            "totliabs": 943829.0,
+            "net_worth": -6110.0,
+            "cur": 0.597,
+            "credscore": 351,
+            "risklev": "High",
             "delinqcount": 1,
             "latepaycount": 8
           },
           {
-            "customer_id": "CS986753",
-            "mthincome": 28742.08,
-            "dti": 0.014,
-            "liqassets": 200195.0,
-            "totassets": 631745.0,
-            "totliabs": 577841.0,
-            "net_worth": 53904.0,
-            "cur": 0.549,
-            "credscore": 497,
-            "risklev": "High",
-            "delinqcount": 0,
+            "customer_id": "CS103479",
+            "scoredate": "2025-02-19",
+            "mthincome": 29159.83,
+            "annlincome": 349918.0,
+            "dti": 0.396,
+            "liqassets": 383813.0,
+            "savamount": 215592.0,
+            "investamt": 572063.0,
+            "totassets": 115382.0,
+            "totliabs": 701017.0,
+            "net_worth": -585635.0,
+            "cur": 0.87,
+            "credscore": 580,
+            "risklev": "Medium",
+            "delinqcount": 6,
+            "latepaycount": 18
+          },
+          {
+            "customer_id": "CS104169",
+            "scoredate": "2025-02-19",
+            "mthincome": 32150.83,
+            "annlincome": 385810.0,
+            "dti": 0.249,
+            "liqassets": 187825.0,
+            "savamount": 470406.0,
+            "investamt": 814836.0,
+            "totassets": 1983531.0,
+            "totliabs": 130828.0,
+            "net_worth": 1852703.0,
+            "cur": 0.995,
+            "credscore": 824,
+            "risklev": "Medium",
+            "delinqcount": 8,
+            "latepaycount": 20
+          },
+          {
+            "customer_id": "CS104621",
+            "scoredate": "2025-02-19",
+            "mthincome": 30247.25,
+            "annlincome": 362967.0,
+            "dti": 0.506,
+            "liqassets": 148561.0,
+            "savamount": 315202.0,
+            "investamt": 631427.0,
+            "totassets": 1910484.0,
+            "totliabs": 158765.0,
+            "net_worth": 1751719.0,
+            "cur": 0.593,
+            "credscore": 592,
+            "risklev": "Very High",
+            "delinqcount": 10,
             "latepaycount": 19
           },
           {
-            "customer_id": "CS414493",
-            "mthincome": 10998.33,
-            "dti": 0.226,
-            "liqassets": 374806.0,
-            "totassets": 634974.0,
-            "totliabs": 573822.0,
-            "net_worth": 61152.0,
-            "cur": 0.782,
-            "credscore": 318,
-            "risklev": "Very High",
-            "delinqcount": 6,
-            "latepaycount": 13
-          },
-          {
-            "customer_id": "CS429393",
-            "mthincome": 30262.75,
-            "dti": 0.34,
-            "liqassets": 4920.0,
-            "totassets": 449712.0,
-            "totliabs": 704236.0,
-            "net_worth": -254524.0,
-            "cur": 0.302,
-            "credscore": 640,
-            "risklev": "Medium",
-            "delinqcount": 9,
-            "latepaycount": 15
-          },
-          {
-            "customer_id": "CS166671",
-            "mthincome": 12955.58,
-            "dti": 0.049,
-            "liqassets": 275510.0,
-            "totassets": 829580.0,
-            "totliabs": 437983.0,
-            "net_worth": 391597.0,
-            "cur": 0.752,
-            "credscore": 604,
-            "risklev": "Very High",
-            "delinqcount": 9,
-            "latepaycount": 4
-          },
-          {
-            "customer_id": "CS222072",
-            "mthincome": 26878.67,
-            "dti": 0.349,
-            "liqassets": 225367.0,
-            "totassets": 382490.0,
-            "totliabs": 169726.0,
-            "net_worth": 212764.0,
-            "cur": 0.972,
-            "credscore": 337,
-            "risklev": "Low",
-            "delinqcount": 4,
-            "latepaycount": 4
-          },
-          {
-            "customer_id": "CS162913",
-            "mthincome": 1925.33,
-            "dti": 0.427,
-            "liqassets": 250760.0,
-            "totassets": 1700935.0,
-            "totliabs": 52119.0,
-            "net_worth": 1648816.0,
-            "cur": 0.355,
-            "credscore": 305,
-            "risklev": "Medium",
-            "delinqcount": 8,
-            "latepaycount": 12
-          },
-          {
-            "customer_id": "CS517135",
-            "mthincome": 25511.67,
-            "dti": 0.432,
-            "liqassets": 277342.0,
-            "totassets": 1666761.0,
-            "totliabs": 696888.0,
-            "net_worth": 969873.0,
-            "cur": 0.582,
-            "credscore": 467,
-            "risklev": "Very High",
-            "delinqcount": 6,
-            "latepaycount": 4
-          },
-          {
-            "customer_id": "CS180245",
-            "mthincome": 10928.33,
-            "dti": 0.551,
-            "liqassets": 329932.0,
-            "totassets": 1846280.0,
-            "totliabs": 617139.0,
-            "net_worth": 1229141.0,
-            "cur": 0.667,
-            "credscore": 720,
-            "risklev": "Very High",
-            "delinqcount": 4,
-            "latepaycount": 8
-          },
-          {
-            "customer_id": "CS335050",
-            "mthincome": 5215.83,
-            "dti": 0.029,
-            "liqassets": 478309.0,
-            "totassets": 801215.0,
-            "totliabs": 743524.0,
-            "net_worth": 57691.0,
-            "cur": 0.085,
-            "credscore": 468,
-            "risklev": "Medium",
-            "delinqcount": 1,
-            "latepaycount": 5
-          },
-          {
-            "customer_id": "CS646404",
-            "mthincome": 39672.75,
-            "dti": 0.51,
-            "liqassets": 36203.0,
-            "totassets": 456257.0,
-            "totliabs": 130837.0,
-            "net_worth": 325420.0,
-            "cur": 0.117,
-            "credscore": 411,
-            "risklev": "High",
-            "delinqcount": 2,
-            "latepaycount": 8
-          },
-          {
-            "customer_id": "CS544345",
-            "mthincome": 8876.08,
+            "customer_id": "CS104627",
+            "scoredate": "2025-02-19",
+            "mthincome": 23095.58,
+            "annlincome": 277147.0,
             "dti": 0.066,
-            "liqassets": 390300.0,
-            "totassets": 264158.0,
-            "totliabs": 235889.0,
-            "net_worth": 28269.0,
-            "cur": 0.235,
-            "credscore": 661,
-            "risklev": "Very High",
-            "delinqcount": 2,
+            "liqassets": 95281.0,
+            "savamount": 119225.0,
+            "investamt": 668922.0,
+            "totassets": 1778371.0,
+            "totliabs": 223824.0,
+            "net_worth": 1554547.0,
+            "cur": 0.934,
+            "credscore": 347,
+            "risklev": "High",
+            "delinqcount": 0,
             "latepaycount": 14
           },
           {
-            "customer_id": "CS450025",
-            "mthincome": 4478.17,
-            "dti": 0.287,
-            "liqassets": 327959.0,
-            "totassets": 194996.0,
-            "totliabs": 51567.0,
-            "net_worth": 143429.0,
-            "cur": 0.195,
-            "credscore": 542,
+            "customer_id": "CS106874",
+            "scoredate": "2025-02-19",
+            "mthincome": 39597.75,
+            "annlincome": 475173.0,
+            "dti": 0.066,
+            "liqassets": 429643.0,
+            "savamount": 36941.0,
+            "investamt": 420805.0,
+            "totassets": 1469407.0,
+            "totliabs": 374340.0,
+            "net_worth": 1095067.0,
+            "cur": 0.761,
+            "credscore": 457,
+            "risklev": "Very High",
+            "delinqcount": 10,
+            "latepaycount": 8
+          },
+          {
+            "customer_id": "CS108094",
+            "scoredate": "2025-02-19",
+            "mthincome": 35149.42,
+            "annlincome": 421793.0,
+            "dti": 0.327,
+            "liqassets": 441709.0,
+            "savamount": 130259.0,
+            "investamt": 639693.0,
+            "totassets": 482323.0,
+            "totliabs": 343691.0,
+            "net_worth": 138632.0,
+            "cur": 0.887,
+            "credscore": 622,
             "risklev": "Low",
-            "delinqcount": 8,
-            "latepaycount": 13
-          },
-          {
-            "customer_id": "CS298969",
-            "mthincome": 34752.25,
-            "dti": 0.512,
-            "liqassets": 68913.0,
-            "totassets": 909790.0,
-            "totliabs": 720010.0,
-            "net_worth": 189780.0,
-            "cur": 0.862,
-            "credscore": 455,
-            "risklev": "Low",
-            "delinqcount": 0,
-            "latepaycount": 15
-          },
-          {
-            "customer_id": "CS824002",
-            "mthincome": 36844.25,
-            "dti": 0.404,
-            "liqassets": 425133.0,
-            "totassets": 1099502.0,
-            "totliabs": 976334.0,
-            "net_worth": 123168.0,
-            "cur": 0.565,
-            "credscore": 781,
-            "risklev": "Low",
-            "delinqcount": 3,
-            "latepaycount": 13
-          },
-          {
-            "customer_id": "CS969683",
-            "mthincome": 15466.08,
-            "dti": 0.38,
-            "liqassets": 168868.0,
-            "totassets": 1888947.0,
-            "totliabs": 423229.0,
-            "net_worth": 1465718.0,
-            "cur": 0.969,
-            "credscore": 762,
-            "risklev": "High",
-            "delinqcount": 9,
-            "latepaycount": 19
-          },
-          {
-            "customer_id": "CS169928",
-            "mthincome": 13932.58,
-            "dti": 0.323,
-            "liqassets": 445414.0,
-            "totassets": 163762.0,
-            "totliabs": 467664.0,
-            "net_worth": -303902.0,
-            "cur": 0.095,
-            "credscore": 600,
-            "risklev": "Medium",
-            "delinqcount": 9,
-            "latepaycount": 13
-          },
-          {
-            "customer_id": "CS180232",
-            "mthincome": 32269.42,
-            "dti": 0.17,
-            "liqassets": 63886.0,
-            "totassets": 1725531.0,
-            "totliabs": 562169.0,
-            "net_worth": 1163362.0,
-            "cur": 0.787,
-            "credscore": 723,
-            "risklev": "High",
             "delinqcount": 10,
             "latepaycount": 1
           },
           {
-            "customer_id": "CS232683",
-            "mthincome": 28957.83,
-            "dti": 0.073,
-            "liqassets": 283634.0,
-            "totassets": 311818.0,
-            "totliabs": 896337.0,
-            "net_worth": -584519.0,
-            "cur": 0.708,
-            "credscore": 737,
-            "risklev": "High",
-            "delinqcount": 9,
-            "latepaycount": 5
-          },
-          {
-            "customer_id": "CS354471",
-            "mthincome": 9145.25,
-            "dti": 0.175,
-            "liqassets": 475716.0,
-            "totassets": 934678.0,
-            "totliabs": 478033.0,
-            "net_worth": 456645.0,
-            "cur": 0.826,
-            "credscore": 849,
-            "risklev": "High",
-            "delinqcount": 6,
-            "latepaycount": 4
-          },
-          {
-            "customer_id": "CS688942",
-            "mthincome": 38216.25,
-            "dti": 0.595,
-            "liqassets": 55503.0,
-            "totassets": 1033596.0,
-            "totliabs": 914624.0,
-            "net_worth": 118972.0,
-            "cur": 0.63,
-            "credscore": 405,
-            "risklev": "High",
-            "delinqcount": 5,
-            "latepaycount": 5
-          },
-          {
-            "customer_id": "CS288223",
-            "mthincome": 2055.83,
-            "dti": 0.005,
-            "liqassets": 210790.0,
-            "totassets": 1415997.0,
-            "totliabs": 598011.0,
-            "net_worth": 817986.0,
-            "cur": 0.051,
-            "credscore": 724,
-            "risklev": "Medium",
-            "delinqcount": 2,
-            "latepaycount": 12
-          },
-          {
-            "customer_id": "CS289722",
-            "mthincome": 37966.92,
-            "dti": 0.377,
-            "liqassets": 293278.0,
-            "totassets": 199067.0,
-            "totliabs": 594804.0,
-            "net_worth": -395737.0,
-            "cur": 0.861,
-            "credscore": 837,
-            "risklev": "Medium",
-            "delinqcount": 5,
-            "latepaycount": 19
-          },
-          {
-            "customer_id": "CS230095",
-            "mthincome": 21405.25,
-            "dti": 0.594,
-            "liqassets": 411686.0,
-            "totassets": 76333.0,
-            "totliabs": 33717.0,
-            "net_worth": 42616.0,
-            "cur": 0.321,
-            "credscore": 316,
-            "risklev": "Low",
-            "delinqcount": 10,
-            "latepaycount": 3
-          },
-          {
-            "customer_id": "CS353632",
-            "mthincome": 20519.33,
-            "dti": 0.543,
-            "liqassets": 211931.0,
-            "totassets": 1793740.0,
-            "totliabs": 796451.0,
-            "net_worth": 997289.0,
-            "cur": 0.93,
-            "credscore": 714,
-            "risklev": "High",
-            "delinqcount": 9,
-            "latepaycount": 2
-          },
-          {
-            "customer_id": "CS435359",
-            "mthincome": 7123.33,
-            "dti": 0.327,
-            "liqassets": 92141.0,
-            "totassets": 46156.0,
-            "totliabs": 908397.0,
-            "net_worth": -862241.0,
-            "cur": 0.864,
-            "credscore": 804,
-            "risklev": "High",
-            "delinqcount": 8,
-            "latepaycount": 6
-          },
-          {
-            "customer_id": "CS997640",
-            "mthincome": 7871.0,
-            "dti": 0.32,
-            "liqassets": 86658.0,
-            "totassets": 780656.0,
-            "totliabs": 958701.0,
-            "net_worth": -178045.0,
-            "cur": 0.95,
-            "credscore": 657,
-            "risklev": "Medium",
-            "delinqcount": 0,
-            "latepaycount": 0
-          },
-          {
-            "customer_id": "CS365031",
-            "mthincome": 28803.83,
-            "dti": 0.141,
-            "liqassets": 296136.0,
-            "totassets": 1267240.0,
-            "totliabs": 610197.0,
-            "net_worth": 657043.0,
-            "cur": 0.819,
-            "credscore": 790,
+            "customer_id": "CS108475",
+            "scoredate": "2025-02-19",
+            "mthincome": 12420.33,
+            "annlincome": 149044.0,
+            "dti": 0.195,
+            "liqassets": 410970.0,
+            "savamount": 217175.0,
+            "investamt": 52496.0,
+            "totassets": 564544.0,
+            "totliabs": 178053.0,
+            "net_worth": 386491.0,
+            "cur": 0.197,
+            "credscore": 742,
             "risklev": "Very High",
-            "delinqcount": 2,
+            "delinqcount": 10,
             "latepaycount": 8
           },
           {
-            "customer_id": "CS616098",
-            "mthincome": 36181.75,
-            "dti": 0.439,
-            "liqassets": 217607.0,
-            "totassets": 1881207.0,
-            "totliabs": 774440.0,
-            "net_worth": 1106767.0,
-            "cur": 0.694,
-            "credscore": 344,
-            "risklev": "Medium",
-            "delinqcount": 2,
-            "latepaycount": 19
-          },
-          {
-            "customer_id": "CS767771",
-            "mthincome": 7059.33,
-            "dti": 0.028,
-            "liqassets": 77885.0,
-            "totassets": 377314.0,
-            "totliabs": 316212.0,
-            "net_worth": 61102.0,
-            "cur": 0.957,
-            "credscore": 353,
-            "risklev": "Medium",
-            "delinqcount": 10,
-            "latepaycount": 0
-          },
-          {
-            "customer_id": "CS211745",
-            "mthincome": 41372.58,
-            "dti": 0.14,
-            "liqassets": 406792.0,
-            "totassets": 360716.0,
-            "totliabs": 58943.0,
-            "net_worth": 301773.0,
-            "cur": 0.678,
-            "credscore": 473,
-            "risklev": "High",
-            "delinqcount": 7,
-            "latepaycount": 17
-          },
-          {
-            "customer_id": "CS652071",
-            "mthincome": 7808.92,
-            "dti": 0.421,
-            "liqassets": 351033.0,
-            "totassets": 186906.0,
-            "totliabs": 393673.0,
-            "net_worth": -206767.0,
-            "cur": 0.341,
-            "credscore": 593,
+            "customer_id": "CS109017",
+            "scoredate": "2025-02-19",
+            "mthincome": 36108.25,
+            "annlincome": 433299.0,
+            "dti": 0.165,
+            "liqassets": 16272.0,
+            "savamount": 217455.0,
+            "investamt": 49036.0,
+            "totassets": 756255.0,
+            "totliabs": 771531.0,
+            "net_worth": -15276.0,
+            "cur": 0.384,
+            "credscore": 342,
             "risklev": "Very High",
             "delinqcount": 6,
+            "latepaycount": 5
+          },
+          {
+            "customer_id": "CS114324",
+            "scoredate": "2025-02-19",
+            "mthincome": 17585.58,
+            "annlincome": 211027.0,
+            "dti": 0.544,
+            "liqassets": 193660.0,
+            "savamount": 466308.0,
+            "investamt": 947824.0,
+            "totassets": 98434.0,
+            "totliabs": 397075.0,
+            "net_worth": -298641.0,
+            "cur": 0.759,
+            "credscore": 783,
+            "risklev": "Medium",
+            "delinqcount": 5,
+            "latepaycount": 1
+          },
+          {
+            "customer_id": "CS114708",
+            "scoredate": "2025-02-19",
+            "mthincome": 20483.67,
+            "annlincome": 245804.0,
+            "dti": 0.237,
+            "liqassets": 43184.0,
+            "savamount": 441017.0,
+            "investamt": 707710.0,
+            "totassets": 906078.0,
+            "totliabs": 669762.0,
+            "net_worth": 236316.0,
+            "cur": 0.097,
+            "credscore": 380,
+            "risklev": "Very High",
+            "delinqcount": 6,
+            "latepaycount": 5
+          },
+          {
+            "customer_id": "CS115119",
+            "scoredate": "2025-02-19",
+            "mthincome": 32760.42,
+            "annlincome": 393125.0,
+            "dti": 0.48,
+            "liqassets": 317992.0,
+            "savamount": 29963.0,
+            "investamt": 490683.0,
+            "totassets": 124477.0,
+            "totliabs": 775471.0,
+            "net_worth": -650994.0,
+            "cur": 0.822,
+            "credscore": 477,
+            "risklev": "Very High",
+            "delinqcount": 0,
             "latepaycount": 9
           },
           {
-            "customer_id": "CS903650",
-            "mthincome": 33384.83,
-            "dti": 0.496,
-            "liqassets": 11679.0,
-            "totassets": 1933746.0,
-            "totliabs": 301359.0,
-            "net_worth": 1632387.0,
-            "cur": 0.55,
-            "credscore": 548,
+            "customer_id": "CS115562",
+            "scoredate": "2025-02-19",
+            "mthincome": 9614.83,
+            "annlincome": 115378.0,
+            "dti": 0.418,
+            "liqassets": 354991.0,
+            "savamount": 92329.0,
+            "investamt": 868274.0,
+            "totassets": 1444127.0,
+            "totliabs": 18493.0,
+            "net_worth": 1425634.0,
+            "cur": 0.565,
+            "credscore": 602,
             "risklev": "Low",
-            "delinqcount": 3,
-            "latepaycount": 11
-          },
-          {
-            "customer_id": "CS780190",
-            "mthincome": 34519.42,
-            "dti": 0.53,
-            "liqassets": 72377.0,
-            "totassets": 1712168.0,
-            "totliabs": 147196.0,
-            "net_worth": 1564972.0,
-            "cur": 0.234,
-            "credscore": 613,
-            "risklev": "Low",
-            "delinqcount": 2,
-            "latepaycount": 1
-          },
-          {
-            "customer_id": "CS442564",
-            "mthincome": 16168.67,
-            "dti": 0.073,
-            "liqassets": 154259.0,
-            "totassets": 988926.0,
-            "totliabs": 406089.0,
-            "net_worth": 582837.0,
-            "cur": 0.24,
-            "credscore": 491,
-            "risklev": "Low",
-            "delinqcount": 7,
-            "latepaycount": 2
-          },
-          {
-            "customer_id": "CS669645",
-            "mthincome": 22163.67,
-            "dti": 0.445,
-            "liqassets": 57044.0,
-            "totassets": 131279.0,
-            "totliabs": 39762.0,
-            "net_worth": 91517.0,
-            "cur": 0.648,
-            "credscore": 730,
-            "risklev": "High",
             "delinqcount": 5,
-            "latepaycount": 4
+            "latepaycount": 15
           },
           {
-            "customer_id": "CS631277",
-            "mthincome": 10665.33,
-            "dti": 0.116,
-            "liqassets": 171893.0,
-            "totassets": 1501606.0,
-            "totliabs": 294941.0,
-            "net_worth": 1206665.0,
-            "cur": 0.983,
-            "credscore": 751,
-            "risklev": "Low",
-            "delinqcount": 3,
-            "latepaycount": 19
-          },
-          {
-            "customer_id": "CS496846",
-            "mthincome": 9055.75,
-            "dti": 0.567,
-            "liqassets": 491033.0,
-            "totassets": 48476.0,
-            "totliabs": 410951.0,
-            "net_worth": -362475.0,
-            "cur": 0.49,
-            "credscore": 604,
-            "risklev": "Very High",
-            "delinqcount": 9,
-            "latepaycount": 14
-          },
-          {
-            "customer_id": "CS150481",
-            "mthincome": 3771.08,
-            "dti": 0.192,
-            "liqassets": 97540.0,
-            "totassets": 1720214.0,
-            "totliabs": 759115.0,
-            "net_worth": 961099.0,
-            "cur": 0.51,
-            "credscore": 560,
-            "risklev": "Low",
-            "delinqcount": 3,
-            "latepaycount": 11
-          },
-          {
-            "customer_id": "CS163455",
-            "mthincome": 33668.0,
-            "dti": 0.38,
-            "liqassets": 195905.0,
-            "totassets": 1743869.0,
-            "totliabs": 894656.0,
-            "net_worth": 849213.0,
-            "cur": 0.03,
-            "credscore": 588,
-            "risklev": "High",
+            "customer_id": "CS116892",
+            "scoredate": "2025-02-19",
+            "mthincome": 21083.25,
+            "annlincome": 252999.0,
+            "dti": 0.535,
+            "liqassets": 467799.0,
+            "savamount": 85291.0,
+            "investamt": 221546.0,
+            "totassets": 457891.0,
+            "totliabs": 635669.0,
+            "net_worth": -177778.0,
+            "cur": 0.485,
+            "credscore": 823,
+            "risklev": "Medium",
             "delinqcount": 0,
             "latepaycount": 3
           },
           {
-            "customer_id": "CS549581",
-            "mthincome": 2624.5,
-            "dti": 0.264,
-            "liqassets": 130170.0,
-            "totassets": 1187727.0,
-            "totliabs": 456592.0,
-            "net_worth": 731135.0,
-            "cur": 0.08,
-            "credscore": 774,
+            "customer_id": "CS117703",
+            "scoredate": "2025-02-19",
+            "mthincome": 39611.08,
+            "annlincome": 475333.0,
+            "dti": 0.039,
+            "liqassets": 25829.0,
+            "savamount": 46479.0,
+            "investamt": 743933.0,
+            "totassets": 1100664.0,
+            "totliabs": 537375.0,
+            "net_worth": 563289.0,
+            "cur": 0.955,
+            "credscore": 628,
+            "risklev": "Very High",
+            "delinqcount": 6,
+            "latepaycount": 13
+          },
+          {
+            "customer_id": "CS117909",
+            "scoredate": "2025-02-19",
+            "mthincome": 11110.17,
+            "annlincome": 133322.0,
+            "dti": 0.48,
+            "liqassets": 25844.0,
+            "savamount": 411027.0,
+            "investamt": 966140.0,
+            "totassets": 355130.0,
+            "totliabs": 107499.0,
+            "net_worth": 247631.0,
+            "cur": 0.019,
+            "credscore": 393,
+            "risklev": "Very High",
+            "delinqcount": 6,
+            "latepaycount": 15
+          },
+          {
+            "customer_id": "CS118101",
+            "scoredate": "2025-02-19",
+            "mthincome": 26003.33,
+            "annlincome": 312040.0,
+            "dti": 0.219,
+            "liqassets": 331611.0,
+            "savamount": 349048.0,
+            "investamt": 164778.0,
+            "totassets": 1025962.0,
+            "totliabs": 161940.0,
+            "net_worth": 864022.0,
+            "cur": 0.333,
+            "credscore": 424,
+            "risklev": "High",
+            "delinqcount": 0,
+            "latepaycount": 16
+          },
+          {
+            "customer_id": "CS118800",
+            "scoredate": "2025-02-19",
+            "mthincome": 32533.33,
+            "annlincome": 390400.0,
+            "dti": 0.419,
+            "liqassets": 95099.0,
+            "savamount": 352779.0,
+            "investamt": 572189.0,
+            "totassets": 767380.0,
+            "totliabs": 581239.0,
+            "net_worth": 186141.0,
+            "cur": 0.885,
+            "credscore": 520,
+            "risklev": "Very High",
+            "delinqcount": 2,
+            "latepaycount": 14
+          },
+          {
+            "customer_id": "CS118849",
+            "scoredate": "2025-02-19",
+            "mthincome": 31478.17,
+            "annlincome": 377738.0,
+            "dti": 0.512,
+            "liqassets": 155839.0,
+            "savamount": 102497.0,
+            "investamt": 106290.0,
+            "totassets": 803542.0,
+            "totliabs": 365628.0,
+            "net_worth": 437914.0,
+            "cur": 0.393,
+            "credscore": 367,
+            "risklev": "Very High",
+            "delinqcount": 2,
+            "latepaycount": 17
+          },
+          {
+            "customer_id": "CS119313",
+            "scoredate": "2025-02-19",
+            "mthincome": 36516.58,
+            "annlincome": 438199.0,
+            "dti": 0.51,
+            "liqassets": 46662.0,
+            "savamount": 461610.0,
+            "investamt": 924422.0,
+            "totassets": 1892188.0,
+            "totliabs": 944219.0,
+            "net_worth": 947969.0,
+            "cur": 0.433,
+            "credscore": 846,
+            "risklev": "High",
+            "delinqcount": 5,
+            "latepaycount": 8
+          },
+          {
+            "customer_id": "CS123662",
+            "scoredate": "2025-02-19",
+            "mthincome": 16433.0,
+            "annlincome": 197196.0,
+            "dti": 0.289,
+            "liqassets": 351084.0,
+            "savamount": 321845.0,
+            "investamt": 196517.0,
+            "totassets": 1339683.0,
+            "totliabs": 842083.0,
+            "net_worth": 497600.0,
+            "cur": 0.986,
+            "credscore": 363,
             "risklev": "Medium",
+            "delinqcount": 2,
+            "latepaycount": 8
+          },
+          {
+            "customer_id": "CS124655",
+            "scoredate": "2025-02-19",
+            "mthincome": 40943.17,
+            "annlincome": 491318.0,
+            "dti": 0.085,
+            "liqassets": 154063.0,
+            "savamount": 177842.0,
+            "investamt": 105040.0,
+            "totassets": 997451.0,
+            "totliabs": 595186.0,
+            "net_worth": 402265.0,
+            "cur": 0.448,
+            "credscore": 461,
+            "risklev": "Low",
+            "delinqcount": 3,
+            "latepaycount": 15
+          },
+          {
+            "customer_id": "CS127224",
+            "scoredate": "2025-02-19",
+            "mthincome": 9764.33,
+            "annlincome": 117172.0,
+            "dti": 0.593,
+            "liqassets": 304825.0,
+            "savamount": 129331.0,
+            "investamt": 158012.0,
+            "totassets": 1009911.0,
+            "totliabs": 253210.0,
+            "net_worth": 756701.0,
+            "cur": 0.304,
+            "credscore": 600,
+            "risklev": "Very High",
+            "delinqcount": 2,
+            "latepaycount": 11
+          },
+          {
+            "customer_id": "CS127497",
+            "scoredate": "2025-02-19",
+            "mthincome": 26979.58,
+            "annlincome": 323755.0,
+            "dti": 0.447,
+            "liqassets": 211166.0,
+            "savamount": 61825.0,
+            "investamt": 949242.0,
+            "totassets": 616072.0,
+            "totliabs": 50114.0,
+            "net_worth": 565958.0,
+            "cur": 0.024,
+            "credscore": 832,
+            "risklev": "Low",
             "delinqcount": 9,
+            "latepaycount": 2
+          },
+          {
+            "customer_id": "CS127904",
+            "scoredate": "2025-02-19",
+            "mthincome": 35774.92,
+            "annlincome": 429299.0,
+            "dti": 0.567,
+            "liqassets": 734.0,
+            "savamount": 325183.0,
+            "investamt": 401756.0,
+            "totassets": 475065.0,
+            "totliabs": 795136.0,
+            "net_worth": -320071.0,
+            "cur": 0.787,
+            "credscore": 711,
+            "risklev": "Medium",
+            "delinqcount": 2,
+            "latepaycount": 14
+          },
+          {
+            "customer_id": "CS128627",
+            "scoredate": "2025-02-19",
+            "mthincome": 41108.25,
+            "annlincome": 493299.0,
+            "dti": 0.053,
+            "liqassets": 272051.0,
+            "savamount": 301349.0,
+            "investamt": 519859.0,
+            "totassets": 1165489.0,
+            "totliabs": 466615.0,
+            "net_worth": 698874.0,
+            "cur": 0.167,
+            "credscore": 393,
+            "risklev": "Very High",
+            "delinqcount": 0,
+            "latepaycount": 17
+          },
+          {
+            "customer_id": "CS133642",
+            "scoredate": "2025-02-19",
+            "mthincome": 5978.25,
+            "annlincome": 71739.0,
+            "dti": 0.314,
+            "liqassets": 102397.0,
+            "savamount": 338474.0,
+            "investamt": 652746.0,
+            "totassets": 962186.0,
+            "totliabs": 54721.0,
+            "net_worth": 907465.0,
+            "cur": 0.483,
+            "credscore": 704,
+            "risklev": "High",
+            "delinqcount": 8,
+            "latepaycount": 9
+          },
+          {
+            "customer_id": "CS134108",
+            "scoredate": "2025-02-19",
+            "mthincome": 34078.75,
+            "annlincome": 408945.0,
+            "dti": 0.506,
+            "liqassets": 470412.0,
+            "savamount": 130377.0,
+            "investamt": 241715.0,
+            "totassets": 939583.0,
+            "totliabs": 185066.0,
+            "net_worth": 754517.0,
+            "cur": 0.151,
+            "credscore": 755,
+            "risklev": "Low",
+            "delinqcount": 10,
+            "latepaycount": 2
+          },
+          {
+            "customer_id": "CS135663",
+            "scoredate": "2025-02-19",
+            "mthincome": 37477.83,
+            "annlincome": 449734.0,
+            "dti": 0.558,
+            "liqassets": 302301.0,
+            "savamount": 413331.0,
+            "investamt": 375112.0,
+            "totassets": 558035.0,
+            "totliabs": 28872.0,
+            "net_worth": 529163.0,
+            "cur": 0.313,
+            "credscore": 841,
+            "risklev": "Very High",
+            "delinqcount": 9,
+            "latepaycount": 19
+          },
+          {
+            "customer_id": "CS135936",
+            "scoredate": "2025-02-19",
+            "mthincome": 7941.5,
+            "annlincome": 95298.0,
+            "dti": 0.499,
+            "liqassets": 379369.0,
+            "savamount": 178193.0,
+            "investamt": 587853.0,
+            "totassets": 1458307.0,
+            "totliabs": 211629.0,
+            "net_worth": 1246678.0,
+            "cur": 0.462,
+            "credscore": 756,
+            "risklev": "Very High",
+            "delinqcount": 4,
+            "latepaycount": 18
+          },
+          {
+            "customer_id": "CS137159",
+            "scoredate": "2025-02-19",
+            "mthincome": 33845.58,
+            "annlincome": 406147.0,
+            "dti": 0.419,
+            "liqassets": 240243.0,
+            "savamount": 56659.0,
+            "investamt": 843650.0,
+            "totassets": 556576.0,
+            "totliabs": 80667.0,
+            "net_worth": 475909.0,
+            "cur": 0.848,
+            "credscore": 673,
+            "risklev": "High",
+            "delinqcount": 8,
+            "latepaycount": 12
+          },
+          {
+            "customer_id": "CS137169",
+            "scoredate": "2025-02-19",
+            "mthincome": 7731.33,
+            "annlincome": 92776.0,
+            "dti": 0.266,
+            "liqassets": 388261.0,
+            "savamount": 121737.0,
+            "investamt": 667362.0,
+            "totassets": 1611887.0,
+            "totliabs": 557675.0,
+            "net_worth": 1054212.0,
+            "cur": 0.25,
+            "credscore": 530,
+            "risklev": "High",
+            "delinqcount": 10,
+            "latepaycount": 7
+          },
+          {
+            "customer_id": "CS137278",
+            "scoredate": "2025-02-19",
+            "mthincome": 33176.92,
+            "annlincome": 398123.0,
+            "dti": 0.207,
+            "liqassets": 309350.0,
+            "savamount": 334375.0,
+            "investamt": 838506.0,
+            "totassets": 606118.0,
+            "totliabs": 85684.0,
+            "net_worth": 520434.0,
+            "cur": 0.438,
+            "credscore": 429,
+            "risklev": "High",
+            "delinqcount": 3,
+            "latepaycount": 3
+          },
+          {
+            "customer_id": "CS138232",
+            "scoredate": "2025-02-19",
+            "mthincome": 30428.17,
+            "annlincome": 365138.0,
+            "dti": 0.117,
+            "liqassets": 303446.0,
+            "savamount": 321206.0,
+            "investamt": 444814.0,
+            "totassets": 1471782.0,
+            "totliabs": 966170.0,
+            "net_worth": 505612.0,
+            "cur": 0.369,
+            "credscore": 490,
+            "risklev": "Medium",
+            "delinqcount": 1,
+            "latepaycount": 17
+          },
+          {
+            "customer_id": "CS138931",
+            "scoredate": "2025-02-19",
+            "mthincome": 39981.25,
+            "annlincome": 479775.0,
+            "dti": 0.245,
+            "liqassets": 257810.0,
+            "savamount": 175713.0,
+            "investamt": 182083.0,
+            "totassets": 590326.0,
+            "totliabs": 56469.0,
+            "net_worth": 533857.0,
+            "cur": 0.916,
+            "credscore": 748,
+            "risklev": "Medium",
+            "delinqcount": 8,
             "latepaycount": 1
+          },
+          {
+            "customer_id": "CS139109",
+            "scoredate": "2025-02-19",
+            "mthincome": 25095.33,
+            "annlincome": 301144.0,
+            "dti": 0.393,
+            "liqassets": 144612.0,
+            "savamount": 257906.0,
+            "investamt": 475017.0,
+            "totassets": 1522932.0,
+            "totliabs": 195528.0,
+            "net_worth": 1327404.0,
+            "cur": 0.2,
+            "credscore": 336,
+            "risklev": "Low",
+            "delinqcount": 10,
+            "latepaycount": 7
+          },
+          {
+            "customer_id": "CS139679",
+            "scoredate": "2025-02-19",
+            "mthincome": 3175.75,
+            "annlincome": 38109.0,
+            "dti": 0.462,
+            "liqassets": 443607.0,
+            "savamount": 321455.0,
+            "investamt": 992799.0,
+            "totassets": 1801849.0,
+            "totliabs": 471791.0,
+            "net_worth": 1330058.0,
+            "cur": 0.568,
+            "credscore": 336,
+            "risklev": "Very High",
+            "delinqcount": 9,
+            "latepaycount": 20
+          },
+          {
+            "customer_id": "CS139849",
+            "scoredate": "2025-02-19",
+            "mthincome": 8724.17,
+            "annlincome": 104690.0,
+            "dti": 0.076,
+            "liqassets": 24171.0,
+            "savamount": 366277.0,
+            "investamt": 160423.0,
+            "totassets": 1831701.0,
+            "totliabs": 651829.0,
+            "net_worth": 1179872.0,
+            "cur": 0.983,
+            "credscore": 594,
+            "risklev": "Low",
+            "delinqcount": 9,
+            "latepaycount": 9
+          },
+          {
+            "customer_id": "CS140564",
+            "scoredate": "2025-02-19",
+            "mthincome": 4971.25,
+            "annlincome": 59655.0,
+            "dti": 0.459,
+            "liqassets": 457733.0,
+            "savamount": 168987.0,
+            "investamt": 86437.0,
+            "totassets": 1619713.0,
+            "totliabs": 317559.0,
+            "net_worth": 1302154.0,
+            "cur": 0.24,
+            "credscore": 746,
+            "risklev": "High",
+            "delinqcount": 8,
+            "latepaycount": 9
+          },
+          {
+            "customer_id": "CS140967",
+            "scoredate": "2025-02-19",
+            "mthincome": 11364.92,
+            "annlincome": 136379.0,
+            "dti": 0.377,
+            "liqassets": 150087.0,
+            "savamount": 237162.0,
+            "investamt": 156735.0,
+            "totassets": 1759080.0,
+            "totliabs": 889182.0,
+            "net_worth": 869898.0,
+            "cur": 0.922,
+            "credscore": 779,
+            "risklev": "Medium",
+            "delinqcount": 5,
+            "latepaycount": 16
+          },
+          {
+            "customer_id": "CS141088",
+            "scoredate": "2025-02-19",
+            "mthincome": 19316.83,
+            "annlincome": 231802.0,
+            "dti": 0.441,
+            "liqassets": 271516.0,
+            "savamount": 47046.0,
+            "investamt": 129627.0,
+            "totassets": 869943.0,
+            "totliabs": 164439.0,
+            "net_worth": 705504.0,
+            "cur": 0.951,
+            "credscore": 388,
+            "risklev": "Medium",
+            "delinqcount": 2,
+            "latepaycount": 8
+          },
+          {
+            "customer_id": "CS141623",
+            "scoredate": "2025-02-19",
+            "mthincome": 35344.33,
+            "annlincome": 424132.0,
+            "dti": 0.317,
+            "liqassets": 442963.0,
+            "savamount": 390368.0,
+            "investamt": 314174.0,
+            "totassets": 1563634.0,
+            "totliabs": 293089.0,
+            "net_worth": 1270545.0,
+            "cur": 0.46,
+            "credscore": 542,
+            "risklev": "Low",
+            "delinqcount": 9,
+            "latepaycount": 16
+          },
+          {
+            "customer_id": "CS143502",
+            "scoredate": "2025-02-19",
+            "mthincome": 28336.17,
+            "annlincome": 340034.0,
+            "dti": 0.33,
+            "liqassets": 214425.0,
+            "savamount": 278938.0,
+            "investamt": 306398.0,
+            "totassets": 1322524.0,
+            "totliabs": 455498.0,
+            "net_worth": 867026.0,
+            "cur": 0.254,
+            "credscore": 847,
+            "risklev": "Very High",
+            "delinqcount": 8,
+            "latepaycount": 8
+          },
+          {
+            "customer_id": "CS144498",
+            "scoredate": "2025-02-19",
+            "mthincome": 17699.58,
+            "annlincome": 212395.0,
+            "dti": 0.415,
+            "liqassets": 366378.0,
+            "savamount": 278153.0,
+            "investamt": 670760.0,
+            "totassets": 1392080.0,
+            "totliabs": 647720.0,
+            "net_worth": 744360.0,
+            "cur": 0.696,
+            "credscore": 611,
+            "risklev": "Medium",
+            "delinqcount": 8,
+            "latepaycount": 5
+          },
+          {
+            "customer_id": "CS145015",
+            "scoredate": "2025-02-19",
+            "mthincome": 20725.42,
+            "annlincome": 248705.0,
+            "dti": 0.575,
+            "liqassets": 82367.0,
+            "savamount": 85720.0,
+            "investamt": 27539.0,
+            "totassets": 1090506.0,
+            "totliabs": 549215.0,
+            "net_worth": 541291.0,
+            "cur": 0.914,
+            "credscore": 721,
+            "risklev": "Very High",
+            "delinqcount": 2,
+            "latepaycount": 0
+          },
+          {
+            "customer_id": "CS145462",
+            "scoredate": "2025-02-19",
+            "mthincome": 38797.83,
+            "annlincome": 465574.0,
+            "dti": 0.048,
+            "liqassets": 282201.0,
+            "savamount": 391710.0,
+            "investamt": 577186.0,
+            "totassets": 596202.0,
+            "totliabs": 436490.0,
+            "net_worth": 159712.0,
+            "cur": 0.435,
+            "credscore": 716,
+            "risklev": "Very High",
+            "delinqcount": 1,
+            "latepaycount": 3
           }
         ],
         "row_count": 50,
-        "query_id": "676a9a9dd8b6413299118da64db66994",
+        "query_id": "9c15c1cb1b1748e985365dcdee5dfc3f",
         "page": 1,
         "page_size": 50,
         "total_pages": 20,
         "total_rows": 1000,
         "has_next_page": true,
         "has_previous_page": false,
-        "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Die Anfrage ist zu allgemein: „financial standing“ und „financial metrics“ sind nicht eindeutig definiert. Im Schema/Domain-Wissen existieren mehrere mögliche Kennzahlen (z. B. Net Worth, DTI, CUR, LTV, CHS, FSI, CES, AHI, CLV usw.), und es ist unklar, welche davon ausgegeben werden sollen. Außerdem ist „customer identifier“ nicht eindeutig, da es sowohl core_record.clientref (Kunden-ID) als auch coreregistry (Record-ID) und appref (Antrags-ID) gibt. Ohne diese Festlegungen lässt sich keine sichere, korrekte SQL-Abfrage formulieren.. Klärungsfragen: Welchen Identifier soll ich als „customer identifier“ verwenden: core_record.clientref (Kunden-ID), core_record.coreregistry (Record-ID) oder core_record.appref (Antrags-ID)?, Welche konkreten „financial metrics“ sollen ausgegeben werden (z. B. Net Worth, DTI, CUR, LTV, CHS, FSI, CES, AHI, CLV) und sollen es Rohfelder, berechnete Kennzahlen oder beides sein?",
-        "summary": "Die Abfrage liefert für 50 Kunden (Seite 1 von 20) je customer_id zentrale Kennzahlen zu Einkommen, Verschuldung (DTI), Vermögen/Verbindlichkeiten inkl. Net Worth sowie Kreditnutzung, Score, Risikostufe und Zahlungsverhalten. In den ersten Zeilen fällt CS834424 mit sehr hohem Monatseinkommen (33.835,58) und hohem Net Worth (1.812.517) bei gleichzeitig niedrigem Credit Score (379), Risk Level „Medium“ und vielen Late Payments (13) auf, während CS206405 trotz solider Liquid Assets (94.190) und Net Worth (864.527) ein „High“-Risiko mit niedrigem Score (423) und 7 Delinquencies zeigt. CS904970 hat einen deutlich besseren Score (645), aber ebenfalls „High“-Risiko, hohe Kreditnutzung (CUR 0,712) und vergleichsweise niedrigen Net Worth (392.801) aufgrund hoher Verbindlichkeiten (866.459).",
-        "explanation": "Lists one row per customer (customer_id in CS format) with key financial standing metrics: income, DTI, liquid assets, total assets/liabilities, computed net worth, credit utilization, and basic credit risk/payment issue indicators. Uses the full required join chain and avoids aggregation.",
+        "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Die Anfrage ist zu allgemein: „customer identifier“ ist im Schema nicht eindeutig (clientref vs. coreregistry vs. appref), und „financial metrics“ ist nicht spezifiziert (es gibt viele mögliche Kennzahlen/Indizes im Domain-Wissen sowie Rohfelder). Ohne Auswahl der gewünschten Metriken und ggf. des Zeitbezugs (mehrere core_record-Einträge pro Kunde möglich über timemark/scoredate) lässt sich keine sichere, korrekte SQL-Abfrage formulieren.. Klärungsfragen: Welchen Kunden-Identifier soll ich ausgeben: core_record.clientref (Kunde), core_record.coreregistry (Record-ID) oder appref (Antrag)?, Welche „financial metrics“ sollen enthalten sein (z.B. DTI/debincratio, CUR/credutil, Net Worth/networth, CLV/custlifeval, CHS/FSI/CES/AHI oder eine konkrete Liste)?",
+        "summary": "Die Abfrage liefert 1.000 Kundenzeilen (Seite 1 zeigt 50) mit Einkommen, DTI, Vermögenswerten/Verbindlichkeiten, Net Worth sowie Kreditkennzahlen (CUR, Score, Risk Level, Delinquencies/Late Pays). In den ersten Ergebnissen fällt auf, dass CS100596 trotz moderatem DTI (0,398) und niedrigem Score (501, Risk “Low”) einen hohen positiven Net Worth von 813.910 (Assets 1.336.658 vs. Liabs 522.748) hat, während CS100439 und CS100625 trotz hoher Einkommen einen negativen Net Worth aufweisen (-333.763 bzw. -459.715) und zugleich erhöhte Zahlungsauffälligkeiten zeigen (z. B. CS100439: 9 Delinquencies, 12 Late Pays). Insgesamt deutet das darauf hin, dass hohe Einkommen nicht automatisch mit positiver Vermögenslage korrelieren und dass Kreditverhalten/Verbindlichkeiten die finanzielle Gesamtposition stark beeinflussen.",
+        "explanation": "Returns one row per customer (CS-format customer_id) with key financial standing metrics: income, DTI, liquid assets/savings/investments, total assets & liabilities, computed net worth, credit utilization, and basic credit risk/payment-issue indicators. Uses the full required join chain and avoids aggregation.",
         "error": null
       }
     },
@@ -1745,21 +1939,21 @@
         "question": "To analyze digital engagement trends, please group customers into quarterly cohorts based on their tenure and identify digital natives. For each combination of cohort with whether they are digital natives, show the cohort quarter, bool value, the cohort size, engagement score, the percentage of the cohort with high engagement, and high-engagement percentage broken down by digital native status.",
         "ambiguity_check": {
           "is_ambiguous": true,
-          "reason": "Mehrere für eine korrekte SQL-Abfrage essentielle Definitionen fehlen bzw. sind widersprüchlich: (1) „Quarterly cohorts based on their tenure“ ist nicht eindeutig, weil zwar ein Domain-Hinweis zu „Cohort Quarter“ existiert, aber unklar ist, ob das Quartal aus scoredate minus tenureyrs (und wie genau: Jahre→Datum) oder aus einem anderen Startdatum abgeleitet werden soll. (2) „Digital natives“ ist nicht definiert; es gibt nur „Digital First Customer“ (High online/mobile + autopay=Yes), aber das ist nicht zwingend gleichbedeutend. (3) „Engagement score“ ist nicht eindeutig: Es gibt CES als definierte Kennzahl, aber auch einzelne Felder (produsescore, chanusescore, bankrelscore, custservint), und es ist unklar, ob CES oder etwas anderes gemeint ist. (4) „High engagement“ ist zwar als CES > 0.7 definiert, aber nur falls CES tatsächlich die gemeinte Engagement-Kennzahl ist. (5) Die gewünschte Ausgabe ist redundant/unklar: Es wird sowohl „percentage of the cohort with high engagement“ als auch „high-engagement percentage broken down by digital native status“ verlangt, obwohl bereits nach digital-native Status gruppiert werden soll; unklar, ob zusätzlich ein Gesamtwert pro Cohort (ohne Aufteilung) erwartet wird.",
+          "reason": "Mehrere essentielle Definitionen sind unklar bzw. nicht direkt aus Schema/Domain-Wissen ableitbar: (1) „quarterly cohorts based on their tenure“ und „cohort quarter“ sind nicht eindeutig operationalisiert (es gibt zwar eine Domain-Notiz, aber unklar ob scoredate oder timemark als Referenzdatum gilt und wie genau das Quarter berechnet werden soll). (2) „digital natives“ ist nicht definiert; es gibt nur „Digital First Customer“ als ähnliche, aber nicht identische Regel. (3) „engagement score“ ist nicht eindeutig: Es existiert CES als definierter Score, aber die Frage könnte auch chanusescore/produsescore/bankrelscore meinen. (4) „high engagement“ ist zwar im Domain-Wissen als CES > 0.7 definiert, aber nur falls „engagement score“ tatsächlich CES ist. (5) Die Ausgabeforderung ist redundant/unklar: Es wird sowohl „percentage of the cohort with high engagement“ als auch „high-engagement percentage broken down by digital native status“ verlangt, obwohl bereits nach digital-native Status gruppiert werden soll; unklar, ob zusätzlich ein Gesamtwert pro Cohort (ohne DN-Split) erwartet wird.",
           "questions": [
-            "Wie genau soll das „cohort quarter“ berechnet werden: gemäß Domain-Wissen als Quartal von (scoredate minus tenureyrs) oder nach einer anderen Logik/Spalte? Falls scoredate minus tenureyrs: soll tenureyrs als ganze Jahre vom scoredate abgezogen werden (z.B. scoredate - interval '1 year' * tenureyrs)?",
-            "Wie definieren Sie „digital natives“ konkret: sollen wir die vorhandene Definition „Digital First Customer“ verwenden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes'), oder gibt es eine andere Regel?"
+            "Wie genau soll der „Cohort Quarter“ berechnet werden: anhand scoredate oder timemark, und ist die Definition „Quarter von (scoredate minus tenureyrs)“ verbindlich (und wie wird tenureyrs in ein Datum umgerechnet)?",
+            "Wie definieren Sie „digital natives“ konkret: soll die vorhandene Regel „Digital First Customer“ (onlineuse='High' oder mobileuse='High' UND autopay='Yes') verwendet werden, oder eine andere Definition?"
           ]
         },
-        "generated_sql": "WITH base AS (\n  SELECT\n    CASE\n      WHEN (\n        (\n          json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n          OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n        )\n        AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'\n      ) THEN 1 ELSE 0\n    END AS is_digital_native,\n    (\n      0.4 * cah.produsescore +\n      0.3 * cah.chanusescore +\n      0.2 * bt.bankrelscore +\n      0.1 * (cah.custservint / 10.0)\n    ) AS ces\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\n  JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\n  JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\n)\nSELECT\n  is_digital_native,\n  COUNT(*) AS cohort_size,\n  AVG(ces) AS avg_engagement,\n  AVG(CASE WHEN ces > 0.7 THEN 1.0 ELSE 0.0 END) AS pct_high_engagement\nFROM base\nGROUP BY is_digital_native\nORDER BY is_digital_native",
+        "generated_sql": "WITH base AS (\n  SELECT\n    CASE\n      WHEN (\n        (json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n         OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High')\n        AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'\n      ) THEN 1 ELSE 0\n    END AS is_digital_native,\n    (\n      0.4 * cah.produsescore +\n      0.3 * cah.chanusescore +\n      0.2 * bt.bankrelscore +\n      0.1 * (cah.custservint / 10.0)\n    ) AS ces\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\n  JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\n  JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\n)\nSELECT\n  is_digital_native,\n  COUNT(*) AS cohort_size,\n  AVG(ces) AS avg_engagement,\n  AVG(CASE WHEN ces > 0.7 THEN 1.0 ELSE 0.0 END) AS pct_high_engagement\nFROM base\nGROUP BY is_digital_native\nORDER BY is_digital_native",
         "validation": {
           "is_valid": true,
           "errors": [],
           "severity": "low",
           "suggestions": [
-            "Optional: json_extract(...) kann NULL liefern; falls gewünscht, mit COALESCE(json_extract(...), 'No') bzw. COALESCE(bt.bankrelscore,0) etc. absichern, um NULL-Propagation in 'ces' zu vermeiden.",
-            "Optional: CAST(json_extract(... ) AS TEXT) verwenden, falls die JSON-Werte nicht konsistent als Text gespeichert sind (SQLite kann sonst je nach JSON-Typisierung vergleichen).",
-            "Style: Am Ende ein Semikolon ergänzen."
+            "Optional: json_extract(...) returns TEXT; if values could be missing/null, wrap comparisons with COALESCE(json_extract(...), '') to avoid NULL logic affecting is_digital_native.",
+            "Optional: Guard against NULL inputs in CES (e.g., COALESCE(cah.produsescore,0), etc.) if any of the score columns can be NULL; otherwise CES/AVG may become NULL for some rows.",
+            "Style: Add a semicolon at the end of the final SELECT for consistency."
           ]
         },
         "results": [
@@ -1777,16 +1971,16 @@
           }
         ],
         "row_count": 2,
-        "query_id": "0b574133df074a57b856728ae9818a77",
+        "query_id": "1876cb6ba2674f529ca42e3644677832",
         "page": 1,
         "page_size": 50,
         "total_pages": 1,
         "total_rows": 2,
         "has_next_page": false,
         "has_previous_page": false,
-        "notice": " Hinweis: Ambiguity: Mehrere für eine korrekte SQL-Abfrage essentielle Definitionen fehlen bzw. sind widersprüchlich: (1) „Quarterly cohorts based on their tenure“ ist nicht eindeutig, weil zwar ein Domain-Hinweis zu „Cohort Quarter“ existiert, aber unklar ist, ob das Quartal aus scoredate minus tenureyrs (und wie genau: Jahre→Datum) oder aus einem anderen Startdatum abgeleitet werden soll. (2) „Digital natives“ ist nicht definiert; es gibt nur „Digital First Customer“ (High online/mobile + autopay=Yes), aber das ist nicht zwingend gleichbedeutend. (3) „Engagement score“ ist nicht eindeutig: Es gibt CES als definierte Kennzahl, aber auch einzelne Felder (produsescore, chanusescore, bankrelscore, custservint), und es ist unklar, ob CES oder etwas anderes gemeint ist. (4) „High engagement“ ist zwar als CES > 0.7 definiert, aber nur falls CES tatsächlich die gemeinte Engagement-Kennzahl ist. (5) Die gewünschte Ausgabe ist redundant/unklar: Es wird sowohl „percentage of the cohort with high engagement“ als auch „high-engagement percentage broken down by digital native status“ verlangt, obwohl bereits nach digital-native Status gruppiert werden soll; unklar, ob zusätzlich ein Gesamtwert pro Cohort (ohne Aufteilung) erwartet wird.. Klärungsfragen: Wie genau soll das „cohort quarter“ berechnet werden: gemäß Domain-Wissen als Quartal von (scoredate minus tenureyrs) oder nach einer anderen Logik/Spalte? Falls scoredate minus tenureyrs: soll tenureyrs als ganze Jahre vom scoredate abgezogen werden (z.B. scoredate - interval '1 year' * tenureyrs)?, Wie definieren Sie „digital natives“ konkret: sollen wir die vorhandene Definition „Digital First Customer“ verwenden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes'), oder gibt es eine andere Regel?",
-        "summary": "Die Abfrage liefert zwei Gruppen nach Digital-Native-Status (ohne quartalsbasierte Tenure-Kohorten): 715 Nicht‑Digital‑Natives und 285 Digital Natives. Der durchschnittliche Engagement-Score ist in beiden Gruppen sehr ähnlich (0,547 vs. 0,543), jedoch ist der Anteil mit hohem Engagement (CES > 0,7) bei Nicht‑Digital‑Natives höher (21,1%) als bei Digital Natives (16,8%). Als nächster Schritt sollten Tenure/Startdatum und eine Quartalszuordnung in die SQL aufgenommen werden, um die gewünschten quartalsweisen Kohorten und die High‑Engagement‑Anteile je Kohorte und Digital‑Native‑Status auszuweisen.",
-        "explanation": "Builds a customer-level base set using the full BSL join chain, flags each customer as a digital native (Digital First) using qualified JSON fields, computes CES per the BSL formula, then returns a 2-row summary grouped by is_digital_native with cohort_size, average CES, and the share of customers with high engagement (CES > 0.7) as a 0-1 ratio. No cohort quarter/time-series fields are computed because no explicit time range was provided. [BSL compliance regeneration]",
+        "notice": " Hinweis: Ambiguity: Mehrere essentielle Definitionen sind unklar bzw. nicht direkt aus Schema/Domain-Wissen ableitbar: (1) „quarterly cohorts based on their tenure“ und „cohort quarter“ sind nicht eindeutig operationalisiert (es gibt zwar eine Domain-Notiz, aber unklar ob scoredate oder timemark als Referenzdatum gilt und wie genau das Quarter berechnet werden soll). (2) „digital natives“ ist nicht definiert; es gibt nur „Digital First Customer“ als ähnliche, aber nicht identische Regel. (3) „engagement score“ ist nicht eindeutig: Es existiert CES als definierter Score, aber die Frage könnte auch chanusescore/produsescore/bankrelscore meinen. (4) „high engagement“ ist zwar im Domain-Wissen als CES > 0.7 definiert, aber nur falls „engagement score“ tatsächlich CES ist. (5) Die Ausgabeforderung ist redundant/unklar: Es wird sowohl „percentage of the cohort with high engagement“ als auch „high-engagement percentage broken down by digital native status“ verlangt, obwohl bereits nach digital-native Status gruppiert werden soll; unklar, ob zusätzlich ein Gesamtwert pro Cohort (ohne DN-Split) erwartet wird.. Klärungsfragen: Wie genau soll der „Cohort Quarter“ berechnet werden: anhand scoredate oder timemark, und ist die Definition „Quarter von (scoredate minus tenureyrs)“ verbindlich (und wie wird tenureyrs in ein Datum umgerechnet)?, Wie definieren Sie „digital natives“ konkret: soll die vorhandene Regel „Digital First Customer“ (onlineuse='High' oder mobileuse='High' UND autopay='Yes') verwendet werden, oder eine andere Definition?",
+        "summary": "Die Abfrage liefert keine quartalsbasierten Tenure-Kohorten, sondern nur einen Vergleich nach Digital-Native-Status: 715 Nicht‑Digital‑Natives vs. 285 Digital Natives. Die durchschnittlichen Engagement-Scores sind sehr ähnlich (0,547 vs. 0,543), jedoch ist der Anteil mit hohem Engagement (CES > 0,7) bei Nicht‑Digital‑Natives höher (21,1%) als bei Digital Natives (16,8%). Als nächster Schritt sollte ein Tenure-/Startdatum-Feld in die Base-CTE aufgenommen und per Quartal (z. B. DATE_TRUNC('quarter', …)) gruppiert werden, um die gewünschten Kohorten-Auswertungen zu erhalten.",
+        "explanation": "Builds a customer-level base set using the full BSL join chain, flags each customer as digital native (Digital First) via qualified JSON fields in bank_and_transactions, computes CES per BSL, then returns the required 2-row summary grouped by is_digital_native with cohort_size, average CES, and the share of customers with CES > 0.7 as a decimal ratio. [BSL compliance regeneration]",
         "error": null
       }
     },
@@ -1795,79 +1989,22 @@
       "question": "I need to analyze debt burden across different customer segments. Can you provide a summary for each segment with relevant debt metrics? Also add a grant total row. Exclude any customer segment with few customers and order the results.",
       "result": {
         "question": "I need to analyze debt burden across different customer segments. Can you provide a summary for each segment with relevant debt metrics? Also add a grant total row. Exclude any customer segment with few customers and order the results.",
-        "ambiguity_check": {
-          "is_ambiguous": true,
-          "reason": "Wesentliche Spezifikationen fehlen, um eine korrekte und sichere SQL-Abfrage zu erstellen: (1) „debt burden“/„relevant debt metrics“ ist nicht eindeutig (DTI, totale Verbindlichkeiten, Kreditnutzung, Loan Amount, LTV etc.). (2) „few customers“ benötigt einen konkreten Schwellenwert oder eine Definition (absolute Anzahl, Prozentanteil, Mindest-n). (3) „order the results“ ist unklar (nach welchem Metric, auf-/absteigend, ob Grand Total oben/unten). (4) „customer segment“ ist zwar als core_record.clientseg naheliegend, aber es ist nicht explizit bestätigt, und es ist unklar, ob ein Zeitraum/aktueller Snapshot gefiltert werden soll (z.B. scoredate).",
-          "questions": [
-            "Welche Kennzahlen sollen als „debt burden“/„relevant debt metrics“ in die Segment-Zusammenfassung aufgenommen werden (z.B. Durchschnitt/Median debincratio (DTI), Summe/Ø totliabs, Ø credutil, Ø totloanamt, Ø delinqcount/latepaycount, LTV für Eigentümer)?",
-            "Wie definierst du „few customers“ für das Exkludieren von Segmenten (z.B. weniger als 30 Kunden, weniger als 1% der Gesamtmenge, oder ein anderer Mindestwert)?",
-            "Nach welchem Kriterium sollen die Ergebnisse sortiert werden (z.B. absteigend nach Ø DTI, absteigend nach Ø totliabs, alphabetisch nach Segment) und wo soll die Grand-Total-Zeile stehen (oben/unten)?"
-          ]
-        },
-        "generated_sql": "WITH _union_order_wrapper AS (\nWITH segment_summary AS (\n  SELECT\n    cr.clientseg AS customer_segment,\n    COUNT(*) AS customer_count,\n    AVG(ei.debincratio) AS avg_dti,\n    AVG(ea.totliabs) AS avg_total_liabilities,\n    AVG(ea.totassets) AS avg_total_assets,\n    AVG(ea.totliabs / NULLIF(ea.totassets, 0)) AS avg_liabilities_to_assets,\n    AVG(cah.credutil) AS avg_credit_utilization,\n    AVG(ea.totassets - ea.totliabs) AS avg_net_worth\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\n  JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\n  JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\n  GROUP BY cr.clientseg\n  HAVING COUNT(*) >= 10\n),\ngrand_total AS (\n  SELECT\n    'Grand Total' AS customer_segment,\n    COUNT(*) AS customer_count,\n    AVG(ei.debincratio) AS avg_dti,\n    AVG(ea.totliabs) AS avg_total_liabilities,\n    AVG(ea.totassets) AS avg_total_assets,\n    AVG(ea.totliabs / NULLIF(ea.totassets, 0)) AS avg_liabilities_to_assets,\n    AVG(cah.credutil) AS avg_credit_utilization,\n    AVG(ea.totassets - ea.totliabs) AS avg_net_worth\n  FROM core_record cr\n  JOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\n  JOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\n  JOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\n  JOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\n  JOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\n)\nSELECT\n  customer_segment,\n  customer_count,\n  avg_dti,\n  avg_total_liabilities,\n  avg_total_assets,\n  avg_liabilities_to_assets,\n  avg_credit_utilization,\n  avg_net_worth\nFROM segment_summary\n\nUNION ALL\n\nSELECT\n  customer_segment,\n  customer_count,\n  avg_dti,\n  avg_total_liabilities,\n  avg_total_assets,\n  avg_liabilities_to_assets,\n  avg_credit_utilization,\n  avg_net_worth\nFROM grand_total\n)\nSELECT * FROM _union_order_wrapper\nORDER BY\n  CASE WHEN customer_segment = 'Grand Total' THEN 1 ELSE 0 END,\n  customer_count DESC,\n  customer_segment ASC",
-        "validation": {
-          "is_valid": true,
-          "errors": [],
-          "severity": "low",
-          "suggestions": [
-            "Die äußere CTE-Hülle \"_union_order_wrapper\" ist für SQLite nicht zwingend nötig, da ORDER BY nach UNION ALL hier nur Ergebnis-Spalten referenziert; sie kann zur Vereinfachung entfernt werden.",
-            "Optional: In \"grand_total\" kann ein WHERE-Filter ergänzt werden, falls nur Segmente berücksichtigt werden sollen, die auch die HAVING-Bedingung (COUNT(*) >= 10) erfüllen; aktuell ist \"Grand Total\" über alle Datensätze berechnet."
-          ]
-        },
-        "results": [
-          {
-            "customer_segment": "Basic",
-            "customer_count": 346,
-            "avg_dti": 0.3013526011560694,
-            "avg_total_liabilities": 499857.6329479769,
-            "avg_total_assets": 1051656.1040462428,
-            "avg_liabilities_to_assets": 1.9980387172730554,
-            "avg_credit_utilization": 0.508,
-            "avg_net_worth": 551798.4710982658
-          },
-          {
-            "customer_segment": "Standard",
-            "customer_count": 340,
-            "avg_dti": 0.29964411764705884,
-            "avg_total_liabilities": 488187.4794117647,
-            "avg_total_assets": 1040977.1794117647,
-            "avg_liabilities_to_assets": 1.3443041604941275,
-            "avg_credit_utilization": 0.5194323529411765,
-            "avg_net_worth": 552789.7
-          },
-          {
-            "customer_segment": "Premium",
-            "customer_count": 314,
-            "avg_dti": 0.2982484076433121,
-            "avg_total_liabilities": 475622.2675159236,
-            "avg_total_assets": 1036613.5350318472,
-            "avg_liabilities_to_assets": 2.12485906228541,
-            "avg_credit_utilization": 0.49786305732484076,
-            "avg_net_worth": 560991.2675159236
-          },
-          {
-            "customer_segment": "Grand Total",
-            "customer_count": 1000,
-            "avg_dti": 0.29979700000000004,
-            "avg_total_liabilities": 488279.876,
-            "avg_total_assets": 1043301.903,
-            "avg_liabilities_to_assets": 1.8155905563020993,
-            "avg_credit_utilization": 0.508704,
-            "avg_net_worth": 555022.027
-          }
-        ],
-        "row_count": 4,
-        "query_id": "5a06ac19378a4392bf9bbc4b0a1895ea",
+        "ambiguity_check": null,
+        "generated_sql": "",
+        "validation": null,
+        "results": [],
+        "row_count": 0,
+        "query_id": null,
         "page": 1,
-        "page_size": 50,
-        "total_pages": 1,
-        "total_rows": 4,
+        "page_size": 100,
+        "total_pages": null,
+        "total_rows": null,
         "has_next_page": false,
         "has_previous_page": false,
-        "notice": " Hinweis: Ambiguity: Wesentliche Spezifikationen fehlen, um eine korrekte und sichere SQL-Abfrage zu erstellen: (1) „debt burden“/„relevant debt metrics“ ist nicht eindeutig (DTI, totale Verbindlichkeiten, Kreditnutzung, Loan Amount, LTV etc.). (2) „few customers“ benötigt einen konkreten Schwellenwert oder eine Definition (absolute Anzahl, Prozentanteil, Mindest-n). (3) „order the results“ ist unklar (nach welchem Metric, auf-/absteigend, ob Grand Total oben/unten). (4) „customer segment“ ist zwar als core_record.clientseg naheliegend, aber es ist nicht explizit bestätigt, und es ist unklar, ob ein Zeitraum/aktueller Snapshot gefiltert werden soll (z.B. scoredate).. Klärungsfragen: Welche Kennzahlen sollen als „debt burden“/„relevant debt metrics“ in die Segment-Zusammenfassung aufgenommen werden (z.B. Durchschnitt/Median debincratio (DTI), Summe/Ø totliabs, Ø credutil, Ø totloanamt, Ø delinqcount/latepaycount, LTV für Eigentümer)?, Wie definierst du „few customers“ für das Exkludieren von Segmenten (z.B. weniger als 30 Kunden, weniger als 1% der Gesamtmenge, oder ein anderer Mindestwert)?, Nach welchem Kriterium sollen die Ergebnisse sortiert werden (z.B. absteigend nach Ø DTI, absteigend nach Ø totliabs, alphabetisch nach Segment) und wo soll die Grand-Total-Zeile stehen (oben/unten)?",
-        "summary": "Über die drei ausreichend großen Segmente (≥10 Kunden) sind Debt-to-Income und Vermögenslage sehr ähnlich: Basic (346 Kunden) hat eine avg DTI von 0,301, Standard (340) 0,300 und Premium (314) 0,298; die durchschnittlichen Nettovermögen liegen jeweils um ~552k–561k bei Assets von ~1,04–1,05 Mio. und Verbindlichkeiten von ~476k–500k. Auffällig ist, dass die Kennzahl „avg_liabilities_to_assets“ je Segment stark schwankt (Standard 1,34 vs. Basic 2,00 und Premium 2,12), obwohl die zugrundeliegenden Durchschnittswerte für Assets/Verbindlichkeiten ähnlich sind; die durchschnittliche Kreditnutzung liegt insgesamt um ~0,50 (Standard am höchsten mit ~0,519). Die Grand-Total-Zeile ist in den gezeigten ersten Zeilen nicht enthalten, sollte aber als vierte Zeile im Ergebnis stehen und die Gesamtmittelwerte über alle Kunden ausweisen.",
-        "explanation": "Creates a per-customer-segment debt-burden summary (count, average DTI, average liabilities/assets, liabilities-to-assets ratio, average credit utilization, and average net worth computed as totassets - totliabs). Segments with fewer than 10 customers are excluded. A 'Grand Total' row across all customers is appended via UNION ALL. Results are ordered with segments first (largest to smallest), and the grand total last.",
-        "error": null
+        "notice": null,
+        "summary": null,
+        "explanation": "Interner Fehler – bitte erneut versuchen.",
+        "error": "Interner Fehler: no such column: sort_key"
       }
     },
     {
@@ -1877,487 +2014,486 @@
         "question": "For each customer, show their ID, liquid and total assets, liquidity measure, monthly income, investment amount and label of their investment potential.",
         "ambiguity_check": {
           "is_ambiguous": true,
-          "reason": "Wesentliche Punkte sind nicht eindeutig genug für eine sichere SQL-Abfrage: (1) „customer ID“ ist im Schema nicht direkt in den Asset/Income-Tabellen vorhanden; es gibt mehrere mögliche IDs (core_record.clientref vs. coreregistry als Record-ID) und die Join-Kette muss festgelegt werden. (2) „liquidity measure“ ist nicht definiert: es könnte liqassets selbst, ALR (liqassets/totassets) oder ein anderer im Domain-Wissen definierter Index (z.B. FSI-Komponente) sein. (3) „label of their investment potential“ ist nicht definiert: es gibt mehrere mögliche Regeln/Labels (z.B. „Investment Focused“, „Investment Services Target“, IPQ-Score) und keine Schwellen/Mapping für ein Label wird angegeben.",
+          "reason": "Wesentliche Punkte sind nicht eindeutig definiert: (1) „customer ID“ kann je nach Join-Pfad coreregistry (Record), clientref (Kunde) oder eine der Referenzen (expemplref/bankexpref/compbankref/histcompref) meinen. (2) „liquidity measure“ ist nicht spezifiziert—im Domain-Wissen existieren mehrere mögliche Kennzahlen (z. B. ALR = liqassets/totassets, FSI-Komponenten, oder ein einfacher Liquiditäts-Puffer wie liqassets/(mthincome*6)). (3) „label of their investment potential“ ist nicht als konkrete Regel/Schwellenwerte definiert; es gibt zwar „Investment Focused“ und „Investment Services Target“, aber „investment potential“ könnte auch quartilsbasiert oder über IPQ/ALR/Investamt-Anteil erfolgen. Ohne diese Festlegungen ist keine sichere, korrekte SQL-Abfrage ableitbar.",
           "questions": [
-            "Welche ID soll als „customer ID“ ausgegeben werden: core_record.clientref (Kunden-ID) oder core_record.coreregistry (Record/Case-ID)?",
-            "Was genau meinst du mit „liquidity measure“: den Asset Liquidity Ratio (liqassets/totassets), den Betrag liqassets, oder einen anderen definierten Index?",
-            "Wie soll „investment potential“ gelabelt werden: nach einer bestehenden Regel (z.B. „Investment Focused“ oder „Investment Services Target“) oder anhand eines Scores (z.B. IPQ) mit welchen Schwellenwerten/Kategorien?"
+            "Welche Spalte soll als „customer ID“ ausgegeben werden: core_record.clientref (Kunden-ID) oder core_record.coreregistry (Record-ID)?",
+            "Welche „liquidity measure“ meinst du genau (z. B. ALR = liqassets/totassets, oder ein anderer im Domain-Wissen definierter Wert)?",
+            "Wie soll das „investment potential“-Label bestimmt werden: nach einer bestehenden Definition (z. B. „Investment Focused“ oder „Investment Services Target“) oder nach eigenen Schwellen/Quartilen?"
           ]
         },
-        "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  ea.liqassets AS liquid_assets,\n  ea.totassets AS total_assets,\n  CASE\n    WHEN ea.totassets IS NULL OR ea.totassets = 0 THEN NULL\n    ELSE ea.liqassets * 1.0 / ea.totassets\n  END AS liquidity_measure_alr,\n  ei.mthincome AS monthly_income,\n  ea.investamt AS investment_amount,\n  CASE\n    WHEN (ea.totassets IS NOT NULL AND ea.totassets <> 0)\n         AND (ea.liqassets * 1.0 / ea.totassets) > 0.3\n         AND ei.mthincome > 5000\n      THEN 'Target'\n    ELSE 'Standard'\n  END AS investment_potential_label\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref",
+        "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  ea.liqassets,\n  ea.totassets,\n  (ea.liqassets * 1.0) / NULLIF(ea.totassets, 0) AS liquidity_measure_alr,\n  ei.mthincome,\n  ea.investamt,\n  CASE\n    WHEN (ea.liqassets * 1.0) / NULLIF(ea.totassets, 0) > 0.3\n         AND ei.mthincome > 5000\n      THEN 'Target'\n    ELSE 'Standard'\n  END AS investment_potential_label\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref",
         "validation": {
           "is_valid": true,
           "errors": [],
           "severity": "low",
           "suggestions": [
-            "JOINs auf bt/cc/cah sind für die ausgewählten Spalten nicht nötig. Wenn keine Filter/Spalten aus diesen Tabellen verwendet werden, können diese JOINs entfernt werden, um Duplikate und unnötige Zeilenvervielfachung zu vermeiden.",
-            "Falls pro Kunde mehrere Datensätze in bt/cc/cah existieren können, erzeugen die INNER JOINs Mehrfachzeilen pro customer_id. Dann entweder auf die benötigte Tabelle/Zeile einschränken (z.B. per DISTINCT, Aggregation oder geeigneten Filterkriterien) oder die JOINs weglassen.",
-            "Optional: In der Label-Logik auch NULL für ei.mthincome berücksichtigen (aktuell führt NULL zu 'Standard', was ok sein kann, aber bewusst entscheiden)."
+            "JOINs auf bank_and_transactions, credit_and_compliance und credit_accounts_and_history sind für die ausgewählten Spalten nicht nötig; entfernen, falls keine Filter/Spalten daraus verwendet werden (Performance/Lesbarkeit).",
+            "Optional: NULL-Handling für liquidity_measure_alr präzisieren (z.B. CASE WHEN ea.totassets IS NULL OR ea.totassets=0 THEN NULL ...), falls NULL/0 in totassets vorkommt."
           ]
         },
         "results": [
           {
             "customer_id": "CS206405",
-            "liquid_assets": 94190.0,
-            "total_assets": 1495371.0,
+            "liqassets": 94190.0,
+            "totassets": 1495371.0,
             "liquidity_measure_alr": 0.062987713416938,
-            "monthly_income": 6564.25,
-            "investment_amount": 163007.0,
+            "mthincome": 6564.25,
+            "investamt": 163007.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS834424",
-            "liquid_assets": 186120.0,
-            "total_assets": 1923802.0,
+            "liqassets": 186120.0,
+            "totassets": 1923802.0,
             "liquidity_measure_alr": 0.0967459229172233,
-            "monthly_income": 33835.58,
-            "investment_amount": 643448.0,
+            "mthincome": 33835.58,
+            "investamt": 643448.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS904970",
-            "liquid_assets": 429061.0,
-            "total_assets": 1259260.0,
+            "liqassets": 429061.0,
+            "totassets": 1259260.0,
             "liquidity_measure_alr": 0.3407247113384051,
-            "monthly_income": 18687.75,
-            "investment_amount": 523492.0,
+            "mthincome": 18687.75,
+            "investamt": 523492.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS886903",
-            "liquid_assets": 326737.0,
-            "total_assets": 555132.0,
+            "liqassets": 326737.0,
+            "totassets": 555132.0,
             "liquidity_measure_alr": 0.5885753298314635,
-            "monthly_income": 21272.83,
-            "investment_amount": 363903.0,
+            "mthincome": 21272.83,
+            "investamt": 363903.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS767632",
-            "liquid_assets": 226494.0,
-            "total_assets": 846173.0,
+            "liqassets": 226494.0,
+            "totassets": 846173.0,
             "liquidity_measure_alr": 0.2676686682274192,
-            "monthly_income": 29862.83,
-            "investment_amount": 312806.0,
+            "mthincome": 29862.83,
+            "investamt": 312806.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS252516",
-            "liquid_assets": 172739.0,
-            "total_assets": 277451.0,
+            "liqassets": 172739.0,
+            "totassets": 277451.0,
             "liquidity_measure_alr": 0.6225928181913203,
-            "monthly_income": 5401.75,
-            "investment_amount": 285627.0,
+            "mthincome": 5401.75,
+            "investamt": 285627.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS891919",
-            "liquid_assets": 284607.0,
-            "total_assets": 1190666.0,
+            "liqassets": 284607.0,
+            "totassets": 1190666.0,
             "liquidity_measure_alr": 0.23903176877478655,
-            "monthly_income": 29779.67,
-            "investment_amount": 377119.0,
+            "mthincome": 29779.67,
+            "investamt": 377119.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS765007",
-            "liquid_assets": 50319.0,
-            "total_assets": 1079715.0,
+            "liqassets": 50319.0,
+            "totassets": 1079715.0,
             "liquidity_measure_alr": 0.04660396493519123,
-            "monthly_income": 7582.5,
-            "investment_amount": 698147.0,
+            "mthincome": 7582.5,
+            "investamt": 698147.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS507608",
-            "liquid_assets": 262653.0,
-            "total_assets": 1838678.0,
+            "liqassets": 262653.0,
+            "totassets": 1838678.0,
             "liquidity_measure_alr": 0.14284882943071053,
-            "monthly_income": 20711.92,
-            "investment_amount": 108554.0,
+            "mthincome": 20711.92,
+            "investamt": 108554.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS893515",
-            "liquid_assets": 114233.0,
-            "total_assets": 663194.0,
+            "liqassets": 114233.0,
+            "totassets": 663194.0,
             "liquidity_measure_alr": 0.17224673323341286,
-            "monthly_income": 3105.67,
-            "investment_amount": 706349.0,
+            "mthincome": 3105.67,
+            "investamt": 706349.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS986753",
-            "liquid_assets": 200195.0,
-            "total_assets": 631745.0,
+            "liqassets": 200195.0,
+            "totassets": 631745.0,
             "liquidity_measure_alr": 0.31689210045192284,
-            "monthly_income": 28742.08,
-            "investment_amount": 675468.0,
+            "mthincome": 28742.08,
+            "investamt": 675468.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS414493",
-            "liquid_assets": 374806.0,
-            "total_assets": 634974.0,
+            "liqassets": 374806.0,
+            "totassets": 634974.0,
             "liquidity_measure_alr": 0.5902698378201312,
-            "monthly_income": 10998.33,
-            "investment_amount": 383086.0,
+            "mthincome": 10998.33,
+            "investamt": 383086.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS429393",
-            "liquid_assets": 4920.0,
-            "total_assets": 449712.0,
+            "liqassets": 4920.0,
+            "totassets": 449712.0,
             "liquidity_measure_alr": 0.010940335147827943,
-            "monthly_income": 30262.75,
-            "investment_amount": 933147.0,
+            "mthincome": 30262.75,
+            "investamt": 933147.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS166671",
-            "liquid_assets": 275510.0,
-            "total_assets": 829580.0,
+            "liqassets": 275510.0,
+            "totassets": 829580.0,
             "liquidity_measure_alr": 0.33210781359242025,
-            "monthly_income": 12955.58,
-            "investment_amount": 303766.0,
+            "mthincome": 12955.58,
+            "investamt": 303766.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS222072",
-            "liquid_assets": 225367.0,
-            "total_assets": 382490.0,
+            "liqassets": 225367.0,
+            "totassets": 382490.0,
             "liquidity_measure_alr": 0.589210175429423,
-            "monthly_income": 26878.67,
-            "investment_amount": 845844.0,
+            "mthincome": 26878.67,
+            "investamt": 845844.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS162913",
-            "liquid_assets": 250760.0,
-            "total_assets": 1700935.0,
+            "liqassets": 250760.0,
+            "totassets": 1700935.0,
             "liquidity_measure_alr": 0.14742479871364866,
-            "monthly_income": 1925.33,
-            "investment_amount": 510567.0,
+            "mthincome": 1925.33,
+            "investamt": 510567.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS517135",
-            "liquid_assets": 277342.0,
-            "total_assets": 1666761.0,
+            "liqassets": 277342.0,
+            "totassets": 1666761.0,
             "liquidity_measure_alr": 0.16639578199873886,
-            "monthly_income": 25511.67,
-            "investment_amount": 531761.0,
+            "mthincome": 25511.67,
+            "investamt": 531761.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS180245",
-            "liquid_assets": 329932.0,
-            "total_assets": 1846280.0,
+            "liqassets": 329932.0,
+            "totassets": 1846280.0,
             "liquidity_measure_alr": 0.17870095543471196,
-            "monthly_income": 10928.33,
-            "investment_amount": 995124.0,
+            "mthincome": 10928.33,
+            "investamt": 995124.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS335050",
-            "liquid_assets": 478309.0,
-            "total_assets": 801215.0,
+            "liqassets": 478309.0,
+            "totassets": 801215.0,
             "liquidity_measure_alr": 0.5969795872518613,
-            "monthly_income": 5215.83,
-            "investment_amount": 475692.0,
+            "mthincome": 5215.83,
+            "investamt": 475692.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS646404",
-            "liquid_assets": 36203.0,
-            "total_assets": 456257.0,
+            "liqassets": 36203.0,
+            "totassets": 456257.0,
             "liquidity_measure_alr": 0.07934782370462261,
-            "monthly_income": 39672.75,
-            "investment_amount": 883237.0,
+            "mthincome": 39672.75,
+            "investamt": 883237.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS544345",
-            "liquid_assets": 390300.0,
-            "total_assets": 264158.0,
+            "liqassets": 390300.0,
+            "totassets": 264158.0,
             "liquidity_measure_alr": 1.4775248146942361,
-            "monthly_income": 8876.08,
-            "investment_amount": 318945.0,
+            "mthincome": 8876.08,
+            "investamt": 318945.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS450025",
-            "liquid_assets": 327959.0,
-            "total_assets": 194996.0,
+            "liqassets": 327959.0,
+            "totassets": 194996.0,
             "liquidity_measure_alr": 1.6818755256518083,
-            "monthly_income": 4478.17,
-            "investment_amount": 795900.0,
+            "mthincome": 4478.17,
+            "investamt": 795900.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS298969",
-            "liquid_assets": 68913.0,
-            "total_assets": 909790.0,
+            "liqassets": 68913.0,
+            "totassets": 909790.0,
             "liquidity_measure_alr": 0.07574605128656063,
-            "monthly_income": 34752.25,
-            "investment_amount": 862559.0,
+            "mthincome": 34752.25,
+            "investamt": 862559.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS824002",
-            "liquid_assets": 425133.0,
-            "total_assets": 1099502.0,
+            "liqassets": 425133.0,
+            "totassets": 1099502.0,
             "liquidity_measure_alr": 0.3866595967992782,
-            "monthly_income": 36844.25,
-            "investment_amount": 969288.0,
+            "mthincome": 36844.25,
+            "investamt": 969288.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS969683",
-            "liquid_assets": 168868.0,
-            "total_assets": 1888947.0,
+            "liqassets": 168868.0,
+            "totassets": 1888947.0,
             "liquidity_measure_alr": 0.08939795558054302,
-            "monthly_income": 15466.08,
-            "investment_amount": 455900.0,
+            "mthincome": 15466.08,
+            "investamt": 455900.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS169928",
-            "liquid_assets": 445414.0,
-            "total_assets": 163762.0,
+            "liqassets": 445414.0,
+            "totassets": 163762.0,
             "liquidity_measure_alr": 2.7198861762802116,
-            "monthly_income": 13932.58,
-            "investment_amount": 921365.0,
+            "mthincome": 13932.58,
+            "investamt": 921365.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS180232",
-            "liquid_assets": 63886.0,
-            "total_assets": 1725531.0,
+            "liqassets": 63886.0,
+            "totassets": 1725531.0,
             "liquidity_measure_alr": 0.03702396537645513,
-            "monthly_income": 32269.42,
-            "investment_amount": 22619.0,
+            "mthincome": 32269.42,
+            "investamt": 22619.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS232683",
-            "liquid_assets": 283634.0,
-            "total_assets": 311818.0,
+            "liqassets": 283634.0,
+            "totassets": 311818.0,
             "liquidity_measure_alr": 0.9096139414658551,
-            "monthly_income": 28957.83,
-            "investment_amount": 483546.0,
+            "mthincome": 28957.83,
+            "investamt": 483546.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS354471",
-            "liquid_assets": 475716.0,
-            "total_assets": 934678.0,
+            "liqassets": 475716.0,
+            "totassets": 934678.0,
             "liquidity_measure_alr": 0.5089624448205692,
-            "monthly_income": 9145.25,
-            "investment_amount": 708061.0,
+            "mthincome": 9145.25,
+            "investamt": 708061.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS688942",
-            "liquid_assets": 55503.0,
-            "total_assets": 1033596.0,
+            "liqassets": 55503.0,
+            "totassets": 1033596.0,
             "liquidity_measure_alr": 0.05369893072341611,
-            "monthly_income": 38216.25,
-            "investment_amount": 446462.0,
+            "mthincome": 38216.25,
+            "investamt": 446462.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS288223",
-            "liquid_assets": 210790.0,
-            "total_assets": 1415997.0,
+            "liqassets": 210790.0,
+            "totassets": 1415997.0,
             "liquidity_measure_alr": 0.14886330973865058,
-            "monthly_income": 2055.83,
-            "investment_amount": 717735.0,
+            "mthincome": 2055.83,
+            "investamt": 717735.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS289722",
-            "liquid_assets": 293278.0,
-            "total_assets": 199067.0,
+            "liqassets": 293278.0,
+            "totassets": 199067.0,
             "liquidity_measure_alr": 1.4732627708259027,
-            "monthly_income": 37966.92,
-            "investment_amount": 153689.0,
+            "mthincome": 37966.92,
+            "investamt": 153689.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS230095",
-            "liquid_assets": 411686.0,
-            "total_assets": 76333.0,
+            "liqassets": 411686.0,
+            "totassets": 76333.0,
             "liquidity_measure_alr": 5.393289927030249,
-            "monthly_income": 21405.25,
-            "investment_amount": 808502.0,
+            "mthincome": 21405.25,
+            "investamt": 808502.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS353632",
-            "liquid_assets": 211931.0,
-            "total_assets": 1793740.0,
+            "liqassets": 211931.0,
+            "totassets": 1793740.0,
             "liquidity_measure_alr": 0.11815034508903186,
-            "monthly_income": 20519.33,
-            "investment_amount": 981686.0,
+            "mthincome": 20519.33,
+            "investamt": 981686.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS435359",
-            "liquid_assets": 92141.0,
-            "total_assets": 46156.0,
+            "liqassets": 92141.0,
+            "totassets": 46156.0,
             "liquidity_measure_alr": 1.9962951728919318,
-            "monthly_income": 7123.33,
-            "investment_amount": 641089.0,
+            "mthincome": 7123.33,
+            "investamt": 641089.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS997640",
-            "liquid_assets": 86658.0,
-            "total_assets": 780656.0,
+            "liqassets": 86658.0,
+            "totassets": 780656.0,
             "liquidity_measure_alr": 0.11100664056895738,
-            "monthly_income": 7871.0,
-            "investment_amount": 842207.0,
+            "mthincome": 7871.0,
+            "investamt": 842207.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS365031",
-            "liquid_assets": 296136.0,
-            "total_assets": 1267240.0,
+            "liqassets": 296136.0,
+            "totassets": 1267240.0,
             "liquidity_measure_alr": 0.23368580537230516,
-            "monthly_income": 28803.83,
-            "investment_amount": 248950.0,
+            "mthincome": 28803.83,
+            "investamt": 248950.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS616098",
-            "liquid_assets": 217607.0,
-            "total_assets": 1881207.0,
+            "liqassets": 217607.0,
+            "totassets": 1881207.0,
             "liquidity_measure_alr": 0.11567413899693123,
-            "monthly_income": 36181.75,
-            "investment_amount": 398727.0,
+            "mthincome": 36181.75,
+            "investamt": 398727.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS767771",
-            "liquid_assets": 77885.0,
-            "total_assets": 377314.0,
+            "liqassets": 77885.0,
+            "totassets": 377314.0,
             "liquidity_measure_alr": 0.20641958686929188,
-            "monthly_income": 7059.33,
-            "investment_amount": 31706.0,
+            "mthincome": 7059.33,
+            "investamt": 31706.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS211745",
-            "liquid_assets": 406792.0,
-            "total_assets": 360716.0,
+            "liqassets": 406792.0,
+            "totassets": 360716.0,
             "liquidity_measure_alr": 1.1277348384878962,
-            "monthly_income": 41372.58,
-            "investment_amount": 807574.0,
+            "mthincome": 41372.58,
+            "investamt": 807574.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS652071",
-            "liquid_assets": 351033.0,
-            "total_assets": 186906.0,
+            "liqassets": 351033.0,
+            "totassets": 186906.0,
             "liquidity_measure_alr": 1.8781259028602613,
-            "monthly_income": 7808.92,
-            "investment_amount": 172474.0,
+            "mthincome": 7808.92,
+            "investamt": 172474.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS903650",
-            "liquid_assets": 11679.0,
-            "total_assets": 1933746.0,
+            "liqassets": 11679.0,
+            "totassets": 1933746.0,
             "liquidity_measure_alr": 0.006039572932536124,
-            "monthly_income": 33384.83,
-            "investment_amount": 832606.0,
+            "mthincome": 33384.83,
+            "investamt": 832606.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS780190",
-            "liquid_assets": 72377.0,
-            "total_assets": 1712168.0,
+            "liqassets": 72377.0,
+            "totassets": 1712168.0,
             "liquidity_measure_alr": 0.042272136846384235,
-            "monthly_income": 34519.42,
-            "investment_amount": 43136.0,
+            "mthincome": 34519.42,
+            "investamt": 43136.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS442564",
-            "liquid_assets": 154259.0,
-            "total_assets": 988926.0,
+            "liqassets": 154259.0,
+            "totassets": 988926.0,
             "liquidity_measure_alr": 0.1559863933196215,
-            "monthly_income": 16168.67,
-            "investment_amount": 610139.0,
+            "mthincome": 16168.67,
+            "investamt": 610139.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS669645",
-            "liquid_assets": 57044.0,
-            "total_assets": 131279.0,
+            "liqassets": 57044.0,
+            "totassets": 131279.0,
             "liquidity_measure_alr": 0.4345249430602,
-            "monthly_income": 22163.67,
-            "investment_amount": 879112.0,
+            "mthincome": 22163.67,
+            "investamt": 879112.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS631277",
-            "liquid_assets": 171893.0,
-            "total_assets": 1501606.0,
+            "liqassets": 171893.0,
+            "totassets": 1501606.0,
             "liquidity_measure_alr": 0.11447277115301883,
-            "monthly_income": 10665.33,
-            "investment_amount": 416820.0,
+            "mthincome": 10665.33,
+            "investamt": 416820.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS496846",
-            "liquid_assets": 491033.0,
-            "total_assets": 48476.0,
+            "liqassets": 491033.0,
+            "totassets": 48476.0,
             "liquidity_measure_alr": 10.129404241274033,
-            "monthly_income": 9055.75,
-            "investment_amount": 462258.0,
+            "mthincome": 9055.75,
+            "investamt": 462258.0,
             "investment_potential_label": "Target"
           },
           {
             "customer_id": "CS150481",
-            "liquid_assets": 97540.0,
-            "total_assets": 1720214.0,
+            "liqassets": 97540.0,
+            "totassets": 1720214.0,
             "liquidity_measure_alr": 0.056702247511065486,
-            "monthly_income": 3771.08,
-            "investment_amount": 947561.0,
+            "mthincome": 3771.08,
+            "investamt": 947561.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS163455",
-            "liquid_assets": 195905.0,
-            "total_assets": 1743869.0,
+            "liqassets": 195905.0,
+            "totassets": 1743869.0,
             "liquidity_measure_alr": 0.11233928695332046,
-            "monthly_income": 33668.0,
-            "investment_amount": 853860.0,
+            "mthincome": 33668.0,
+            "investamt": 853860.0,
             "investment_potential_label": "Standard"
           },
           {
             "customer_id": "CS549581",
-            "liquid_assets": 130170.0,
-            "total_assets": 1187727.0,
+            "liqassets": 130170.0,
+            "totassets": 1187727.0,
             "liquidity_measure_alr": 0.10959589198527944,
-            "monthly_income": 2624.5,
-            "investment_amount": 823995.0,
+            "mthincome": 2624.5,
+            "investamt": 823995.0,
             "investment_potential_label": "Standard"
           }
         ],
         "row_count": 50,
-        "query_id": "8010995b86f7436a9854b5b91eb8d062",
+        "query_id": "2ec37c9bacc9457b8ab49aa3658e4923",
         "page": 1,
         "page_size": 50,
         "total_pages": 20,
         "total_rows": 1000,
         "has_next_page": true,
         "has_previous_page": false,
-        "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Wesentliche Punkte sind nicht eindeutig genug für eine sichere SQL-Abfrage: (1) „customer ID“ ist im Schema nicht direkt in den Asset/Income-Tabellen vorhanden; es gibt mehrere mögliche IDs (core_record.clientref vs. coreregistry als Record-ID) und die Join-Kette muss festgelegt werden. (2) „liquidity measure“ ist nicht definiert: es könnte liqassets selbst, ALR (liqassets/totassets) oder ein anderer im Domain-Wissen definierter Index (z.B. FSI-Komponente) sein. (3) „label of their investment potential“ ist nicht definiert: es gibt mehrere mögliche Regeln/Labels (z.B. „Investment Focused“, „Investment Services Target“, IPQ-Score) und keine Schwellen/Mapping für ein Label wird angegeben.. Klärungsfragen: Welche ID soll als „customer ID“ ausgegeben werden: core_record.clientref (Kunden-ID) oder core_record.coreregistry (Record/Case-ID)?, Was genau meinst du mit „liquidity measure“: den Asset Liquidity Ratio (liqassets/totassets), den Betrag liqassets, oder einen anderen definierten Index?, Wie soll „investment potential“ gelabelt werden: nach einer bestehenden Regel (z.B. „Investment Focused“ oder „Investment Services Target“) oder anhand eines Scores (z.B. IPQ) mit welchen Schwellenwerten/Kategorien?",
-        "summary": "Die Abfrage liefert pro Kunde (insgesamt 1000 Zeilen, hier die ersten 50) ID, liquide und Gesamtvermögen, die daraus berechnete Liquiditätsquote, Monatseinkommen, Investitionsbetrag sowie ein Investment-Potenzial-Label, das nur bei Liquiditätsquote > 0,3 und Einkommen > 5.000 als „Target“ gesetzt wird. In den Beispielzeilen sind CS206405 (Liquiditätsquote ~0,063; Einkommen 6.564,25; Invest 163.007) und CS834424 (~0,097; Einkommen 33.835,58; Invest 643.448) trotz teils hoher Einkommen „Standard“, während CS904970 mit ~0,341 Liquiditätsquote und 18.687,75 Einkommen als „Target“ klassifiziert wird. Insgesamt deutet das darauf hin, dass die Liquiditätsquote der entscheidende Engpass für das „Target“-Label ist, nicht die absolute Höhe von Vermögen oder Einkommen allein.",
-        "explanation": "Returns one row per customer (CS customer_id) with liquid assets, total assets, ALR liquidity measure (liqassets/totassets), monthly income, investment amount, and an investment potential label ('Target' if ALR>0.3 and monthly income>5000, else 'Standard').",
+        "notice": "Seite 1 von 20 (50 von 1000 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: Wesentliche Punkte sind nicht eindeutig definiert: (1) „customer ID“ kann je nach Join-Pfad coreregistry (Record), clientref (Kunde) oder eine der Referenzen (expemplref/bankexpref/compbankref/histcompref) meinen. (2) „liquidity measure“ ist nicht spezifiziert—im Domain-Wissen existieren mehrere mögliche Kennzahlen (z. B. ALR = liqassets/totassets, FSI-Komponenten, oder ein einfacher Liquiditäts-Puffer wie liqassets/(mthincome*6)). (3) „label of their investment potential“ ist nicht als konkrete Regel/Schwellenwerte definiert; es gibt zwar „Investment Focused“ und „Investment Services Target“, aber „investment potential“ könnte auch quartilsbasiert oder über IPQ/ALR/Investamt-Anteil erfolgen. Ohne diese Festlegungen ist keine sichere, korrekte SQL-Abfrage ableitbar.. Klärungsfragen: Welche Spalte soll als „customer ID“ ausgegeben werden: core_record.clientref (Kunden-ID) oder core_record.coreregistry (Record-ID)?, Welche „liquidity measure“ meinst du genau (z. B. ALR = liqassets/totassets, oder ein anderer im Domain-Wissen definierter Wert)?, Wie soll das „investment potential“-Label bestimmt werden: nach einer bestehenden Definition (z. B. „Investment Focused“ oder „Investment Services Target“) oder nach eigenen Schwellen/Quartilen?",
+        "summary": "Die Abfrage liefert pro Kunde ID, liquide und Gesamtvermögen, die daraus berechnete Liquiditätsquote, Monatseinkommen, Investitionsbetrag sowie ein Potenzial-Label (Target nur bei Liquiditätsquote > 0,3 und Einkommen > 5.000). In den ersten Zeilen sind CS206405 (Liquiditätsquote ~0,063; Einkommen 6.564,25; Invest 163.007) und CS834424 (~0,097; 33.835,58; 643.448) trotz teils hoher Einkommen als „Standard“ klassifiziert, weil ihre Liquiditätsquote unter 0,3 liegt. CS904970 sticht als „Target“ hervor (Liquiditätsquote ~0,341 bei 18.687,75 Einkommen; Invest 523.492), da beide Kriterien erfüllt sind.",
+        "explanation": "Returns one row per customer with CS-format customer_id, liquid assets, total assets, liquidity measure (ALR = liqassets/totassets), monthly income, investment amount, and an investment potential label ('Target' if ALR > 0.3 and mthincome > 5000, else 'Standard'). Uses the full required join chain.",
         "error": null
       }
     },
@@ -2368,21 +2504,22 @@
         "question": "To pinpoint customers who might be facing financial hardship, I'd like to see their customer ID, the calculated vulnerability score, their net worth, delinquency count, and late payment count. Only output the customers with signs of financial hardship.",
         "ambiguity_check": {
           "is_ambiguous": true,
-          "reason": "„Signs of financial hardship“ ist nicht eindeutig als filterbare Definition angegeben. Im Domain-Wissen existieren mehrere nahe Konzepte (z.B. „Financially Vulnerable“ mit festen Schwellenwerten und „Financial Stress Indicator“ mit FVS>0.7 + weitere Bedingungen). Außerdem ist der „vulnerability score“ nicht eindeutig: es gibt sowohl eine regelbasierte Kategorie „Financially Vulnerable“ als auch die Formel „Financial Vulnerability Score (FVS)“. Ohne Festlegung, welche Definition/Schwellenwerte gelten, ist keine sichere WHERE-Logik ableitbar.",
+          "reason": "„Signs of financial hardship“ ist nicht eindeutig definiert. Im Domain-Wissen gibt es mehrere mögliche Definitionen/Regeln (z.B. Financially Vulnerable, Financial Stress Indicator, FVS > 0.7), die unterschiedliche Filterbedingungen und teils zusätzliche Felder/Zeiträume erfordern. Außerdem ist der „vulnerability score“ nicht eindeutig: es könnte der Financial Vulnerability Score (FVS) sein, aber das ist nicht explizit gesagt. Für einige Regeln werden Zeitfenster benötigt (z.B. „past six months“), die im Schema nicht direkt als Zeitreihen vorliegen.",
           "questions": [
-            "Meinst du mit „calculated vulnerability score“ explizit den Financial Vulnerability Score (FVS) nach der angegebenen Formel, oder etwas anderes (z.B. die regelbasierte Kategorie „Financially Vulnerable“)?",
-            "Welche konkrete Definition soll für „customers with signs of financial hardship“ als Filter verwendet werden: die Regel „Financially Vulnerable“ (DTI>0.5, liqassets < mthincome×3, plus Delinq/Late/Overdraft-Kriterium) oder der „Financial Stress Indicator“ (FVS>0.7 + Payment-Issues + negative Net Worth) oder eine andere Schwelle?"
+            "Welchen „vulnerability score“ soll ich berechnen: den Financial Vulnerability Score (FVS) aus dem Domain-Wissen oder eine andere Kennzahl (z.B. Financially Vulnerable als Regel/Flag)?",
+            "Wie genau sollen „signs of financial hardship“ gefiltert werden: nach FVS-Schwelle (welcher Wert?), nach der Regel „Financially Vulnerable“, nach „Financial Stress Indicator“, oder nach einer Kombination?"
           ]
         },
-        "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  (\n    0.5 * ei.debincratio\n    + 0.5 * (\n      1.0 - (ea.liqassets / (ei.mthincome * 6.0))\n    )\n  ) AS vulnerability_score,\n  (ea.totassets - ea.totliabs) AS net_worth,\n  cc.delinqcount AS delinquency_count,\n  cc.latepaycount AS late_payment_count\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE\n  (\n    0.5 * ei.debincratio\n    + 0.5 * (1.0 - (ea.liqassets / (ei.mthincome * 6.0)))\n  ) > 0.7\n  AND (cc.delinqcount > 0 OR cc.latepaycount > 0)\n  AND (ea.totassets - ea.totliabs) < 0\n  AND ei.mthincome IS NOT NULL AND ei.mthincome > 0\n  AND ea.liqassets IS NOT NULL",
+        "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  (\n    0.5 * ei.debincratio\n    + 0.5 * (\n      1 - (\n        ea.liqassets / NULLIF(ei.mthincome * 6.0, 0)\n      )\n    )\n  ) AS vulnerability_score,\n  (ea.totassets - ea.totliabs) AS net_worth,\n  cc.delinqcount,\n  cc.latepaycount\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE\n  (\n    0.5 * ei.debincratio\n    + 0.5 * (\n      1 - (\n        ea.liqassets / NULLIF(ei.mthincome * 6.0, 0)\n      )\n    )\n  ) > 0.7\n  AND (cc.delinqcount > 0 OR cc.latepaycount > 0)\n  AND (ea.totassets - ea.totliabs) < 0",
         "validation": {
           "is_valid": true,
           "errors": [],
           "severity": "low",
           "suggestions": [
-            "JOIN credit_accounts_and_history (cah) is unused in SELECT/WHERE; remove it unless you need it, to avoid unnecessary row filtering and performance cost.",
-            "The vulnerability_score expression can divide by zero if ei.mthincome = 0; you already filter ei.mthincome > 0, so it’s safe. Consider also filtering ea.liqassets >= 0 if negative values are not meaningful.",
-            "Consider using a CTE to compute vulnerability_score once and reuse it in SELECT and WHERE for readability and to avoid repeating the expression."
+            "Query ist sicher (nur SELECT) und syntaktisch gültig für SQLite.",
+            "JOIN-Kette folgt den definierten FK-Beziehungen korrekt: core_record→employment_and_income→expenses_and_assets→bank_and_transactions→credit_and_compliance→credit_accounts_and_history.",
+            "Optional: Den wiederholten Ausdruck für vulnerability_score in eine CTE/Subquery auslagern, um Redundanz zu vermeiden und Lesbarkeit/Performance zu verbessern.",
+            "Optional: Falls NULL-Werte in ei.debincratio oder ea.liqassets vorkommen können, COALESCE verwenden, sonst wird vulnerability_score NULL und die WHERE-Bedingung filtert diese Zeilen implizit heraus."
           ]
         },
         "results": [
@@ -2390,28 +2527,28 @@
             "customer_id": "CS448987",
             "vulnerability_score": 0.7420225883917988,
             "net_worth": -589973.0,
-            "delinquency_count": 5,
-            "late_payment_count": 10
+            "delinqcount": 5,
+            "latepaycount": 10
           },
           {
             "customer_id": "CS127904",
             "vulnerability_score": 0.7817902361020886,
             "net_worth": -320071.0,
-            "delinquency_count": 2,
-            "late_payment_count": 14
+            "delinqcount": 2,
+            "latepaycount": 14
           }
         ],
         "row_count": 2,
-        "query_id": "80aaa8e5f6c84a9fa0bbce453467cb87",
+        "query_id": "cdbe2c64cf0c40dc89719873986f038d",
         "page": 1,
         "page_size": 50,
         "total_pages": 1,
         "total_rows": 2,
         "has_next_page": false,
         "has_previous_page": false,
-        "notice": " Hinweis: Ambiguity: „Signs of financial hardship“ ist nicht eindeutig als filterbare Definition angegeben. Im Domain-Wissen existieren mehrere nahe Konzepte (z.B. „Financially Vulnerable“ mit festen Schwellenwerten und „Financial Stress Indicator“ mit FVS>0.7 + weitere Bedingungen). Außerdem ist der „vulnerability score“ nicht eindeutig: es gibt sowohl eine regelbasierte Kategorie „Financially Vulnerable“ als auch die Formel „Financial Vulnerability Score (FVS)“. Ohne Festlegung, welche Definition/Schwellenwerte gelten, ist keine sichere WHERE-Logik ableitbar.. Klärungsfragen: Meinst du mit „calculated vulnerability score“ explizit den Financial Vulnerability Score (FVS) nach der angegebenen Formel, oder etwas anderes (z.B. die regelbasierte Kategorie „Financially Vulnerable“)?, Welche konkrete Definition soll für „customers with signs of financial hardship“ als Filter verwendet werden: die Regel „Financially Vulnerable“ (DTI>0.5, liqassets < mthincome×3, plus Delinq/Late/Overdraft-Kriterium) oder der „Financial Stress Indicator“ (FVS>0.7 + Payment-Issues + negative Net Worth) oder eine andere Schwelle?",
-        "summary": "Die Abfrage identifiziert 2 Kunden mit klaren Anzeichen finanzieller Härte (Vulnerability Score > 0,7, negative Net Worth sowie Delinquenzen oder verspätete Zahlungen): CS127904 (Vulnerability Score 0,782; Net Worth -320.071; 2 Delinquenzen; 14 Late Payments) und CS448987 (Vulnerability Score 0,742; Net Worth -589.973; 5 Delinquenzen; 10 Late Payments). CS127904 weist den höheren Vulnerability Score und die meisten verspäteten Zahlungen auf, während CS448987 die deutlich negativere Vermögenslage und mehr Delinquenzen hat.",
-        "explanation": "Lists customers (CS customer_id) who meet the BSL-defined Financial Hardship/Stress criteria by computing FVS from DTI (debincratio) and emergency-fund adequacy (liqassets vs 6 months of income), computing net worth as totassets - totliabs, and filtering to FVS > 0.7 with payment issues and negative net worth.",
+        "notice": " Hinweis: Ambiguity: „Signs of financial hardship“ ist nicht eindeutig definiert. Im Domain-Wissen gibt es mehrere mögliche Definitionen/Regeln (z.B. Financially Vulnerable, Financial Stress Indicator, FVS > 0.7), die unterschiedliche Filterbedingungen und teils zusätzliche Felder/Zeiträume erfordern. Außerdem ist der „vulnerability score“ nicht eindeutig: es könnte der Financial Vulnerability Score (FVS) sein, aber das ist nicht explizit gesagt. Für einige Regeln werden Zeitfenster benötigt (z.B. „past six months“), die im Schema nicht direkt als Zeitreihen vorliegen.. Klärungsfragen: Welchen „vulnerability score“ soll ich berechnen: den Financial Vulnerability Score (FVS) aus dem Domain-Wissen oder eine andere Kennzahl (z.B. Financially Vulnerable als Regel/Flag)?, Wie genau sollen „signs of financial hardship“ gefiltert werden: nach FVS-Schwelle (welcher Wert?), nach der Regel „Financially Vulnerable“, nach „Financial Stress Indicator“, oder nach einer Kombination?",
+        "summary": "Die Abfrage identifiziert 2 Kunden mit klaren Anzeichen finanzieller Härte (Vulnerability Score > 0,7, negative Net Worth sowie Delinquenzen oder verspätete Zahlungen). CS127904 weist den höchsten Vulnerability Score (0,782) und die meisten Late Payments (14) bei einem Nettovermögen von -320.071 auf, während CS448987 ein noch stärker negatives Nettovermögen (-589.973) und die höchste Delinquency-Anzahl (5) bei 10 Late Payments hat.",
+        "explanation": "Returns row-level customers (customer_id in CS format) who meet the BSL 'Financial Stress Indicator' hardship definition, along with their computed Financial Vulnerability Score (FVS), computed net worth (totassets - totliabs), and payment-issue indicators (delinquencies and late payments).",
         "error": null
       }
     }
