@@ -2,22 +2,23 @@
   "question": "Please find all the customer IDs who are highly digital.",
   "ambiguity_check": {
     "is_ambiguous": true,
-    "reason": "„Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Filterkriterium definiert. Es gibt zwar die Definition „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Definition gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung reicht. Außerdem ist nicht eindeutig, aus welcher Tabelle/Beziehung die „customer IDs“ (core_record.clientref) gezogen werden sollen, da die Digital-Felder in bank_and_transactions.chaninvdatablock liegen und ein Join-Pfad nötig ist.",
+    "reason": "„Highly digital“ ist kein konkretes Feld/Label im Schema. Es gibt zwar digitale Nutzungsindikatoren (chaninvdatablock.onlineuse, mobileuse, autopay, depostat sowie chanusescore), aber es ist nicht definiert, welche Kriterien/Schwellenwerte „hoch digital“ genau bedeuten. Außerdem ist unklar, welche ID ausgegeben werden soll (core_record.clientref vs. coreregistry) und ob alle Zeitpunkte oder ein bestimmter Stichtag/Zeitraum gelten soll.",
     "questions": [
-      "Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ bestimmt werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?",
-      "Meinst du mit „customer IDs“ das Feld core_record.clientref (und sollen nur Kunden mit vorhandenen Bank-/Channel-Daten berücksichtigt werden)?"
+      "Wie soll „highly digital“ genau definiert werden (z.B. Digital First Customer: (onlineuse='High' ODER mobileuse='High') UND autopay='Yes', oder alternativ über chanusescore > bestimmter Schwelle)?",
+      "Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder coreregistry (Record-ID)?",
+      "Soll die Auswahl für alle Datensätze gelten oder nur für den neuesten Datensatz je Kunde bzw. für einen bestimmten scoredate/Zeitraum?"
     ]
   },
-  "generated_sql": "SELECT\n  cr.coreregistry AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
+  "generated_sql": "SELECT\n  cr.coreregistry AS customer_id\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE (\n    json_extract(bt.chaninvdatablock, '$.onlineuse') = 'High'\n    OR json_extract(bt.chaninvdatablock, '$.mobileuse') = 'High'\n  )\n  AND json_extract(bt.chaninvdatablock, '$.autopay') = 'Yes'",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Query is syntactically valid SQLite and uses only SELECT (safe).",
-      "JOIN chain follows the declared FK relationships: core_record.coreregistry -> employment_and_income.emplcoreref -> expenses_and_assets.expemplref -> bank_and_transactions.bankexpref.",
-      "JSON extraction is from the correct column (bank_and_transactions.chaninvdatablock) and paths '$.onlineuse', '$.mobileuse', '$.autopay' match the provided example JSON.",
-      "Optional: If you want to avoid duplicate customer_id rows (in case of multiple related rows), use SELECT DISTINCT cr.coreregistry AS customer_id."
+      "Query is SELECT-only and uses valid SQLite syntax; no safety issues found.",
+      "JOIN chain follows the declared foreign keys: core_record→employment_and_income→expenses_and_assets→bank_and_transactions→credit_and_compliance→credit_accounts_and_history.",
+      "JSON extraction is from the correct column (bank_and_transactions.chaninvdatablock) and paths match the example keys (onlineuse, mobileuse, autopay).",
+      "Optional: If you want to avoid NULL JSON values affecting logic, wrap json_extract with COALESCE(...,'') in the WHERE clause."
     ]
   },
   "results": [
@@ -173,15 +174,15 @@
     }
   ],
   "row_count": 50,
-  "query_id": "2ea80d31931d4a7ca71ca16f066b9b7d",
+  "query_id": "046d7f44122246709f76fe193b4722f6",
   "page": 1,
   "page_size": 50,
   "total_pages": 6,
   "total_rows": 285,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist im Schema/Domain-Wissen nicht als eindeutiges Filterkriterium definiert. Es gibt zwar die Definition „Digital First Customer“ (onlineuse oder mobileuse = 'High' UND autopay = 'Yes'), aber die Frage sagt nicht, ob genau diese Definition gemeint ist oder ob z.B. nur hohe Online-/Mobile-Nutzung reicht. Außerdem ist nicht eindeutig, aus welcher Tabelle/Beziehung die „customer IDs“ (core_record.clientref) gezogen werden sollen, da die Digital-Felder in bank_and_transactions.chaninvdatablock liegen und ein Join-Pfad nötig ist.. Klärungsfragen: Soll „highly digital“ exakt nach der Domain-Definition „Digital First Customer“ bestimmt werden (onlineuse='High' ODER mobileuse='High' UND autopay='Yes')?, Meinst du mit „customer IDs“ das Feld core_record.clientref (und sollen nur Kunden mit vorhandenen Bank-/Channel-Daten berücksichtigt werden)?",
-  "summary": "Die Abfrage identifiziert insgesamt 285 Kunden-IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden 50 von 285 Treffern angezeigt. Beispiele aus den ersten Ergebnissen sind die Kunden CS893515, CS414493 und CS222072. Wenn du eine priorisierte Liste möchtest, wäre ein nächster Schritt, zusätzlich nach „onlineuse“ vs. „mobileuse“ zu unterscheiden oder die Ergebnisse nach weiteren Merkmalen (z. B. Transaktionsvolumen) zu sortieren.",
-  "explanation": "Returns the CS-format customer IDs for customers who meet the BSL 'Digital First Customer' definition (high online or mobile usage, and autopay enabled), using the required join chain and JSON extraction from chaninvdatablock.",
+  "notice": "Seite 1 von 6 (50 von 285 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Highly digital“ ist kein konkretes Feld/Label im Schema. Es gibt zwar digitale Nutzungsindikatoren (chaninvdatablock.onlineuse, mobileuse, autopay, depostat sowie chanusescore), aber es ist nicht definiert, welche Kriterien/Schwellenwerte „hoch digital“ genau bedeuten. Außerdem ist unklar, welche ID ausgegeben werden soll (core_record.clientref vs. coreregistry) und ob alle Zeitpunkte oder ein bestimmter Stichtag/Zeitraum gelten soll.. Klärungsfragen: Wie soll „highly digital“ genau definiert werden (z.B. Digital First Customer: (onlineuse='High' ODER mobileuse='High') UND autopay='Yes', oder alternativ über chanusescore > bestimmter Schwelle)?, Welche ID soll zurückgegeben werden: core_record.clientref (Customer ID) oder coreregistry (Record-ID)?, Soll die Auswahl für alle Datensätze gelten oder nur für den neuesten Datensatz je Kunde bzw. für einen bestimmten scoredate/Zeitraum?",
+  "summary": "Die Abfrage identifiziert 285 Kunden-IDs, die als „hoch digital“ gelten, weil sie entweder eine hohe Online- oder Mobile-Nutzung aufweisen und zusätzlich Autopay aktiviert haben; auf der ersten Seite werden u. a. die Kunden CS893515, CS414493 und CS222072 angezeigt. Insgesamt wurden 285 Treffer gefunden (50 pro Seite, aktuell Seite 1 von 6), was auf eine größere Gruppe stark digitaler Kunden im Datenbestand hindeutet.",
+  "explanation": "Returns all Customer IDs (CS format) for customers who meet the BSL 'Digital First Customer' definition (high online or mobile usage and autopay enabled), using the required full join chain to reach the digital-channel JSON field.",
   "error": null
 }

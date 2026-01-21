@@ -1,22 +1,22 @@
 {
   "question": "Can you identify all customers focused on investments in our database? I need to see their IDs, investment amounts and total assets.",
   "ambiguity_check": {
-    "is_ambiguous": false,
-    "reason": "Die Frage ist mit dem gegebenen Schema und Domain-Wissen eindeutig beantwortbar: „Investment Focused“ ist als klare Regel definiert (investport ∈ {Moderate, Aggressive}, investexp = Extensive, und investamt > 0.3 × totassets). Die benötigten Felder für IDs (z.B. core_record.clientref oder coreregistry) sowie investamt und totassets sind vorhanden (expenses_and_assets; zusätzlich JSONB in bank_and_transactions.chaninvdatablock). Es ist keine zwingende Zeitspanne oder zusätzliche Metrikdefinition erforderlich.",
+    "is_ambiguous": true,
+    "reason": "„Focused on investments“ ist nicht eindeutig definiert. Im Domain-Wissen existiert zwar ein Segment „Investment Focused“, das aber zusätzliche Kriterien (JSON-Felder in chaninvdatablock + investamt > 0.3 × totassets) voraussetzt. Die Frage nennt diese Kriterien nicht und könnte auch einfach „Kunden mit investamt > 0“ oder eine andere Schwelle meinen. Außerdem ist unklar, welche „ID“ ausgegeben werden soll (coreregistry vs. clientref vs. appref), da mehrere Identifikatoren im Schema existieren.",
     "questions": [
-      "Welche ID soll ausgegeben werden: clientref (Kunden-ID) oder coreregistry (Record-ID)?",
-      "Sollen nur eindeutige Kunden (dedupliziert über clientref) oder alle Records/Scorings (mehrere core_record-Zeilen pro Kunde möglich) gelistet werden?"
+      "Soll „focused on investments“ nach der Domain-Regel „Investment Focused“ bestimmt werden (invcluster.investport in {Moderate, Aggressive} AND invcluster.investexp = Extensive AND investamt > 0.3 * totassets), oder nach einem anderen Kriterium (z. B. investamt > 0)?",
+      "Welche Kunden-ID soll ausgegeben werden: core_record.coreregistry, core_record.clientref oder core_record.appref?"
     ]
   },
-  "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  ea.investamt AS investment_amount,\n  ea.totassets AS total_assets\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE\n  json_extract(bt.chaninvdatablock, '$.invcluster.investport') IN ('Moderate', 'Aggressive')\n  AND json_extract(bt.chaninvdatablock, '$.invcluster.investexp') = 'Extensive'\n  AND ea.investamt > (0.3 * ea.totassets)",
+  "generated_sql": "SELECT\n  cr.coreregistry AS customer_id,\n  ea.investamt AS investment_amount,\n  ea.totassets AS total_assets\nFROM core_record cr\nJOIN employment_and_income ei ON cr.coreregistry = ei.emplcoreref\nJOIN expenses_and_assets ea ON ei.emplcoreref = ea.expemplref\nJOIN bank_and_transactions bt ON ea.expemplref = bt.bankexpref\nJOIN credit_and_compliance cc ON bt.bankexpref = cc.compbankref\nJOIN credit_accounts_and_history cah ON cc.compbankref = cah.histcompref\nWHERE json_extract(bt.chaninvdatablock, '$.invcluster.investport') IN ('Moderate', 'Aggressive')\n  AND json_extract(bt.chaninvdatablock, '$.invcluster.investexp') = 'Extensive'\n  AND ea.investamt > 0.3 * ea.totassets",
   "validation": {
     "is_valid": true,
     "errors": [],
     "severity": "low",
     "suggestions": [
-      "Optional: Add NULL-safety if needed, e.g. `ea.totassets IS NOT NULL AND ea.totassets != 0 AND ea.investamt IS NOT NULL` to avoid NULL results and edge cases.",
-      "Optional: If `chaninvdatablock` can contain invalid JSON, guard with `json_valid(bt.chaninvdatablock)` before `json_extract(...)` to prevent runtime errors.",
-      "Optional: If you only need customers matching the JSON criteria, current INNER JOINs are fine; otherwise consider LEFT JOINs to avoid dropping customers without downstream records."
+      "JOINs zu credit_and_compliance und credit_accounts_and_history sind für die ausgewählten Spalten/Filter nicht erforderlich; entfernen, falls nicht gebraucht (Performance/Lesbarkeit).",
+      "Falls chaninvdatablock ungültiges JSON enthalten kann, optional absichern: WHERE json_valid(bt.chaninvdatablock) AND ...",
+      "Logik prüfen: Filter verlangt investport IN ('Moderate','Aggressive') UND investexp = 'Extensive'. In den Beispieldaten ist investexp z.B. 'Moderate'—das kann zu 0 Treffern führen (inhaltlich, nicht syntaktisch)."
     ]
   },
   "results": [
@@ -272,15 +272,15 @@
     }
   ],
   "row_count": 50,
-  "query_id": "5cd59483ee1c4b039740b9925c7a903a",
+  "query_id": "17452404206c4df7afc36e1f543b09f6",
   "page": 1,
   "page_size": 50,
   "total_pages": 2,
   "total_rows": 95,
   "has_next_page": true,
   "has_previous_page": false,
-  "notice": "Seite 1 von 2 (50 von 95 Zeilen). Weitere Seiten verfügbar. ",
-  "summary": "Die Abfrage identifiziert 95 Kunden (Seite 1 zeigt 50), die ein moderates oder aggressives Investmentprofil mit „Extensive“ Erfahrung haben und deren Investmentbetrag mehr als 30% der Gesamtvermögenswerte ausmacht. In den ersten Ergebnissen fallen CS450025 (Investment 795.900 bei Total Assets 194.996), CS354471 (708.061 bei 934.678) und CS956134 (462.864 bei 1.073.011) als besonders investitionsfokussiert auf. Als nächster Schritt bietet sich an, die zweite Seite abzurufen, um alle 95 Kunden-IDs vollständig zu sehen.",
-  "explanation": "Lists every customer who meets the BSL 'Investment Focused' definition, returning the CS-format customer_id (coreregistry) along with their investment amount and total assets. Uses the full mandated join chain and extracts investment profile attributes from the chaninvdatablock JSON.",
+  "notice": "Seite 1 von 2 (50 von 95 Zeilen). Weitere Seiten verfügbar.  Hinweis: Ambiguity: „Focused on investments“ ist nicht eindeutig definiert. Im Domain-Wissen existiert zwar ein Segment „Investment Focused“, das aber zusätzliche Kriterien (JSON-Felder in chaninvdatablock + investamt > 0.3 × totassets) voraussetzt. Die Frage nennt diese Kriterien nicht und könnte auch einfach „Kunden mit investamt > 0“ oder eine andere Schwelle meinen. Außerdem ist unklar, welche „ID“ ausgegeben werden soll (coreregistry vs. clientref vs. appref), da mehrere Identifikatoren im Schema existieren.. Klärungsfragen: Soll „focused on investments“ nach der Domain-Regel „Investment Focused“ bestimmt werden (invcluster.investport in {Moderate, Aggressive} AND invcluster.investexp = Extensive AND investamt > 0.3 * totassets), oder nach einem anderen Kriterium (z. B. investamt > 0)?, Welche Kunden-ID soll ausgegeben werden: core_record.coreregistry, core_record.clientref oder core_record.appref?",
+  "summary": "Die Abfrage identifiziert 95 Kunden mit „Moderate“ oder „Aggressive“ Investmentprofil und „Extensive“ Investment-Erfahrung, deren Investmentbetrag zudem über 30% der Gesamtassets liegt; auf Seite 1 werden 50 Treffer angezeigt. Auffällig sind u.a. CS450025 mit 795.900 Investmentbetrag bei 194.996 Gesamtassets (sehr hoher Investmentanteil), CS354471 mit 708.061 bei 934.678 sowie CS956134 mit 462.864 bei 1.073.011. Für eine vollständige Liste aller betroffenen Kunden-IDs und Werte sollten die weiteren Ergebnisseiten (Seite 2) ebenfalls abgerufen werden.",
+  "explanation": "Returns all Investment Focused customers (per BSL definition) and lists their Customer IDs (CS), investment amount, and total assets. Investment focus is determined using investment style/experience from the channel+investment JSON block and the threshold investamt > 30% of total assets.",
   "error": null
 }
